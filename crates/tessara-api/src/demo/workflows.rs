@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -157,6 +157,21 @@ pub(super) async fn ensure_single_form_workflow_assignment(
 ) -> ApiResult<Uuid> {
     workflows::ensure_workflow_assignment_for_form_version(
         pool,
+        form_version_id,
+        node_id,
+        account_id,
+    )
+    .await
+}
+
+pub(super) async fn ensure_single_form_workflow_assignment_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    form_version_id: Uuid,
+    node_id: Uuid,
+    account_id: Uuid,
+) -> ApiResult<Uuid> {
+    workflows::ensure_workflow_assignment_for_form_version_tx(
+        transaction,
         form_version_id,
         node_id,
         account_id,

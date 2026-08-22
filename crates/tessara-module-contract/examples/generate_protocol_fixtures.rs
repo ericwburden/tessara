@@ -4,9 +4,10 @@ use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V2, AuthorizationGrantOperationV1, AuthorizationGrantV2,
     CONTRACT_SCHEMA_VERSION_V1, CapabilityScopeBindingV1, DependencyBindingKey,
     ExternalIdentityAssertionV1, FunctionalContractId, ModuleDefinitionId,
-    NavigationContributionId, NavigationProjectionV1, OriginalActorProjectionV1,
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, SecurityCapabilityId, ShellContextV1,
-    ShellDocumentStateV1, ShellThemeV1,
+    NavigationContributionId, OriginalActorProjectionV1, ProtocolSignaturePurposeV1,
+    PurposeBoundSigningKeyV1, SHELL_CONTEXT_SCHEMA_VERSION_V2, SecurityCapabilityId,
+    ShellContextV2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+    ShellNavigationItemProjectionV2, ShellThemeV1,
 };
 use uuid::Uuid;
 
@@ -41,8 +42,8 @@ fn main() {
     .unwrap();
 
     let shell = shell_signer
-        .sign(ShellContextV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        .sign(ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: id(1),
             module_definition_id: ModuleDefinitionId::new("tessara.reference.scoped-records")
                 .unwrap(),
@@ -53,13 +54,18 @@ fn main() {
                 email: Some("admin@tessara.local".into()),
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new(
-                    "tessara.reference.scoped-records.main",
-                )
-                .unwrap(),
-                label: "Scoped Records".into(),
-                href: "/modules/scoped-records/".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new(
+                        "tessara.reference.scoped-records.main",
+                    )
+                    .unwrap(),
+                    key: "scoped_records".into(),
+                    label: "Scoped Records".into(),
+                    href: "/modules/scoped-records/".into(),
+                }],
             }],
             return_destination: "/admin/modules".into(),
             locale: "en-US".into(),

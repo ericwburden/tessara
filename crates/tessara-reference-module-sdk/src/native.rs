@@ -18,7 +18,7 @@ use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
     ModuleDefinitionId, ModuleServicePrincipalV1, SecurityCapabilityId,
-    ShellContextValidationContextV1,
+    ShellContextValidationContextV2,
 };
 use tessara_module_runtime::{
     ConfigurationProvider, ConfigurationValidationEnvelope, CoreVerifiers, DiagnosticsProvider,
@@ -291,7 +291,7 @@ async fn verified_document(
     if verify_shell_context(
         &envelope,
         &runtime.verifiers.shell,
-        &ShellContextValidationContextV1 {
+        &ShellContextValidationContextV2 {
             installation_id: security.installation_id,
             module_definition_id: envelope.payload.module_definition_id.clone(),
             module_instance_id: security.module_instance_id,

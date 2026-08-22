@@ -57,6 +57,8 @@ $catalogPayloadPath = Join-Path $runtimeDirectory "release-catalog.json"
 $catalogPath = Join-Path $runtimeDirectory "release-catalog.signed.json"
 $catalogKeyPath = Join-Path $repoRoot "deploy/$DeploymentDirectory/catalogs/catalog-dev-v1.public.hex"
 $lockfilePath = Join-Path $runtimeDirectory "lockfile.json"
+$currentLockfilePath = Join-Path $runtimeDirectory "current-lockfile.json"
+$currentLockfileForApply = $null
 $authorizationPath = Join-Path $runtimeDirectory "authorization.json"
 $signedAuthorizationPath = Join-Path $runtimeDirectory "authorization.signed.json"
 $receiptPath = Join-Path $runtimeDirectory "apply-response.json"
@@ -69,6 +71,19 @@ $processEnvironmentVariableNames = @(
     "TESSARA_SIGNING_KEY_ID",
     "TESSARA_SIGNING_SECRET_HEX"
 )
+
+function Assert-Sprint7ACatalogSourceContract {
+    if (-not (Test-Path -LiteralPath $catalogTemplatePath -PathType Leaf)) {
+        throw "Release catalog template not found: $catalogTemplatePath"
+    }
+    if (-not (Test-Path -LiteralPath $catalogKeyPath -PathType Leaf)) {
+        throw "Release catalog public key not found: $catalogKeyPath"
+    }
+    $catalogPublicKey = (Get-Content -LiteralPath $catalogKeyPath -Raw).Trim()
+    if ($catalogPublicKey -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Release catalog public key must be one exact lowercase Ed25519 key."
+    }
+}
 
 function Get-Sprint7AProcessEnvironmentSnapshot {
     param([Parameter(Mandatory)][string[]]$Names)
@@ -149,7 +164,26 @@ function Get-Sprint7AApprovedEffects {
     } | Sort-Object -Unique)
 }
 
+function Test-Sprint7AComposeStartupRequired {
+    param([Parameter(Mandatory)][bool]$IsSemanticNoOp)
+
+    -not $IsSemanticNoOp
+}
+
+function Get-Sprint7ARuntimeServiceName {
+    param([Parameter(Mandatory)][string]$DefinitionId)
+
+    switch -CaseSensitive ($DefinitionId) {
+        "tessara.reference.scoped-records" { "scoped-records"; break }
+        "tessara.datasets" { "datasets"; break }
+        "tessara.components" { "components"; break }
+        "tessara.dashboards" { "dashboards"; break }
+        default { $null }
+    }
+}
+
 function Test-Sprint7ABootstrapHelpers {
+    Assert-Sprint7ACatalogSourceContract
     $effects = @(Get-Sprint7AApprovedEffects -Actions @(
         [pscustomobject]@{ action = "acquire_image" },
         [pscustomobject]@{ action = "provision_database" },
@@ -163,6 +197,25 @@ function Test-Sprint7ABootstrapHelpers {
     $expectedEffects = @("bootstrap", "configure", "disable", "enable", "install", "upgrade")
     if (($effects | ConvertTo-Json -Compress) -cne ($expectedEffects | ConvertTo-Json -Compress)) {
         throw "Sprint 7A approved-effect projection self-test failed."
+    }
+    $expectedRuntimeServices = [ordered]@{
+        "tessara.reference.scoped-records" = "scoped-records"
+        "tessara.datasets" = "datasets"
+        "tessara.components" = "components"
+        "tessara.dashboards" = "dashboards"
+    }
+    foreach ($definitionId in $expectedRuntimeServices.Keys) {
+        if ((Get-Sprint7ARuntimeServiceName -DefinitionId $definitionId) -cne
+            [string]$expectedRuntimeServices[$definitionId]) {
+            throw "Sprint 7A runtime image service projection self-test failed for '$definitionId'."
+        }
+    }
+    if ($null -ne (Get-Sprint7ARuntimeServiceName -DefinitionId "tessara.unknown")) {
+        throw "Sprint 7A runtime image service projection accepted an unknown module definition."
+    }
+    if ((Test-Sprint7AComposeStartupRequired -IsSemanticNoOp $true) -or
+        -not (Test-Sprint7AComposeStartupRequired -IsSemanticNoOp $false)) {
+        throw "Sprint 7A semantic no-op startup-mutation guard self-test failed."
     }
 
     $roundTripTimestamp = (@{ expires_at = "2031-02-03T04:05:06.1234567+00:00" } |
@@ -250,6 +303,7 @@ if (-not (Test-Path -LiteralPath $composePath)) { throw "Compose file not found:
 if (-not (Test-Path -LiteralPath $resolvedBlueprintPath -PathType Leaf)) {
     throw "Blueprint not found: $resolvedBlueprintPath"
 }
+Assert-Sprint7ACatalogSourceContract
 [IO.Directory]::CreateDirectory($runtimeDirectory) | Out-Null
 $processEnvironmentSnapshot = Get-Sprint7AProcessEnvironmentSnapshot -Names $processEnvironmentVariableNames
 
@@ -288,24 +342,26 @@ try {
             if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel $service image build failed." }
         }
     }
-    if ($ExcludePublicGateway) {
-        $startupServices = @($composeConfiguration.services.PSObject.Properties.Name |
-            Where-Object { [string]$_ -cne "gateway" } |
-            Sort-Object)
-        if ($startupServices.Count -eq 0) {
-            throw "$RuntimeLabel did not resolve any non-gateway startup services."
+    if (Test-Sprint7AComposeStartupRequired -IsSemanticNoOp ([bool]$SemanticNoOp)) {
+        if ($ExcludePublicGateway) {
+            $startupServices = @($composeConfiguration.services.PSObject.Properties.Name |
+                Where-Object { [string]$_ -cne "gateway" } |
+                Sort-Object)
+            if ($startupServices.Count -eq 0) {
+                throw "$RuntimeLabel did not resolve any non-gateway startup services."
+            }
+            & docker @composeArguments up -d --no-build @startupServices
+        } else {
+            & docker @composeArguments up -d --no-build
         }
-        & docker @composeArguments up -d --no-build @startupServices
-    } else {
-        & docker @composeArguments up -d --no-build
-    }
-    if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
-    if ($ExcludePublicGateway) {
-        $runningGateway = @(& docker @composeArguments ps --status running -q gateway 2>&1 |
-            ForEach-Object { ([string]$_).Trim() } |
-            Where-Object { $_ })
-        if ($LASTEXITCODE -ne 0 -or $runningGateway.Count -ne 0) {
-            throw "$RuntimeLabel public gateway must remain stopped during owner materialization."
+        if ($LASTEXITCODE -ne 0) { throw "$RuntimeLabel service startup failed." }
+        if ($ExcludePublicGateway) {
+            $runningGateway = @(& docker @composeArguments ps --status running -q gateway 2>&1 |
+                ForEach-Object { ([string]$_).Trim() } |
+                Where-Object { $_ })
+            if ($LASTEXITCODE -ne 0 -or $runningGateway.Count -ne 0) {
+                throw "$RuntimeLabel public gateway must remain stopped during owner materialization."
+            }
         }
     }
 
@@ -330,6 +386,15 @@ try {
         }
     }
     if (-not $coreReady) { throw "$RuntimeLabel Core did not become ready." }
+    $coreIdentity = Invoke-RestMethod `
+        -Uri "$CoreUrl/api/me" `
+        -Method Get `
+        -WebSession $coreSession
+    $authenticatedAccountId = [Guid]::Empty
+    if (-not [Guid]::TryParse([string]$coreIdentity.account_id, [ref]$authenticatedAccountId) -or
+        $authenticatedAccountId -eq [Guid]::Empty) {
+        throw "$RuntimeLabel authenticated composition account identity is invalid."
+    }
 
     # The reference acceptance suite builds on the established UAT demo data.
     # Seed through Core's owning API boundary. Sprint 8A binds that boundary to
@@ -377,10 +442,12 @@ try {
         $catalog.core_releases[0].core_image = Get-ImageDigest (Get-ConfiguredServiceImage "core")
         $catalog.core_releases[0].gateway_image = Get-ImageDigest (Get-ConfiguredServiceImage "gateway")
         $catalog.core_releases[0].database_image = Get-ImageDigest (Get-ConfiguredServiceImage "postgres")
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.reference.scoped-records").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "scoped-records")
-        ($catalog.module_releases | Where-Object definition_id -eq "tessara.dashboards").runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "dashboards")
-        $componentRelease = $catalog.module_releases | Where-Object definition_id -eq "tessara.components"
-        if ($componentRelease) { $componentRelease.runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage "components") }
+        foreach ($moduleRelease in @($catalog.module_releases)) {
+            $runtimeService = Get-Sprint7ARuntimeServiceName -DefinitionId ([string]$moduleRelease.definition_id)
+            if (-not [string]::IsNullOrWhiteSpace($runtimeService)) {
+                $moduleRelease.runtime_image = Get-ImageDigest (Get-ConfiguredServiceImage $runtimeService)
+            }
+        }
         [IO.File]::WriteAllText($catalogPayloadPath, ($catalog | ConvertTo-Json -Depth 100) + "`n", [Text.UTF8Encoding]::new($false))
         & cargo run -q -p tessara-supervisor --bin tessara-compose -- catalog-sign $catalogPayloadPath $catalogPath
         if ($LASTEXITCODE -ne 0) { throw "Runtime release catalog signing failed." }
@@ -407,6 +474,12 @@ try {
         if ($null -eq $currentComposition.latest_blueprint -or $null -eq $currentComposition.latest_receipt) {
             throw "Semantic no-op resolution requires one successfully applied current composition."
         }
+        [IO.File]::WriteAllText(
+            $currentLockfilePath,
+            ($currentComposition.latest_lockfile | ConvertTo-Json -Depth 100) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $currentLockfileForApply = $currentLockfilePath
         $noOpBlueprint = Get-Content -LiteralPath $resolvedBlueprintPath -Raw | ConvertFrom-Json
         $noOpBlueprint.revision = [uint64]$currentComposition.latest_blueprint.revision + 1
         Invoke-RestMethod `
@@ -448,8 +521,8 @@ try {
     $approvedEffects = @(Get-Sprint7AApprovedEffects -Actions @($lockfile.materialization_plan.actions))
 
     # Persist the same desired state and explicit approval through Core before
-    # the operator-authorized Supervisor apply. This keeps Core read-back
-    # complete while retaining the offline/detached CLI execution boundary.
+    # the authorized Supervisor apply. The detached CLI authorization binds
+    # its initiator and approver to the exact authenticated Core account UUID.
     $compositionSummary = Invoke-RestMethod `
         -Uri "$CoreUrl/api/admin/composition" `
         -Method Get `
@@ -509,23 +582,6 @@ try {
     }
 
     $now = [DateTimeOffset]::UtcNow
-    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
-        $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
-        if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
-            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
-                -Value $pendingAuthorization.payload.expires_at `
-                -Label "Pending authorization expiry") -gt $now) {
-            $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-                apply $SupervisorUrl $lockfilePath $signedAuthorizationPath
-            if ($LASTEXITCODE -eq 0) {
-                [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
-                Prepare-Sprint7AUatFixtures
-                Write-Host "Recovered the accepted $RuntimeLabel operation with its original signed authorization."
-                Write-Host "Receipt: $receiptPath"
-                return
-            }
-        }
-    }
     $baseReceiptDigest = $null
     $applySequence = [uint64]1
     try {
@@ -538,8 +594,38 @@ try {
         )
         $baseReceiptDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $currentReceiptPath).Trim()
         $applySequence = [uint64]$currentReceipt.revision + 1
+        if ($null -eq $currentLockfileForApply) {
+            $targetLockfileDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $lockfilePath).Trim()
+            if ($LASTEXITCODE -ne 0 -or $targetLockfileDigest -cne [string]$currentReceipt.lockfile_digest) {
+                throw "The applied Supervisor receipt requires an exact source lockfile distinct from the target lockfile."
+            }
+            Copy-Item -LiteralPath $lockfilePath -Destination $currentLockfilePath -Force
+            $currentLockfileForApply = $currentLockfilePath
+        }
+        $currentLockfileDigest = (& cargo run -q -p tessara-supervisor --bin tessara-compose -- digest $currentLockfileForApply).Trim()
+        if ($LASTEXITCODE -ne 0 -or $currentLockfileDigest -cne [string]$currentReceipt.lockfile_digest) {
+            throw "The source lockfile does not match the applied Supervisor receipt."
+        }
     } catch {
         if ($_.Exception.Response.StatusCode.value__ -ne 404) { throw }
+    }
+    if ((Test-Path -LiteralPath $signedAuthorizationPath) -and -not (Test-Path -LiteralPath $receiptPath)) {
+        $pendingAuthorization = Get-Content -LiteralPath $signedAuthorizationPath -Raw | ConvertFrom-Json
+        if ($pendingAuthorization.payload.target_plan_digest -eq $lockfile.materialization_plan_digest -and `
+            (ConvertTo-Sprint7ABootstrapDateTimeOffset `
+                -Value $pendingAuthorization.payload.expires_at `
+                -Label "Pending authorization expiry") -gt $now) {
+            $recoveryArguments = @("apply", $SupervisorUrl, $lockfilePath, $signedAuthorizationPath)
+            if ($null -ne $currentLockfileForApply) { $recoveryArguments += $currentLockfileForApply }
+            $recoveredResponse = & cargo run -q -p tessara-supervisor --bin tessara-compose -- @recoveryArguments
+            if ($LASTEXITCODE -eq 0) {
+                [IO.File]::WriteAllLines($receiptPath, $recoveredResponse, [Text.UTF8Encoding]::new($false))
+                Prepare-Sprint7AUatFixtures
+                Write-Host "Recovered the accepted $RuntimeLabel operation with its original signed authorization."
+                Write-Host "Receipt: $receiptPath"
+                return
+            }
+        }
     }
     $reuseAuthorization = $false
     if (Test-Path -LiteralPath $signedAuthorizationPath) {
@@ -566,8 +652,8 @@ try {
         apply_sequence = $applySequence
         nonce = [Guid]::NewGuid().ToString()
         idempotency_key = "$RuntimeLabel-$Composition-r$($lockfile.blueprint_revision)-a$applySequence"
-        initiator = [ordered]@{ actor_id = "local:$RuntimeLabel-bootstrap"; actor_kind = "operator"; authority = "local-cli" }
-        approver = [ordered]@{ actor_id = "local:$RuntimeLabel-approver"; actor_kind = "operator"; authority = "composition:approve" }
+        initiator = [ordered]@{ actor_id = $authenticatedAccountId.ToString(); actor_kind = "account"; authority = "composition:approve" }
+        approver = [ordered]@{ actor_id = $authenticatedAccountId.ToString(); actor_kind = "account"; authority = "composition:approve" }
         issued_at = $now.ToString("o")
         expires_at = $now.AddMinutes(10).ToString("o")
         approved_effects = $approvedEffects
@@ -588,12 +674,54 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Apply authorization signing failed." }
     }
 
+    $applyArguments = @("apply", $SupervisorUrl, $lockfilePath, $signedAuthorizationPath)
+    if ($null -ne $currentLockfileForApply) { $applyArguments += $currentLockfileForApply }
     $response = @(& cargo run -q -p tessara-supervisor --bin tessara-compose -- `
-        apply $SupervisorUrl $lockfilePath $signedAuthorizationPath 2>&1 | ForEach-Object { [string]$_ })
+        @applyArguments 2>&1 | ForEach-Object { [string]$_ })
     $applyExitCode = $LASTEXITCODE
     if ($applyExitCode -ne 0) {
         $failureResponsePath = Join-Path $runtimeDirectory "apply-failure-response.log"
         [IO.File]::WriteAllLines($failureResponsePath, $response, [Text.UTF8Encoding]::new($false))
+        try {
+            $configuredServiceNames = @($composeConfiguration.services.PSObject.Properties.Name)
+            $failureLogServices = @(
+                "datasets",
+                "response-provider-proxy",
+                "form-provider-proxy",
+                "supervisor",
+                "core"
+            ) | Where-Object { $configuredServiceNames -ccontains $_ }
+            if ($failureLogServices.Count -gt 0) {
+                $failureServiceLogs = @(& docker @composeArguments logs `
+                    --no-color --timestamps @failureLogServices 2>&1 |
+                    ForEach-Object { [string]$_ })
+                $failureServiceLogsPath = Join-Path $runtimeDirectory `
+                    "composition-failure-service-logs.log"
+                [IO.File]::WriteAllLines(
+                    $failureServiceLogsPath,
+                    $failureServiceLogs,
+                    [Text.UTF8Encoding]::new($false)
+                )
+            }
+        } catch {
+            # Apply output remains authoritative. Service logs are retained as
+            # bounded diagnostic evidence when Compose can provide them.
+        }
+        try {
+            $failureSummary = Invoke-RestMethod `
+                -Uri "$CoreUrl/api/admin/composition" `
+                -Method Get `
+                -WebSession $coreSession
+            $failureSummaryPath = Join-Path $runtimeDirectory "composition-failure-summary.json"
+            [IO.File]::WriteAllText(
+                $failureSummaryPath,
+                ($failureSummary | ConvertTo-Json -Depth 100) + "`n",
+                [Text.UTF8Encoding]::new($false)
+            )
+        } catch {
+            # The raw apply failure remains authoritative when Core itself is
+            # unavailable. Do not replace it with a diagnostic-capture error.
+        }
         throw "Supervisor apply failed. Raw response: $failureResponsePath"
     }
     [IO.File]::WriteAllLines($receiptPath, $response, [Text.UTF8Encoding]::new($false))

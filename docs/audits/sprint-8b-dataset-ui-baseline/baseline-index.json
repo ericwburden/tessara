@@ -1,0 +1,599 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8b.dataset-ui-baseline",
+  "source_commit": "5856576f6d25e510d8ced466a8942cc8a313eeac",
+  "capture_state": "captured-current-main",
+  "captured_from": "http://127.0.0.1:8088",
+  "cases": [
+    {
+      "key": "dataset-directory",
+      "route": "/datasets",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-directory-light-1440x1000.png",
+      "screenshot_sha256": "4163946035571ec7a33518f74ab9c9f320b56e122ed8f6c0197502c0c815f3e1",
+      "semantic_assertions": {
+        "title": "Datasets · Tessara",
+        "headings": [
+          "Datasets"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "header",
+          "nav"
+        ],
+        "body_text_sha256": "41ad640804235a7469f1926178181769f6976fea2c92581928daed0009bb870a"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 1,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-create",
+      "route": "/datasets/new",
+      "role": "administrator",
+      "fixture_key": "manager",
+      "theme": "dark",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-create-dark-390x844.png",
+      "screenshot_sha256": "e07d18c81a955a58cfc1b9caaf23fcf3af3a4f1bd66dc9ac77bd96ae4ae94b57",
+      "semantic_assertions": {
+        "title": "Create Dataset · Tessara",
+        "headings": [
+          "Create Dataset",
+          "Dataset Definition",
+          "Initial Data Source",
+          "View Restrictions",
+          "Generated SQL",
+          "Visibility"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "dd8241ea3c6af1038d4130dcc2143404c717ef944a7761df33403b8a1494acbf"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 6,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-detail",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e",
+      "role": "administrator",
+      "fixture_key": "read_only",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-detail-light-1440x1000.png",
+      "screenshot_sha256": "604cf561366c441fb58c151a5572dd02821d91cd6983c7397a8e7f7657111f6f",
+      "semantic_assertions": {
+        "title": "Dataset Detail · Tessara",
+        "headings": [
+          "Dataset Detail",
+          "Demo Partner Profile Dataset"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header",
+          "nav"
+        ],
+        "body_text_sha256": "53d71f363e78569f71a032111231bd8863797e2b6ad859a83b195cccde4dac65"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 2,
+        "landmark_count": 9
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-preview",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e/preview",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "dark",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-preview-dark-1440x1000.png",
+      "screenshot_sha256": "a6357971bf874590f6528866a5b93b07f759b2bc96b93e1e7e2daf316a7da463",
+      "semantic_assertions": {
+        "title": "Dataset Preview",
+        "headings": [
+          "Demo Partner Profile Dataset"
+        ],
+        "landmarks": [
+          "main",
+          "header",
+          "nav"
+        ],
+        "body_text_sha256": "87b07af86f7c5bfd4cea2e8f8c10c672d8887bf74ffe7cdc50d5f575912a5966"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 1,
+        "landmark_count": 3
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-edit",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e/edit",
+      "role": "administrator",
+      "fixture_key": "manager",
+      "theme": "light",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-edit-light-390x844.png",
+      "screenshot_sha256": "49bf6e45f0d58e6825720b769e7613f8b2ee31b543b3cf724897f94e3ab606d1",
+      "semantic_assertions": {
+        "title": "Edit Dataset · Tessara",
+        "headings": [
+          "Edit Dataset",
+          "Dataset Definition",
+          "Initial Data Source",
+          "View Restrictions",
+          "Generated SQL",
+          "Visibility"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "9c959e42aee8241b852503b3827a1a0991abd50f8ebd5b68f523b15f3a8c6827"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 6,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-revisions",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e/revisions",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-revisions-dark-1024x1366.png",
+      "screenshot_sha256": "9e9129130e25aeeade6cd40fb8292f98c3597ade81486ba15cc3895254bd9c37",
+      "semantic_assertions": {
+        "title": "Dataset Revisions · Tessara",
+        "headings": [
+          "Dataset Revisions",
+          "Demo Partner Profile Dataset"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "d9491a0a766b63df5859b0f05f80ffc950f423970338a92d9763bb7c4654a508"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 2,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-revision-detail",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e/revisions/cede43ac-1d29-443f-856f-990ae1d56643",
+      "role": "administrator",
+      "fixture_key": "read_only",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-revision-detail-light-1024x1366.png",
+      "screenshot_sha256": "180bd5d4ba847a95548039a8791695120cdbf07008506407ff5ee68bb43a5dee",
+      "semantic_assertions": {
+        "title": "Dataset Revision · Tessara",
+        "headings": [
+          "Dataset Revision",
+          "Changelog",
+          "No changelog entries",
+          "Downstream Dependencies",
+          "No downstream dependencies",
+          "Output Fields",
+          "Generated SQL"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "85307d917cf0d2ff168e0d891af234708b54e244a22914bdfc06ba93e281f3a5"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 7,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-revision-edit",
+      "route": "/datasets/99c07d62-93d8-4667-9c50-440156bbbf4e/revisions/cede43ac-1d29-443f-856f-990ae1d56643/edit",
+      "role": "administrator",
+      "fixture_key": "manager",
+      "theme": "dark",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "dataset-revision-edit-dark-1440x1000.png",
+      "screenshot_sha256": "cc203e2ae5a3a8cda02b677328ea1b71321b1b1037e867705550dd6ce1e50e03",
+      "semantic_assertions": {
+        "title": "Edit Revision · Tessara",
+        "headings": [
+          "Edit Revision",
+          "Dataset Definition",
+          "Initial Data Source",
+          "View Restrictions",
+          "Generated SQL",
+          "Visibility"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "bb7bc9533244354249c8eb1d3bb3b35cb1f0b67feac04c2e4eaf30a660c76fd6"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 6,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "operations-dataset-readiness",
+      "route": "/operations",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "operations-dataset-readiness-light-1440x1000.png",
+      "screenshot_sha256": "b9dabaf8515e862f0437405fb98150da459de420d8f608343bc284b90ffee022",
+      "semantic_assertions": {
+        "title": "Operations · Tessara",
+        "headings": [
+          "Operations",
+          "Workflow Assignments",
+          "Dataset Readiness"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "header",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header"
+        ],
+        "body_text_sha256": "2778ca526e40536bc12b0b66061a3c3665b6de433af71e658fd52b8711fe2ec4"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 3,
+        "landmark_count": 25
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "module-management-dataset",
+      "route": "/administration/modules/tessara.datasets",
+      "role": "administrator",
+      "fixture_key": "administrator",
+      "theme": "dark",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "module-management-dataset-dark-390x844.png",
+      "screenshot_sha256": "b4d7905ffbb8f5683cf76da81fd81011de294e39c583410c6beb4abe2fe3ae47",
+      "semantic_assertions": {
+        "title": "Module Management · Tessara",
+        "headings": [
+          "Datasets",
+          "Definition",
+          "Lifecycle assessment",
+          "Declaration summary",
+          "Current navigation",
+          "Configuration",
+          "Feature Declarations",
+          "Dataset authoring",
+          "Dataset publication",
+          "Dataset materialization",
+          "Dataset preview",
+          "Contracts",
+          "Capabilities",
+          "Dependency assessment",
+          "Declared dependencies",
+          "Catalog findings",
+          "Configuration",
+          "Readiness",
+          "Health",
+          "Findings",
+          "Resources/Destinations",
+          "Resource types",
+          "Semantic destinations",
+          "Navigation policy",
+          "Descriptor declarations",
+          "Source digest"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "6e03347425b4f47b62dcf99a888a99c143faa2c51fdf59482c00a54510518662"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 26,
+        "landmark_count": 8
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "form-dataset-sources",
+      "route": "/forms/54cce676-f2c4-40a6-bca4-d216e51ee725",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "light",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "form-dataset-sources-light-390x844.png",
+      "screenshot_sha256": "30d9590b760bce9b8a46e711fcbf0ec7b8f2a728acf16133d824f0a9554465aa",
+      "semantic_assertions": {
+        "title": "Forms · Tessara",
+        "headings": [
+          "Form Detail",
+          "Demo Partner Profile",
+          "Details",
+          "Active Version",
+          "Fields",
+          "Versions",
+          "1.0.0",
+          "Related Work"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "nav",
+          "nav",
+          "nav"
+        ],
+        "body_text_sha256": "64914f6eda5883db65cdce40dce8eb605061080826af552c2a585eb9bda181c9"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 8,
+        "landmark_count": 13
+      },
+      "external_requests": [
+        "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+      ]
+    },
+    {
+      "key": "dataset-directory-javascript-disabled",
+      "route": "/datasets",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "system_theme",
+      "viewport": "1024x1366",
+      "runtime": "javascript_disabled_ssr_direct_refresh",
+      "screenshot": "dataset-directory-javascript-disabled-1024x1366.png",
+      "screenshot_sha256": "911327260511fdb0768033787e03de3398c155051bb8bb9e1330a417bdda4382",
+      "semantic_assertions": {
+        "body_text_sha256": "4e5955c543bd6165b0c7cf11e0e99789c15fb4b9719c7823a5e9182b7b0a0095",
+        "useful_content": false
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "body_text_length": 90
+      },
+      "external_requests": []
+    }
+  ],
+  "source_evidence": [
+    {
+      "path": "crates/tessara-web/src/routes/datasets.rs",
+      "sha256": "e29410dc932fd6fb6e8d861688b99a99a2f2e10ca73e3be31270fc1493030c26"
+    },
+    {
+      "path": "crates/tessara-web-datasets/src/pages/mod.rs",
+      "sha256": "5e8904a40590e81d20b5cfe356b86a30ac8f34f3590e539377618d35e1bfb35e"
+    },
+    {
+      "path": "crates/tessara-web-datasets/src/api.rs",
+      "sha256": "e151915ac7f53cd4bcfdb2ba94652dbcfcf9858c91615c8ce4b4eaac31b174c8"
+    },
+    {
+      "path": "end2end/tests/datasets.spec.ts",
+      "sha256": "0fd7dc0deb98f3bc7a2c3d9176aff912dd940a48eeb5135f44fdeaa2d4c52160"
+    },
+    {
+      "path": "end2end/tests/permissions.spec.ts",
+      "sha256": "d463674a89179d987b6343b3edd73aac392c29e30f8d77139dc567ec883c9417"
+    }
+  ],
+  "delegated_behavior_coverage": {
+    "reader_restricted_and_empty_states": "end2end/tests/permissions.spec.ts",
+    "loading_validation_and_unsaved_dirty_states": "end2end/tests/datasets.spec.ts",
+    "stored_and_system_theme_behavior": "end2end/tests/components.spec.ts",
+    "two_hundred_percent_zoom_and_overflow": "end2end/tests/components.spec.ts"
+  },
+  "required_matrix": {
+    "routes": [
+      "/datasets",
+      "/datasets/new",
+      "/datasets/{dataset_id}",
+      "/datasets/{dataset_id}/edit",
+      "/datasets/{dataset_id}/revisions",
+      "/datasets/{dataset_id}/revisions/{revision_id}",
+      "/operations",
+      "/forms/{form_id}",
+      "/administration/modules/tessara.datasets"
+    ],
+    "roles": [
+      "reader",
+      "manager",
+      "restricted",
+      "administrator"
+    ],
+    "states": [
+      "populated",
+      "empty",
+      "loading",
+      "read_only",
+      "restricted",
+      "provider_degraded",
+      "validation_error",
+      "unsaved_dirty"
+    ],
+    "themes": [
+      "light",
+      "dark",
+      "stored_theme",
+      "system_theme"
+    ],
+    "viewports": [
+      "1440x1000",
+      "1024x1366",
+      "390x844",
+      "200_percent_zoom"
+    ],
+    "runtime": [
+      "javascript_disabled_ssr",
+      "direct_refresh",
+      "hydrated",
+      "no_external_assets"
+    ]
+  }
+}

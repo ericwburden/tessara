@@ -1,8 +1,8 @@
--- Sprint 8A Component Module fresh baseline.
+-- Component Module fresh baseline.
 --
 -- This schema is owned by one Component Module Instance. Dataset relationships
--- are typed Core contract references; no Dataset, Dashboard, or Core foreign
--- key, view, credential, or writable schema is present.
+-- are typed Dataset v2 Module Instance references; no Dataset, Dashboard, or
+-- Core foreign key, view, credential, or writable schema is present.
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -65,9 +65,14 @@ CREATE TABLE component_versions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (component_id, version_number),
-    CHECK (dataset_reference #>> '{reference,resource_type}' = 'tessara.transition.dataset_major_line'),
-    CHECK (dataset_reference #>> '{reference,owner,kind}' = 'core_installation'),
-    CHECK (dataset_reference #>> '{reference,installation_id}' =
+    CHECK ((dataset_reference #>> '{reference,resource_type}') IS NOT DISTINCT FROM
+           'tessara.datasets.dataset_major_line'),
+    CHECK ((dataset_reference #>> '{reference,owner,kind}') IS NOT DISTINCT FROM
+           'module_instance'),
+    CHECK (btrim(COALESCE(dataset_reference #>> '{reference,owner,module_instance_id}', '')) <> ''),
+    CHECK (btrim(COALESCE(dataset_reference #>> '{reference,resource_id}', '')) <> ''),
+    CHECK (dataset_reference #>> '{reference,installation_id}' IS NOT NULL AND
+           dataset_reference #>> '{reference,installation_id}' =
            dataset_reference #>> '{reference,owner,installation_id}'),
     CHECK (successor_version_id IS NULL OR successor_version_id <> id)
 );

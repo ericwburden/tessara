@@ -7,7 +7,6 @@ import {
   type Browser,
   type Page,
 } from "@playwright/test";
-import { invokeDemoSeedEndpoint } from "./support/demo-seed";
 import {
   attachNativeRouteGuard,
   expectHydratedNativeRouteDirectLoadAndRefresh,
@@ -21,6 +20,7 @@ const PASSWORD = "tessara-dev-permissions";
 const COMPONENT_DOCUMENT_ROOT = "#module-content";
 const COMPONENT_CONTENT_ROOT = ".components-page";
 const DASHBOARD_DOCUMENT_ROOT = "#module-content";
+const DATASET_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
 type CapabilitySummary = { id: string; key: string };
@@ -46,8 +46,16 @@ type FormSummary = {
   name: string;
   slug: string;
   visibility_nodes: VisibilityNode[];
-  versions: Array<{ id: string; status: string }>;
+  versions: Array<{ id: string; status: string; version_label?: string | null }>;
 };
+type FormWorkflowLink = {
+  id: string;
+  name: string;
+  source: string;
+  current_version_id: string | null;
+  current_status: string | null;
+};
+type FormDefinition = FormSummary & { workflows: FormWorkflowLink[] };
 type WorkflowSummary = { id: string; name: string; slug: string; available_nodes: Array<{ id: string; name: string }> };
 type WorkflowDefinition = WorkflowSummary & { versions: Array<{ id: string; status: string; steps: Array<{ form_version_id: string }> }> };
 type DatasetSummary = {
@@ -73,6 +81,20 @@ type DatasetDraftRevisionResponse = {
   revision_id: string;
   status: "draft";
 };
+type DatasetRevisionDetail = {
+  id: string;
+  dataset_id: string;
+  version_number: number;
+  version_label: string;
+  version_major: number | null;
+  version_minor: number | null;
+  version_patch: number | null;
+  status: "draft" | "published" | "superseded";
+  metadata: {
+    name: string;
+    slug: string;
+  };
+};
 type DatasetTable = {
   rows: Array<{
     node_name: string;
@@ -83,10 +105,11 @@ type DatasetReference = {
   reference: {
     installation_id: string;
     owner: {
-      kind: "core_installation";
+      kind: "module_instance";
       installation_id: string;
+      module_instance_id: string;
     };
-    resource_type: "tessara.transition.dataset_major_line";
+    resource_type: "tessara.datasets.dataset_major_line";
     resource_id: string;
   };
 };
@@ -107,6 +130,7 @@ type ComponentVersion = {
   component_type: string;
   publication_state: string;
   lifecycle_state: string;
+  resource_revision: number;
 };
 type ComponentDefinition = {
   schema_version: number;
@@ -143,10 +167,13 @@ type OperationsStatus = {
   summary: {
     open_workflow_assignment_count: number;
     draft_response_count: number;
-    dataset_attention_count: number;
+    dataset_attention_count: number | null;
   };
   workflow_assignments: Array<{ workflow_assignment_id: string; workflow_id: string; workflow_name: string; node_id: string }>;
-  dataset_readiness: { datasets: Array<{ dataset_id: string; readiness: string }> };
+  dataset_readiness: {
+    state: "available" | "empty" | "unavailable" | "undisclosed";
+    datasets: Array<{ dataset_id: string; readiness: string }>;
+  };
 };
 type WorkflowAssignmentCandidate = {
   workflow_version_id: string;
@@ -176,6 +203,11 @@ type SubmissionDetail = {
   node_id: string;
   status: string;
   form_name?: string;
+  values?: Array<{
+    key: string;
+    field_type: string;
+    required: boolean;
+  }>;
 };
 type SessionAccount = {
   account_id: string;
@@ -197,6 +229,8 @@ type ApiErrorBody = {
 type FrozenNativeRoute = {
   path: string;
   expectedText: string;
+  additionalExpectedTexts?: string[];
+  expectedLabeledValues?: Array<{ label: string; value: string }>;
   expectedRootMarkup?: string;
   documentRootSelector?: string;
   contentSelector?: string;
@@ -213,8 +247,9 @@ type FixtureState = {
   delegator: APIRequestContext;
   noAccess: APIRequestContext;
   userIds: Record<string, string>;
-  inScopeNodeId: string;
-  outOfScopeNodeId: string;
+  inScopeNode: NodeSummary;
+  outOfScopeNode: NodeSummary;
+  creationNodeType: NodeTypeSummary;
   inScopeNodeIds: Set<string>;
   inScopeForm: FormSummary;
   outOfScopeForm: FormSummary;
@@ -228,6 +263,7 @@ type FixtureState = {
   outOfScopeVisualComponent: ComponentSummary;
   inScopeDashboard: DashboardSummary;
   outOfScopeDashboard: DashboardSummary;
+  workflowVersionId: string;
   inScopeAssignmentId: string;
   outOfScopeAssignmentId: string;
   ownerAssignmentId: string;
@@ -235,8 +271,15 @@ type FixtureState = {
   delegateAssignmentId: string;
 };
 
+// This acceptance file runs only inside the sprint runner's owned Reference
+// topology. Core intentionally has no DELETE API for published Forms/generated
+// Workflows, assignments, nodes/node types, users, or roles, so exact Compose
+// project teardown is the deterministic cleanup boundary for those resources.
+// Product owners with supported cleanup APIs are removed explicitly below.
+
 let fixtures: FixtureState;
 const contexts: APIRequestContext[] = [];
+let mutationSequence = 0;
 
 async function newContext() {
   const context = await request.newContext({ baseURL: BASE_URL });
@@ -250,31 +293,33 @@ async function expectJson<T>(response: APIResponse): Promise<T> {
   return JSON.parse(text) as T;
 }
 
-async function ensureDemoSeed(admin: APIRequestContext) {
-  const response = await invokeDemoSeedEndpoint(admin);
-  if (response === null) {
-    return;
-  }
-  const text = await response.text();
-  if (response.ok()) {
-    return;
-  }
-  if (response.status() === 400 && text.includes("Demo seed requires an empty database")) {
-    return;
-  }
-  expect(response.ok(), `${response.url()} returned ${response.status()}: ${text}`).toBeTruthy();
-}
-
 async function getJson<T>(context: APIRequestContext, url: string) {
   return expectJson<T>(await context.get(url));
 }
 
+function mutationHeaders(operation: string) {
+  mutationSequence += 1;
+  return {
+    "x-idempotency-key": `${RUN_ID}-${operation}-${mutationSequence}`,
+  };
+}
+
 async function postJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  return expectJson<T>(await context.post(url, data ? { data } : undefined));
+  return expectJson<T>(
+    await context.post(url, {
+      headers: mutationHeaders("post"),
+      ...(data ? { data } : {}),
+    }),
+  );
 }
 
 async function putJson<T>(context: APIRequestContext, url: string, data?: Record<string, unknown>) {
-  return expectJson<T>(await context.put(url, data ? { data } : undefined));
+  return expectJson<T>(
+    await context.put(url, {
+      headers: mutationHeaders("put"),
+      ...(data ? { data } : {}),
+    }),
+  );
 }
 
 async function expectStatus(
@@ -284,7 +329,10 @@ async function expectStatus(
   statuses: number[],
   data?: Record<string, unknown>,
 ) {
-  const response = await context[method](url, data ? { data } : undefined);
+  const response = await context[method](url, {
+    ...(method === "get" ? {} : { headers: mutationHeaders(method) }),
+    ...(data ? { data } : {}),
+  });
   expect(statuses, `${method.toUpperCase()} ${url} returned ${response.status()}: ${await response.text()}`).toContain(
     response.status(),
   );
@@ -367,9 +415,33 @@ async function expectNoJavaScriptRoutes(
             .filter({ visible: true })
             .first(),
         ).toBeVisible();
+        for (const expectedText of route.additionalExpectedTexts ?? []) {
+          await expect(
+            routeContent
+              .getByText(expectedText, { exact: true })
+              .filter({ visible: true })
+              .first(),
+          ).toBeVisible();
+        }
+        for (const expectedValue of route.expectedLabeledValues ?? []) {
+          await expect(
+            routeContent.getByLabel(expectedValue.label, { exact: true }),
+          ).toHaveValue(expectedValue.value);
+        }
       },
     });
   }
+}
+
+function datasetRevisionVersion(revision: DatasetRevisionDetail) {
+  if (
+    revision.version_major !== null &&
+    revision.version_minor !== null &&
+    revision.version_patch !== null
+  ) {
+    return `v${revision.version_major}.${revision.version_minor}.${revision.version_patch}`;
+  }
+  return `Revision ${revision.version_number}`;
 }
 
 async function expectHydratedRoute(page: Page, route: FrozenNativeRoute) {
@@ -429,6 +501,237 @@ async function createUser(admin: APIRequestContext, email: string, displayName: 
   });
 }
 
+async function createPermissionNodes(admin: APIRequestContext) {
+  const nodes = await getJson<NodeSummary[]>(admin, "/api/nodes");
+  const referenceRoot = requireItem(
+    nodes,
+    (node) => node.name === "Reference Organization" && node.parent_node_id === null,
+    "the receipt-backed Reference Organization should exist",
+  );
+  const disjointRoot = requireItem(
+    nodes,
+    (node) => node.name === "Disjoint Organization" && node.parent_node_id === null,
+    "the receipt-backed Disjoint Organization should exist",
+  );
+  expect(disjointRoot.node_type_id).toBe(referenceRoot.node_type_id);
+
+  const nodeType = await postJson<IdResponse>(admin, "/api/admin/node-types", {
+    name: `${RUN_ID} Permission Scope`,
+    slug: `${RUN_ID}-permission-scope`,
+    plural_label: `${RUN_ID} Permission Scopes`,
+    parent_node_type_ids: [referenceRoot.node_type_id],
+    child_node_type_ids: [],
+  });
+  await postJson<IdResponse>(admin, "/api/admin/node-metadata-fields", {
+    node_type_id: nodeType.id,
+    key: "source_code",
+    label: "Source Code",
+    field_type: "text",
+    required: true,
+  });
+  const rootCreationNodeType = await postJson<IdResponse>(
+    admin,
+    "/api/admin/node-types",
+    {
+      name: `${RUN_ID} Root Creation Scope`,
+      slug: `${RUN_ID}-root-creation-scope`,
+      plural_label: `${RUN_ID} Root Creation Scopes`,
+      parent_node_type_ids: [],
+      child_node_type_ids: [],
+    },
+  );
+  await postJson<IdResponse>(admin, "/api/admin/node-metadata-fields", {
+    node_type_id: rootCreationNodeType.id,
+    key: "source_code",
+    label: "Source Code",
+    field_type: "text",
+    required: true,
+  });
+
+  const inScope = await postJson<IdResponse>(admin, "/api/admin/nodes", {
+    node_type_id: nodeType.id,
+    parent_node_id: referenceRoot.id,
+    name: `${RUN_ID} In Scope`,
+    metadata: { source_code: `${RUN_ID}-IN` },
+  });
+  const outOfScope = await postJson<IdResponse>(admin, "/api/admin/nodes", {
+    node_type_id: nodeType.id,
+    parent_node_id: disjointRoot.id,
+    name: `${RUN_ID} Out Of Scope`,
+    metadata: { source_code: `${RUN_ID}-OUT` },
+  });
+  const containment = await postJson<IdResponse>(admin, "/api/admin/nodes", {
+    node_type_id: nodeType.id,
+    parent_node_id: referenceRoot.id,
+    name: `${RUN_ID} Containment Scope`,
+    metadata: { source_code: `${RUN_ID}-CONTAINMENT` },
+  });
+  const readableNodeTypes = await getJson<NodeTypeSummary[]>(admin, "/api/node-types");
+  const fixtureNodeType = requireItem(
+    readableNodeTypes,
+    (candidate) => candidate.id === nodeType.id,
+    "the scenario-owned permission node type should be readable",
+  );
+  const creationNodeType = requireItem(
+    readableNodeTypes,
+    (candidate) => candidate.id === rootCreationNodeType.id,
+    "the scenario-owned root creation node type should be readable",
+  );
+  expect(creationNodeType.is_root_type).toBe(true);
+  const inScopeNode = await getJson<NodeSummary>(admin, `/api/nodes/${inScope.id}`);
+  const outOfScopeNode = await getJson<NodeSummary>(admin, `/api/nodes/${outOfScope.id}`);
+  const containmentNode = await getJson<NodeSummary>(
+    admin,
+    `/api/nodes/${containment.id}`,
+  );
+  expect(inScopeNode.parent_node_id).toBe(referenceRoot.id);
+  expect(outOfScopeNode.parent_node_id).toBe(disjointRoot.id);
+  expect(containmentNode.parent_node_id).toBe(referenceRoot.id);
+  return {
+    fixtureNodeType,
+    creationNodeType,
+    inScopeNode,
+    outOfScopeNode,
+    containmentNode,
+  };
+}
+
+async function createPublishedPermissionForm(
+  admin: APIRequestContext,
+  fixtureNodeType: NodeTypeSummary,
+  nameSuffix: string,
+  visibilityNodeIds: string[],
+) {
+  const slug = `${RUN_ID}-${nameSuffix.toLowerCase().replaceAll(" ", "-")}`;
+  const form = await postJson<IdResponse>(admin, "/api/admin/forms", {
+    name: `${RUN_ID} ${nameSuffix}`,
+    slug,
+    scope_node_type_id: fixtureNodeType.id,
+    visibility_node_ids: visibilityNodeIds,
+  });
+  const version = await postJson<IdResponse>(
+    admin,
+    `/api/admin/forms/${form.id}/versions`,
+    {},
+  );
+  const section = await postJson<IdResponse>(
+    admin,
+    `/api/admin/form-versions/${version.id}/sections`,
+    {
+      title: "Permission Evidence",
+      description: "Scenario-owned authorization evidence.",
+      position: 0,
+    },
+  );
+  await postJson<IdResponse>(
+    admin,
+    `/api/admin/form-versions/${version.id}/fields`,
+    {
+      section_id: section.id,
+      key: "evidence",
+      label: "Evidence",
+      field_type: "text",
+      required: true,
+      position: 0,
+      grid_row: 1,
+      grid_column: 1,
+      grid_width: 12,
+      grid_height: 2,
+    },
+  );
+  await postJson<Record<string, unknown>>(
+    admin,
+    `/api/admin/form-versions/${version.id}/publish`,
+    {},
+  );
+  const definition = await getJson<FormDefinition>(admin, `/api/forms/${form.id}`);
+  const publishedVersion = requireItem(
+    definition.versions,
+    (candidate) => candidate.id === version.id && candidate.status === "published",
+    `${definition.name} should expose its scenario-owned published version`,
+  );
+  const workflow = requireItem(
+    definition.workflows,
+    (candidate) =>
+      candidate.source === "generated_form" &&
+      candidate.current_status === "published" &&
+      candidate.current_version_id !== null,
+    `${definition.name} should expose its generated workflow candidate source`,
+  );
+  return {
+    definition,
+    formVersionId: publishedVersion.id,
+    workflowVersionId: workflow.current_version_id!,
+  };
+}
+
+async function submitPermissionResponse(
+  context: APIRequestContext,
+  assignmentId: string,
+) {
+  const submission = await postJson<IdResponse>(
+    context,
+    `/api/workflow-assignments/${assignmentId}/start`,
+    {},
+  );
+  const detail = await getJson<SubmissionDetail>(
+    context,
+    `/api/submissions/${submission.id}`,
+  );
+  const requiredValues = Object.fromEntries(
+    (detail.values ?? [])
+      .filter((field) => field.required)
+      .map((field) => [field.key, `Evidence for ${RUN_ID}`]),
+  );
+  expect(Object.keys(requiredValues).length).toBeGreaterThan(0);
+  await putJson<IdResponse>(context, `/api/submissions/${submission.id}/values`, {
+    values: requiredValues,
+  });
+  await postJson<IdResponse>(context, `/api/submissions/${submission.id}/submit`, {});
+}
+
+async function createPermissionDataset(
+  admin: APIRequestContext,
+  nameSuffix: string,
+  visibilityNodeIds: string[],
+  form: FormSummary,
+  formVersionId: string,
+) {
+  const slug = `${RUN_ID}-${nameSuffix.toLowerCase().replaceAll(" ", "-")}`;
+  const created = await postJson<IdResponse>(admin, "/api/admin/datasets", {
+    name: `${RUN_ID} ${nameSuffix}`,
+    slug,
+    grain: "submission",
+    version_label: "Initial permission fixture",
+    visibility_node_ids: visibilityNodeIds,
+    initial_source: {
+      kind: "form",
+      alias: "fixture",
+      form_id: form.id,
+      form_version_id: formVersionId,
+    },
+    operations: [
+      {
+        kind: "projection",
+        fields: [
+          {
+            key: "fixture__evidence",
+            label: "Evidence",
+            input_field_key: "fixture__evidence",
+            position: 0,
+          },
+        ],
+        position: 0,
+      },
+    ],
+    restriction_policy: null,
+  });
+  const dataset = await getJson<DatasetDefinition>(admin, `/api/datasets/${created.id}`);
+  expect(dataset.slug).toBe(slug);
+  expect(dataset.output_fields.map((field) => field.key)).toContain("fixture__evidence");
+  return dataset;
+}
+
 async function assignAccess(
   admin: APIRequestContext,
   accountId: string,
@@ -465,7 +768,7 @@ function componentDatasetReference(
   catalog: ComponentDatasetCatalog,
   dataset: DatasetSummary,
 ) {
-  expect(catalog.schema_version).toBe(1);
+  expect(catalog.schema_version).toBe(2);
   const resourceId = `${dataset.id}@${datasetMajor(dataset)}`;
   const option = requireItem(
     catalog.datasets,
@@ -473,12 +776,16 @@ function componentDatasetReference(
     `Component authoring catalog should expose Dataset major line ${resourceId}`,
   );
   expect(option.reference.reference.resource_type).toBe(
-    "tessara.transition.dataset_major_line",
+    "tessara.datasets.dataset_major_line",
   );
-  expect(option.reference.reference.owner).toEqual({
-    kind: "core_installation",
+  expect(option.reference.reference.owner).toMatchObject({
+    kind: "module_instance",
     installation_id: option.reference.reference.installation_id,
   });
+  expect(
+    option.reference.reference.owner.module_instance_id,
+    "Dataset major-line reference must name its owning Dataset Module Instance",
+  ).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   return option.reference;
 }
 
@@ -598,11 +905,16 @@ async function createAssignmentFor(
   candidates: WorkflowAssignmentCandidate[],
   nodeId: string,
   accountId: string,
+  workflowVersionId?: string,
 ) {
   const candidate = requireItem(
     candidates,
-    (item) => item.node_id === nodeId,
-    `workflow candidate should exist for node ${nodeId}`,
+    (item) =>
+      item.node_id === nodeId &&
+      (workflowVersionId === undefined || item.workflow_version_id === workflowVersionId),
+    `workflow candidate should exist for node ${nodeId}${
+      workflowVersionId ? ` and workflow version ${workflowVersionId}` : ""
+    }`,
   );
   return postJson<IdResponse>(admin, "/api/workflow-assignments", {
     workflow_version_id: candidate.workflow_version_id,
@@ -614,8 +926,14 @@ async function createAssignmentFor(
 async function setupFixtures(): Promise<FixtureState> {
   const admin = await newContext();
   await signIn(admin, "admin@tessara.local", "tessara-dev-admin");
-  await ensureDemoSeed(admin);
-  await cleanupPlaywrightDashboards(admin);
+  await cleanupSupportedPermissionFixtures(admin);
+  const {
+    fixtureNodeType,
+    creationNodeType,
+    inScopeNode,
+    outOfScopeNode,
+    containmentNode,
+  } = await createPermissionNodes(admin);
 
   const [
     noAccessRole,
@@ -704,18 +1022,6 @@ async function setupFixtures(): Promise<FixtureState> {
     ]),
   };
 
-  const adminNodes = await getJson<NodeSummary[]>(admin, "/api/nodes?q=Demo");
-  const inScopeNode = requireItem(
-    adminNodes,
-    (node) => node.name === "Demo Program Family Outreach",
-    "Demo Program Family Outreach should exist",
-  );
-  const outOfScopeNode = requireItem(
-    adminNodes,
-    (node) => node.name === "Demo Program Workforce Readiness",
-    "Demo Program Workforce Readiness should exist",
-  );
-
   await assignAccess(admin, users.scopedManager.id, [inScopeNode.id]);
   await assignAccess(admin, users.componentManager.id, [inScopeNode.id]);
   await assignAccess(admin, users.partialComponentManager.id, [inScopeNode.id]);
@@ -729,6 +1035,7 @@ async function setupFixtures(): Promise<FixtureState> {
   const delegate = await newContext();
   const delegator = await newContext();
   const noAccess = await newContext();
+  const dataWriter = await newContext();
   await signIn(scopedManager, `${RUN_ID}-scoped-manager@tessara.local`, PASSWORD);
   await signIn(componentManager, `${RUN_ID}-component-manager@tessara.local`, PASSWORD);
   await signIn(partialComponentManager, `${RUN_ID}-partial-component-manager@tessara.local`, PASSWORD);
@@ -737,83 +1044,125 @@ async function setupFixtures(): Promise<FixtureState> {
   await signIn(delegate, `${RUN_ID}-delegate@tessara.local`, PASSWORD);
   await signIn(delegator, `${RUN_ID}-delegator@tessara.local`, PASSWORD);
   await signIn(noAccess, `${RUN_ID}-no-access@tessara.local`, PASSWORD);
+  await signIn(dataWriter, `${RUN_ID}-global@tessara.local`, PASSWORD);
 
-  const scopedNodes = await getJson<NodeSummary[]>(scopedManager, "/api/nodes?q=Demo");
+  const scopedNodes = await getJson<NodeSummary[]>(
+    scopedManager,
+    `/api/nodes?q=${encodeURIComponent(RUN_ID)}`,
+  );
   const inScopeNodeIds = new Set(scopedNodes.map((node) => node.id));
   expect(inScopeNodeIds.has(inScopeNode.id)).toBe(true);
   expect(inScopeNodeIds.has(outOfScopeNode.id)).toBe(false);
 
-  const adminForms = await getJson<FormSummary[]>(admin, "/api/forms");
-  const inScopeForm = requireItem(
-    adminForms,
-    (form) => overlaps(form.visibility_nodes, inScopeNodeIds),
-    "an in-scope form should exist",
+  const inScopeFormFixture = await createPublishedPermissionForm(
+    admin,
+    fixtureNodeType,
+    "In Scope Form",
+    [inScopeNode.id, containmentNode.id],
   );
-  const outOfScopeForm = requireItem(
-    adminForms,
-    (form) => disjointFrom(form.visibility_nodes, inScopeNodeIds),
-    "an out-of-scope form should exist",
+  const outOfScopeFormFixture = await createPublishedPermissionForm(
+    admin,
+    fixtureNodeType,
+    "Out Of Scope Form",
+    [outOfScopeNode.id],
   );
+  const inScopeForm = inScopeFormFixture.definition;
+  const outOfScopeForm = outOfScopeFormFixture.definition;
+  expect(overlaps(inScopeForm.visibility_nodes, inScopeNodeIds)).toBe(true);
+  expect(disjointFrom(outOfScopeForm.visibility_nodes, inScopeNodeIds)).toBe(true);
 
   const adminCandidates = await getJson<WorkflowAssignmentCandidate[]>(
     admin,
     "/api/workflow-assignment-candidates",
   );
-  expect(adminCandidates.some((item) => item.node_id === inScopeNode.id)).toBe(true);
-  expect(adminCandidates.some((item) => item.node_id === outOfScopeNode.id)).toBe(true);
+  expect(
+    adminCandidates.some(
+      (item) =>
+        item.node_id === inScopeNode.id &&
+        item.workflow_version_id === inScopeFormFixture.workflowVersionId,
+    ),
+  ).toBe(true);
+  expect(
+    adminCandidates.some(
+      (item) =>
+        item.node_id === outOfScopeNode.id &&
+        item.workflow_version_id === inScopeFormFixture.workflowVersionId,
+    ),
+  ).toBe(true);
 
   const inScopeAssignment = await createAssignmentFor(
     admin,
     adminCandidates,
     inScopeNode.id,
     users.noAccess.id,
+    inScopeFormFixture.workflowVersionId,
   );
   const outOfScopeAssignment = await createAssignmentFor(
     admin,
     adminCandidates,
     outOfScopeNode.id,
     users.outOfScopeOwner.id,
+    inScopeFormFixture.workflowVersionId,
   );
   const ownerAssignment = await createAssignmentFor(
     admin,
     adminCandidates,
     inScopeNode.id,
     users.owner.id,
+    inScopeFormFixture.workflowVersionId,
   );
   const outOfScopeOwnerAssignment = await createAssignmentFor(
     admin,
     adminCandidates,
     outOfScopeNode.id,
     users.scopedManager.id,
+    inScopeFormFixture.workflowVersionId,
   );
   const delegateAssignment = await createAssignmentFor(
     admin,
     adminCandidates,
     inScopeNode.id,
     users.delegate.id,
+    inScopeFormFixture.workflowVersionId,
   );
 
-  const adminDatasets = await getJson<DatasetSummary[]>(admin, "/api/datasets");
-  const inScopeDataset = requireItem(
-    adminDatasets,
-    (dataset) =>
-      overlaps(dataset.visibility_nodes, inScopeNodeIds) &&
-      dataset.visibility_nodes.some((node) => !inScopeNodeIds.has(node.node_id)),
-    "a partial-overlap in-scope dataset should exist",
+  const dataAssignment = await createAssignmentFor(
+    admin,
+    adminCandidates,
+    inScopeNode.id,
+    users.global.id,
+    inScopeFormFixture.workflowVersionId,
   );
+  await submitPermissionResponse(dataWriter, dataAssignment.id);
+
+  const inScopeDataset = await createPermissionDataset(
+    admin,
+    "In Scope Dataset",
+    [inScopeNode.id, containmentNode.id],
+    inScopeForm,
+    inScopeFormFixture.formVersionId,
+  );
+  expect(overlaps(inScopeDataset.visibility_nodes, inScopeNodeIds)).toBe(true);
+  expect(
+    inScopeDataset.visibility_nodes.some((node) => !inScopeNodeIds.has(node.node_id)),
+  ).toBe(true);
   await assignAccess(
     admin,
     users.componentManager.id,
     inScopeDataset.visibility_nodes.map((node) => node.node_id),
   );
-  const componentManagerNodeIds = new Set(inScopeDataset.visibility_nodes.map((node) => node.node_id));
-  const outOfScopeDataset = requireItem(
-    adminDatasets,
-    (dataset) =>
-      disjointFrom(dataset.visibility_nodes, inScopeNodeIds) &&
-      disjointFrom(dataset.visibility_nodes, componentManagerNodeIds),
-    "an out-of-scope dataset should exist",
+  const componentManagerNodeIds = new Set(
+    inScopeDataset.visibility_nodes.map((node) => node.node_id),
   );
+  const outOfScopeDataset = await createPermissionDataset(
+    admin,
+    "Out Of Scope Dataset",
+    [outOfScopeNode.id],
+    outOfScopeForm,
+    outOfScopeFormFixture.formVersionId,
+  );
+  expect(disjointFrom(outOfScopeDataset.visibility_nodes, inScopeNodeIds)).toBe(true);
+  expect(disjointFrom(outOfScopeDataset.visibility_nodes, componentManagerNodeIds)).toBe(true);
   const componentDatasetCatalog = await getJson<ComponentDatasetCatalog>(
     admin,
     "/api/admin/components/datasets",
@@ -903,8 +1252,9 @@ async function setupFixtures(): Promise<FixtureState> {
       delegator: users.delegator.id,
       noAccess: users.noAccess.id,
     },
-    inScopeNodeId: inScopeNode.id,
-    outOfScopeNodeId: outOfScopeNode.id,
+    inScopeNode,
+    outOfScopeNode,
+    creationNodeType,
     inScopeNodeIds,
     inScopeForm,
     outOfScopeForm,
@@ -918,6 +1268,7 @@ async function setupFixtures(): Promise<FixtureState> {
     outOfScopeVisualComponent,
     inScopeDashboard,
     outOfScopeDashboard,
+    workflowVersionId: inScopeFormFixture.workflowVersionId,
     inScopeAssignmentId: inScopeAssignment.id,
     outOfScopeAssignmentId: outOfScopeAssignment.id,
     ownerAssignmentId: ownerAssignment.id,
@@ -931,12 +1282,84 @@ async function cleanupPlaywrightDashboards(admin: APIRequestContext) {
   for (const dashboard of dashboards.filter((candidate) =>
     candidate.name.startsWith(PLAYWRIGHT_ENTITY_PREFIX),
   )) {
-    const response = await admin.delete(`/api/admin/dashboards/${dashboard.id}`);
+    const response = await admin.delete(`/api/admin/dashboards/${dashboard.id}`, {
+      headers: mutationHeaders("delete-dashboard"),
+    });
     expect(
       response.ok(),
       `Dashboard cleanup for ${dashboard.id} returned ${response.status()}`,
     ).toBeTruthy();
   }
+}
+
+async function cleanupPlaywrightComponents(admin: APIRequestContext) {
+  const components = await getJson<ComponentListSummary[]>(
+    admin,
+    "/api/admin/components",
+  );
+  for (const component of components.filter((candidate) =>
+    candidate.slug.startsWith(PLAYWRIGHT_ENTITY_PREFIX),
+  )) {
+    const definition = await getJson<ComponentDefinition>(
+      admin,
+      `/api/admin/components/${component.component_id}`,
+    );
+    for (const version of definition.versions) {
+      if (version.publication_state === "draft") {
+        await expectStatus(
+          admin,
+          "delete",
+          `/api/admin/components/${component.component_id}/versions/${version.component_version_id}`,
+          [200],
+        );
+        continue;
+      }
+      let resourceRevision = version.resource_revision;
+      if (version.lifecycle_state === "active" || version.lifecycle_state === "inactive") {
+        await postJson<ComponentMutationResponse>(
+          admin,
+          `/api/admin/components/${component.component_id}/versions/${version.component_version_id}/lifecycle`,
+          {
+            schema_version: 1,
+            action: "archive",
+            expected_resource_revision: resourceRevision,
+          },
+        );
+        resourceRevision += 1;
+      }
+      if (version.lifecycle_state !== "tombstoned") {
+        await postJson<ComponentMutationResponse>(
+          admin,
+          `/api/admin/components/${component.component_id}/versions/${version.component_version_id}/lifecycle`,
+          {
+            schema_version: 1,
+            action: "tombstone",
+            expected_resource_revision: resourceRevision,
+          },
+        );
+      }
+    }
+  }
+}
+
+async function cleanupPlaywrightDatasets(admin: APIRequestContext) {
+  const datasets = await getJson<DatasetSummary[]>(admin, "/api/datasets");
+  for (const dataset of datasets.filter((candidate) =>
+    candidate.slug?.startsWith(PLAYWRIGHT_ENTITY_PREFIX),
+  )) {
+    await expectStatus(
+      admin,
+      "delete",
+      `/api/admin/datasets/${dataset.id}`,
+      [200, 204, 404],
+    );
+  }
+}
+
+async function cleanupSupportedPermissionFixtures(admin: APIRequestContext) {
+  await cleanupPlaywrightDashboards(admin);
+  await cleanupPlaywrightComponents(admin);
+  await cleanupPlaywrightDatasets(admin);
 }
 
 test.describe.serial("capability + scope + ownership permissions", () => {
@@ -947,7 +1370,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   test.afterAll(async () => {
     try {
       if (fixtures) {
-        await cleanupPlaywrightDashboards(fixtures.admin);
+        await cleanupSupportedPermissionFixtures(fixtures.admin);
       }
     } finally {
       await Promise.all(contexts.map((context) => context.dispose()));
@@ -1088,44 +1511,44 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       expectedText: "Organization Explorer",
     });
     await expect(page.getByRole("heading", { name: "Organization Explorer" })).toBeVisible();
-    await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
-    await expect(page.getByText("Demo Program Workforce Readiness")).toHaveCount(0);
+    await expect(page.getByText(fixtures.inScopeNode.name).first()).toBeVisible();
+    await expect(page.getByText(fixtures.outOfScopeNode.name)).toHaveCount(0);
 
     await expectHydratedRoute(page, {
-      path: `/organization/${fixtures.inScopeNodeId}`,
+      path: `/organization/${fixtures.inScopeNode.id}`,
       expectedText: "Organization Detail",
     });
     await expect(page.getByRole("heading", { name: "Organization Detail" })).toBeVisible();
-    await expect(page.getByText("Demo Program Family Outreach").first()).toBeVisible();
+    await expect(page.getByText(fixtures.inScopeNode.name).first()).toBeVisible();
 
     await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/nodes/${fixtures.outOfScopeNodeId}`, count: 2 },
+      { path: `/api/nodes/${fixtures.outOfScopeNode.id}`, count: 2 },
     ], async () => {
       await expectHydratedRoute(page, {
-        path: `/organization/${fixtures.outOfScopeNodeId}`,
+        path: `/organization/${fixtures.outOfScopeNode.id}`,
         expectedText: "Organization detail unavailable",
       });
       await expect(page.getByRole("heading", { name: "Organization detail unavailable" })).toBeVisible();
     });
 
     await expectHydratedRoute(page, {
-      path: `/organization/${fixtures.inScopeNodeId}/edit`,
+      path: `/organization/${fixtures.inScopeNode.id}/edit`,
       expectedText: "Edit Organization Node",
     });
     await expect(page.getByRole("heading", { name: "Edit Organization Node" })).toBeVisible();
     await expect(page.locator("#organization-name")).toHaveValue(
-      "Demo Program Family Outreach",
+      fixtures.inScopeNode.name,
     );
-    const programCode = page.locator("#organization-metadata-program_code");
-    await expect(programCode).toBeVisible();
-    await expect(programCode).toHaveValue("FO-01");
+    const editSourceCode = page.locator("#organization-metadata-source_code");
+    await expect(editSourceCode).toBeVisible();
+    await expect(editSourceCode).toHaveValue(`${RUN_ID}-IN`);
     await assertNativeRouteGuard();
 
     await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/nodes/${fixtures.outOfScopeNodeId}`, count: 2 },
+      { path: `/api/nodes/${fixtures.outOfScopeNode.id}`, count: 2 },
     ], async () => {
       await expectHydratedRoute(page, {
-        path: `/organization/${fixtures.outOfScopeNodeId}/edit`,
+        path: `/organization/${fixtures.outOfScopeNode.id}/edit`,
         expectedText: "Organization node unavailable",
       });
       await expect(page.getByRole("heading", { name: "Organization node unavailable" })).toBeVisible();
@@ -1135,10 +1558,10 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       "/api/node-types",
     );
-    const partnerNodeType = requireItem(
+    const permissionNodeType = requireItem(
       readableNodeTypes,
-      (nodeType) => nodeType.name === "Partner",
-      "the seeded Partner node type should remain readable",
+      (nodeType) => nodeType.id === fixtures.creationNodeType.id,
+      "the scenario-owned root creation node type should remain readable",
     );
     await expectHydratedRoute(page, {
       path: "/organization/new",
@@ -1146,11 +1569,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     });
     await expect(page.getByRole("heading", { name: "Create Organization Node" })).toBeVisible();
     const nodeTypeSelect = page.locator("#organization-node-type");
-    await nodeTypeSelect.selectOption(partnerNodeType.id);
-    await expect(nodeTypeSelect).toHaveValue(partnerNodeType.id);
-    const sourceCode = page.locator("#organization-metadata-source_code");
-    await expect(sourceCode).toBeVisible();
-    await expect(sourceCode).toHaveJSProperty("required", true);
+    await nodeTypeSelect.selectOption(permissionNodeType.id);
+    await expect(nodeTypeSelect).toHaveValue(permissionNodeType.id);
+    const createSourceCode = page.locator("#organization-metadata-source_code");
+    await expect(createSourceCode).toBeVisible();
+    await expect(createSourceCode).toHaveJSProperty("required", true);
     await assertNativeRouteGuard();
   });
 
@@ -1161,7 +1584,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       name: `${RUN_ID} Managed Form`,
       slug: formSlug,
       scope_node_type_id: null,
-      visibility_node_ids: [fixtures.inScopeNodeId],
+      visibility_node_ids: [fixtures.inScopeNode.id],
     });
     await getJson(fixtures.scopedManager, `/api/forms/${created.id}`);
 
@@ -1169,14 +1592,14 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       name: `${RUN_ID} Out Form`,
       slug: `${RUN_ID}-out-form`,
       scope_node_type_id: null,
-      visibility_node_ids: [fixtures.outOfScopeNodeId],
+      visibility_node_ids: [fixtures.outOfScopeNode.id],
     });
 
     await putJson<IdResponse>(fixtures.scopedManager, `/api/admin/forms/${created.id}`, {
       name: `${RUN_ID} Managed Form Updated`,
       slug: formSlug,
       scope_node_type_id: null,
-      visibility_node_ids: [fixtures.inScopeNodeId],
+      visibility_node_ids: [fixtures.inScopeNode.id],
     });
     await expectStatus(
       fixtures.scopedManager,
@@ -1187,7 +1610,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         name: `${RUN_ID} Managed Form Out`,
         slug: formSlug,
         scope_node_type_id: null,
-        visibility_node_ids: [fixtures.outOfScopeNodeId],
+        visibility_node_ids: [fixtures.outOfScopeNode.id],
       },
     );
 
@@ -1221,7 +1644,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       name: `${RUN_ID} Managed Workflow`,
       slug: `${RUN_ID}-managed-workflow`,
       description: "Scoped workflow permission fixture.",
-      available_node_ids: [fixtures.inScopeNodeId],
+      available_node_ids: [fixtures.inScopeNode.id],
     });
     await getJson<WorkflowDefinition>(fixtures.scopedManager, `/api/workflows/${inWorkflow.id}`);
 
@@ -1229,7 +1652,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       name: `${RUN_ID} Out Workflow`,
       slug: `${RUN_ID}-out-workflow`,
       description: "Out-of-scope workflow permission fixture.",
-      available_node_ids: [fixtures.outOfScopeNodeId],
+      available_node_ids: [fixtures.outOfScopeNode.id],
     });
     await expectStatus(
       fixtures.scopedManager,
@@ -1240,7 +1663,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         name: `${RUN_ID} Managed Workflow Out`,
         slug: `${RUN_ID}-managed-workflow`,
         description: "Should be rejected.",
-        available_node_ids: [fixtures.outOfScopeNodeId],
+        available_node_ids: [fixtures.outOfScopeNode.id],
       },
     );
 
@@ -1248,7 +1671,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       name: `${RUN_ID} Admin Out Workflow`,
       slug: `${RUN_ID}-admin-out-workflow`,
       description: "Out-of-scope workflow permission fixture.",
-      available_node_ids: [fixtures.outOfScopeNodeId],
+      available_node_ids: [fixtures.outOfScopeNode.id],
     });
     await expectStatus(fixtures.scopedManager, "get", `/api/workflows/${outWorkflow.id}`, [403]);
 
@@ -1312,8 +1735,9 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const assignment = await createAssignmentFor(
       fixtures.admin,
       candidates,
-      fixtures.inScopeNodeId,
+      fixtures.inScopeNode.id,
       editor.id,
+      fixtures.workflowVersionId,
     );
     const draft = await postJson<IdResponse>(
       editorContext,
@@ -1347,18 +1771,18 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const dashboard = await postJson<IdResponse>(fixtures.scopedManager, "/api/admin/dashboards", {
       name: `${RUN_ID} Managed Dashboard`,
       description: "Scoped dashboard permission fixture.",
-      visibility_node_ids: [fixtures.inScopeNodeId],
+      visibility_node_ids: [fixtures.inScopeNode.id],
     });
     await getJson<DashboardDefinition>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
     await expectStatus(fixtures.scopedManager, "post", "/api/admin/dashboards", [403], {
       name: `${RUN_ID} Out Dashboard Denied`,
       description: "Should be rejected.",
-      visibility_node_ids: [fixtures.outOfScopeNodeId],
+      visibility_node_ids: [fixtures.outOfScopeNode.id],
     });
     await putJson<IdResponse>(fixtures.scopedManager, `/api/admin/dashboards/${dashboard.id}`, {
       name: `${RUN_ID} Managed Dashboard Updated`,
       description: "Scoped dashboard permission fixture updated.",
-      visibility_node_ids: [fixtures.inScopeNodeId],
+      visibility_node_ids: [fixtures.inScopeNode.id],
     });
     await expectStatus(
       fixtures.scopedManager,
@@ -1368,7 +1792,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       {
         name: `${RUN_ID} Managed Dashboard Out`,
         description: "Should be rejected.",
-        visibility_node_ids: [fixtures.outOfScopeNodeId],
+        visibility_node_ids: [fixtures.outOfScopeNode.id],
       },
     );
 
@@ -1407,14 +1831,14 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await assertNativeRouteGuard();
   });
 
-  test("dashboard composition excludes hidden Components before viewer execution", async ({
+  test("dashboard composition redacts reader-hidden Components before viewer execution", async ({
     page,
   }) => {
     const dashboard = await postJson<IdResponse>(fixtures.admin, "/api/admin/dashboards", {
       name: `${RUN_ID} Redacted Dashboard`,
       description: "Dashboard redaction browser fixture.",
       visibility_node_ids: [
-        fixtures.inScopeNodeId,
+        fixtures.inScopeNode.id,
         ...fixtures.outOfScopeDataset.visibility_nodes.map((node) => node.node_id),
       ],
     });
@@ -1422,33 +1846,57 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     try {
       const composition = await getJson<{
         available_component_versions: Array<{
+          component_reference: unknown;
           component_version_id: string;
           component_slug: string;
           default_grid_width: number;
           default_grid_height: number;
         }>;
       }>(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`);
+      const hiddenOption = composition.available_component_versions.find(
+        (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
+      );
       expect(
-        composition.available_component_versions.some(
-          (option) => option.component_slug === fixtures.outOfScopeVisualComponent.slug,
-        ),
-        "Dashboard authoring must exclude a Component that is hidden from part of the Dashboard audience",
-      ).toBe(false);
+        hiddenOption,
+        "an authorized manager may bind a Component contained by the Dashboard's complete scope",
+      ).toBeTruthy();
+      await putJson(fixtures.admin, `/api/admin/dashboards/${dashboard.id}/composition`, {
+        commands: [
+          {
+            operation: "bind",
+            client_key: `${RUN_ID}-redacted-placement`,
+            component_reference: hiddenOption!.component_reference,
+            geometry: {
+              grid_row: 1,
+              grid_column: 1,
+              grid_width: hiddenOption!.default_grid_width,
+              grid_height: hiddenOption!.default_grid_height,
+            },
+          },
+        ],
+      });
 
       const scopedDashboard = await getJson<{
         placements: Array<{
+          placement_id: string;
           availability: "available" | "unavailable";
           component?: { component_slug: string };
         }>;
       }>(fixtures.scopedManager, `/api/dashboards/${dashboard.id}`);
-      expect(scopedDashboard.placements).toHaveLength(0);
+      expect(scopedDashboard.placements).toHaveLength(1);
+      expect(scopedDashboard.placements[0]).toMatchObject({ availability: "unavailable" });
+      expect(scopedDashboard.placements[0].component).toBeUndefined();
 
       const hiddenExecutionRequests: string[] = [];
+      const hiddenPlacementRenderPath = new RegExp(
+        `^/api/dashboards/${dashboard.id}/placements/${scopedDashboard.placements[0].placement_id}/render/`,
+      );
       page.on("request", (request) => {
         const pathname = new URL(request.url()).pathname;
         if (
           request.method() === "GET" &&
-          pathname.includes(`/api/components/${fixtures.outOfScopeVisualComponent.slug}/`)
+          (pathname.includes(`/api/components/${fixtures.outOfScopeVisualComponent.slug}/`) ||
+            hiddenPlacementRenderPath.test(pathname))
         ) {
           hiddenExecutionRequests.push(pathname);
         }
@@ -1456,12 +1904,16 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await signInPage(page, `${RUN_ID}-scoped-manager@tessara.local`);
       await page.goto(`/dashboards/${dashboard.id}`);
       await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
+      await expect(page.locator(".dashboard-placement-card.is-unavailable")).toHaveCount(1);
       await page.goto(`/dashboards/${dashboard.id}/view`);
       await expect(page.getByRole("heading", { level: 1, name: `${RUN_ID} Redacted Dashboard` })).toBeVisible();
+      await expect(page.locator(".dashboard-redacted-placeholder")).toHaveCount(1);
       await page.waitForLoadState("networkidle");
       expect(hiddenExecutionRequests).toEqual([]);
     } finally {
-      const response = await fixtures.admin.delete(`/api/admin/dashboards/${dashboard.id}`);
+      const response = await fixtures.admin.delete(`/api/admin/dashboards/${dashboard.id}`, {
+        headers: mutationHeaders("delete-dashboard"),
+      });
       expect(response.ok(), `Dashboard cleanup returned ${response.status()}`).toBeTruthy();
     }
   });
@@ -1549,6 +2001,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
     const operations = await getJson<OperationsStatus>(fixtures.admin, "/api/operations/status");
     expect(operations.summary.open_workflow_assignment_count).toBeGreaterThanOrEqual(0);
+    expect(operations.dataset_readiness.state).toBe("available");
     expect(operations.summary.dataset_attention_count).toBe(
       operations.dataset_readiness.datasets.filter((item) => item.readiness !== "Ready").length,
     );
@@ -1595,13 +2048,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.scopedManager,
       "get",
       `/api/datasets/${fixtures.outOfScopeDataset.id}`,
-      [403],
+      [404],
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
       `/api/datasets/${fixtures.outOfScopeDataset.id}/table`,
-      [403],
+      [404],
     );
 
     const components = await getJson<ComponentListSummary[]>(fixtures.scopedManager, "/api/components");
@@ -1718,6 +2171,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
 
     const operations = await getJson<OperationsStatus>(fixtures.scopedManager, "/api/operations/status");
+    expect(operations.dataset_readiness.state).toBe("available");
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.inScopeDataset.id)).toBe(true);
     expect(operations.dataset_readiness.datasets.some((item) => item.dataset_id === fixtures.outOfScopeDataset.id)).toBe(false);
     expect(operations.workflow_assignments.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
@@ -1962,12 +2416,14 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions`,
         expectedText: "Dataset Revisions",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Draft");
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions/${draft.revision_id}`,
         expectedText: "Dataset Revision",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revision" })).toBeVisible();
       await expect(page.locator(".route-panel__section").filter({ hasText: "Status" }).first()).toContainText("Draft");
@@ -1976,16 +2432,19 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expectHydratedRoute(page, {
         path: `/datasets/${dataset.id}/revisions`,
         expectedText: "Dataset Revisions",
+        documentRootSelector: DATASET_DOCUMENT_ROOT,
       });
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Published current");
       await expect(page.locator("tbody")).not.toContainText("Draft");
-      await expectStatus(
-        fixtures.scopedManager,
-        "get",
+      const hiddenDraftResponse = await fixtures.scopedManager.get(
         `/api/datasets/${dataset.id}/revisions/${draft.revision_id}`,
-        [403],
       );
+      expect(hiddenDraftResponse.status()).toBe(404);
+      const hiddenDraftBody = (await hiddenDraftResponse.json()) as {
+        error: { code: string };
+      };
+      expect(hiddenDraftBody.error.code).toBe("dataset.not_found_or_forbidden");
       await assertNativeRouteGuard();
     } finally {
       await expectStatus(
@@ -2042,7 +2501,9 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
     const inCandidate = requireItem(
       candidates,
-      (item) => item.node_id === fixtures.inScopeNodeId,
+      (item) =>
+        item.node_id === fixtures.inScopeNode.id &&
+        item.workflow_version_id === fixtures.workflowVersionId,
       "scoped manager should have an in-scope workflow candidate",
     );
     const assignees = await getJson<WorkflowAssigneeOption[]>(
@@ -2077,7 +2538,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       [400, 403],
       {
         workflow_version_id: inCandidate.workflow_version_id,
-        node_id: fixtures.outOfScopeNodeId,
+        node_id: fixtures.outOfScopeNode.id,
         account_id: fixtures.userIds.owner,
       },
     );
@@ -2094,7 +2555,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       `/api/submissions/${ownOutOfScope.id}`,
     );
     expect(ownOutDetail.id).toBe(ownOutOfScope.id);
-    expect(ownOutDetail.node_id).toBe(fixtures.outOfScopeNodeId);
+    expect(ownOutDetail.node_id).toBe(fixtures.outOfScopeNode.id);
 
     const unrelatedOutOfScope = await postJson<IdResponse>(
       fixtures.outOfScopeOwner,
@@ -2170,7 +2631,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       expect.arrayContaining(["forms:read", "workflows:manage", "submissions:manage"]),
     );
     expect(scopedSession.account?.scope_nodes.map((node) => node.node_name)).toContain(
-      "Demo Program Family Outreach",
+      fixtures.inScopeNode.name,
     );
 
     const delegatorSession = await getJson<SessionState>(fixtures.delegator, "/api/auth/session");
@@ -2204,11 +2665,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         { path: "/organization", expectedText: "Organization Explorer" },
         { path: "/organization/new", expectedText: "Create Organization Node" },
         {
-          path: `/organization/${fixtures.inScopeNodeId}`,
+          path: `/organization/${fixtures.inScopeNode.id}`,
           expectedText: "Loading detail",
         },
         {
-          path: `/organization/${fixtures.inScopeNodeId}/edit`,
+          path: `/organization/${fixtures.inScopeNode.id}/edit`,
           expectedText: "Edit Organization Node",
         },
         { path: "/administration/users", expectedText: "Users" },
@@ -2286,8 +2747,9 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     const assignment = await createAssignmentFor(
       fixtures.admin,
       candidates,
-      fixtures.inScopeNodeId,
+      fixtures.inScopeNode.id,
       editor.id,
+      fixtures.workflowVersionId,
     );
     const responseDraft = await postJson<IdResponse>(
       editorContext,
@@ -2299,19 +2761,37 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       fixtures.admin,
       `/api/datasets/${fixtures.inScopeDataset.id}`,
     );
+    const datasetDraftName = `${dataset.name} Native Route Draft`;
+    const datasetDraftLabel = `${RUN_ID} Native Route Label`;
     const datasetDraft = await postJson<DatasetDraftRevisionResponse>(
       fixtures.admin,
       `/api/admin/datasets/${dataset.id}/draft-revision`,
       {
-        name: `${dataset.name} Native Route Draft`,
+        name: datasetDraftName,
         slug: dataset.slug,
         grain: "submission",
         visibility_node_ids: dataset.visibility_nodes.map((node) => node.node_id),
         initial_source: dataset.initial_source,
         operations: dataset.operations,
         restriction_policy: dataset.restriction_policy ?? null,
+        version_label: datasetDraftLabel,
       },
     );
+    const datasetDraftDetail = await getJson<DatasetRevisionDetail>(
+      fixtures.admin,
+      `/api/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
+    );
+    expect(datasetDraftDetail).toMatchObject({
+      id: datasetDraft.revision_id,
+      dataset_id: dataset.id,
+      version_label: datasetDraftLabel,
+      status: "draft",
+      metadata: {
+        name: datasetDraftName,
+        slug: dataset.slug,
+      },
+    });
+    const datasetDraftVersion = datasetRevisionVersion(datasetDraftDetail);
 
     try {
       await withNoJavaScriptPage(browser, async (page) => {
@@ -2331,33 +2811,65 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
         await signInPage(page, "admin@tessara.local", "tessara-dev-admin");
         await expectNoJavaScriptRoutes(page, [
-          { path: "/datasets", expectedText: "Datasets" },
-          { path: "/datasets/new", expectedText: "Create Dataset" },
+          {
+            path: "/datasets",
+            expectedText: "Datasets",
+            additionalExpectedTexts: [dataset.name],
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+          },
+          {
+            path: "/datasets/new",
+            expectedText: "Create Dataset",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+          },
           {
             path: `/datasets/${dataset.id}`,
-            expectedText: "Loading dataset",
+            expectedText: dataset.name,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
           },
           {
             path: `/datasets/${dataset.id}/edit`,
             expectedText: "Edit Dataset",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+            expectedLabeledValues: [
+              { label: "Name", value: dataset.name },
+              { label: "Slug", value: dataset.slug },
+            ],
           },
           {
             path: `/datasets/${dataset.id}/preview`,
-            expectedText: "Loading preview",
+            expectedText: dataset.name,
             expectedRootMarkup: 'class="dataset-preview-page"',
             contentSelector: ".dataset-preview-page",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
           },
           {
             path: `/datasets/${dataset.id}/revisions`,
-            expectedText: "Dataset Revisions",
+            expectedText: dataset.name,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+            additionalExpectedTexts: [
+              datasetDraftVersion,
+              datasetDraftLabel,
+              "Draft",
+            ],
           },
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
-            expectedText: "Loading revision",
+            expectedText: datasetDraftName,
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+            additionalExpectedTexts: [datasetDraftVersion, "Draft"],
+            expectedLabeledValues: [
+              { label: "Revision label", value: datasetDraftLabel },
+            ],
           },
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}/edit`,
             expectedText: "Edit Revision",
+            documentRootSelector: DATASET_DOCUMENT_ROOT,
+            expectedLabeledValues: [
+              { label: "Name", value: datasetDraftName },
+              { label: "Slug", value: dataset.slug },
+            ],
           },
         ]);
       });

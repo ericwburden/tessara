@@ -19,8 +19,8 @@ use axum::{
 use serde::Serialize;
 use sqlx::Row;
 use tessara_module_contract::{
-    ModuleManifest, NavigationContributionId, NavigationProjectionV1, ResourceOwner,
-    SemanticDestination, SemanticRouteName,
+    ModuleManifest, NavigationContributionId, ResourceOwner, SemanticDestination,
+    SemanticRouteName, ShellNavigationGroupProjectionV2, ShellNavigationItemProjectionV2,
 };
 use uuid::Uuid;
 
@@ -131,7 +131,7 @@ pub(crate) async fn load_context_navigation(
     state: &AppState,
     account: &AccountContext,
     expected_installation_id: Uuid,
-) -> ApiResult<Vec<NavigationProjectionV1>> {
+) -> ApiResult<Vec<ShellNavigationGroupProjectionV2>> {
     let canonical_installation_id: Uuid =
         sqlx::query_scalar("SELECT id FROM application_installations WHERE singleton=true")
             .fetch_one(&state.pool)
@@ -208,27 +208,39 @@ async fn load_response_for_installation(
 
 fn navigation_projection(
     response: &ShellNavigationResponseV1,
-) -> Result<Vec<NavigationProjectionV1>, ()> {
+) -> Result<Vec<ShellNavigationGroupProjectionV2>, ()> {
     response
         .groups
         .iter()
-        .flat_map(|group| &group.items)
-        .map(|item| {
-            let destination_id = match item.contribution_id.as_deref() {
-                Some(contribution_id) => contribution_id,
-                None => navigation_catalog::DESTINATIONS
-                    .iter()
-                    .find(|destination| {
-                        destination.owner == NavigationCatalogOwner::Core
-                            && destination.key == item.key
+        .map(|group| {
+            let items = group
+                .items
+                .iter()
+                .map(|item| {
+                    let destination_id = match item.contribution_id.as_deref() {
+                        Some(contribution_id) => contribution_id,
+                        None => navigation_catalog::DESTINATIONS
+                            .iter()
+                            .find(|destination| {
+                                destination.owner == NavigationCatalogOwner::Core
+                                    && destination.key == item.key
+                            })
+                            .map(|destination| destination.id)
+                            .ok_or(())?,
+                    };
+                    Ok(ShellNavigationItemProjectionV2 {
+                        contribution_id: NavigationContributionId::new(destination_id)
+                            .map_err(|_| ())?,
+                        key: item.key.clone(),
+                        label: item.label.clone(),
+                        href: item.href.clone(),
                     })
-                    .map(|destination| destination.id)
-                    .ok_or(())?,
-            };
-            Ok(NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new(destination_id).map_err(|_| ())?,
-                label: item.label.clone(),
-                href: item.href.clone(),
+                })
+                .collect::<Result<Vec<_>, ()>>()?;
+            Ok(ShellNavigationGroupProjectionV2 {
+                id: group.id.clone(),
+                label: group.name.clone(),
+                items,
             })
         })
         .collect()
@@ -514,6 +526,7 @@ mod tests {
         let projection = navigation_projection(&response).expect("projection is valid");
         let identities = projection
             .iter()
+            .flat_map(|group| &group.items)
             .map(|item| item.contribution_id.as_str())
             .collect::<Vec<_>>();
         assert_eq!(
@@ -555,8 +568,12 @@ mod tests {
 
         assert_eq!(response.state, ShellNavigationStateV1::Unavailable);
         assert_eq!(projection.len(), 1);
-        assert_eq!(projection[0].contribution_id.as_str(), "core.home");
-        assert_eq!(projection[0].href, "/");
+        assert_eq!(projection[0].id, "core.main");
+        assert_eq!(projection[0].label, "Main");
+        assert_eq!(projection[0].items.len(), 1);
+        assert_eq!(projection[0].items[0].contribution_id.as_str(), "core.home");
+        assert_eq!(projection[0].items[0].key, "home");
+        assert_eq!(projection[0].items[0].href, "/");
     }
 
     #[test]

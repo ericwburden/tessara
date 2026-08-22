@@ -65,15 +65,22 @@ test("root route renders assigned work in the native shell", async ({ page }) =>
   await expect(
     page.getByRole("heading", { name: "Assigned to Me" }),
   ).toBeVisible();
+  const primaryNavigation = page.getByRole("complementary", {
+    name: "Primary navigation",
+  });
   for (const directAdmin of [
     "User Management",
     "Roles & Access",
     "Node Types",
     "Module Management",
   ]) {
-    await expect(page.getByRole("link", { name: directAdmin })).toBeVisible();
+    await expect(
+      primaryNavigation.getByRole("link", { name: directAdmin }),
+    ).toBeVisible();
   }
-  await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+  await expect(
+    primaryNavigation.getByRole("link", { name: "Administration" }),
+  ).toHaveCount(0);
   await expect(page.locator('a[href="/forms"]').first()).toBeVisible();
   await expect(page.locator('a[href^="/app"]')).toHaveCount(0);
   await assertNoConsoleErrors();
@@ -128,7 +135,10 @@ test("authenticated primary routes render in the native shell", async ({
   }
 
   await page.goto("/datasets");
-  await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+  await expect(page.locator("#module-content")).toHaveAttribute(
+    "data-hydration",
+    "ready",
+  );
   await expect(
     page.getByRole("heading", { level: 1, name: "Datasets" }),
   ).toBeVisible();

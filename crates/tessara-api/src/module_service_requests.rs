@@ -6,11 +6,16 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
+use tessara_composition::{
+    ApplicationLockfileV1, MaterializationActionV1, OwnerBootstrapAuthorizationContextV1,
+    OwnerBootstrapAuthorizationV1,
+};
 use tessara_module_contract::{
-    AuthorizationGrantV3, MODULE_SERVICE_IDENTITIES_ENVIRONMENT, ModuleManifest,
+    AuthorizationAudienceV1, AuthorizationGrantV3, AuthorizationValidationContextV3,
+    CapabilityScopeBindingV1, MODULE_SERVICE_IDENTITIES_ENVIRONMENT, ModuleManifest,
     ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1, ModuleServiceRequestV1,
     ModuleServiceRequestValidationContextV1, ProtocolSignaturePurposeV1,
-    PurposeBoundVerifyingKeyV1, SignedEnvelopeV1,
+    PurposeBoundVerifyingKeyV1, ServiceActionMethod, SignedEnvelopeV1,
 };
 
 use crate::{
@@ -24,6 +29,19 @@ pub(crate) enum AuthorizationGrantConsumption {
     OneTimeProviderAudience(uuid::Uuid),
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct CoreProviderAuthorizationV1 {
+    pub(crate) payload: CoreProviderAuthorizationPayloadV1,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CoreProviderAuthorizationPayloadV1 {
+    pub(crate) installation_id: uuid::Uuid,
+    pub(crate) original_actor_id: uuid::Uuid,
+    pub(crate) presenting_service: ModuleServicePrincipalV1,
+    pub(crate) capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
+}
+
 impl AuthorizationGrantConsumption {
     fn authorization_jti(self) -> Option<uuid::Uuid> {
         match self {
@@ -31,6 +49,311 @@ impl AuthorizationGrantConsumption {
             Self::OneTimeProviderAudience(jti) => Some(jti),
         }
     }
+}
+
+/// Validates one exact Core-owned private provider invocation. Product
+/// providers still own their media type, typed body, scope, and nondisclosure
+/// rules; this function owns the shared grant/service-request boundary.
+pub(crate) async fn authorize_core_provider(
+    state: &AppState,
+    headers: &HeaderMap,
+    functional_contract: &str,
+    action: &str,
+    path: &str,
+    body: &[u8],
+    restricted_message: &'static str,
+) -> ApiResult<CoreProviderAuthorizationV1> {
+    let restricted = || ApiError::NotFound(restricted_message.into());
+    let declaration =
+        crate::core_service_providers::resolve_service_action(functional_contract, action)
+            .filter(|declaration| {
+                declaration.method == ServiceActionMethod::Post && declaration.path == path
+            })
+            .ok_or_else(&restricted)?;
+    if headers.contains_key("x-tessara-owner-bootstrap-authorization") {
+        return authorize_bootstrap_core_provider(
+            state,
+            headers,
+            BootstrapCoreProviderExpectation {
+                functional_contract,
+                action,
+                path,
+                body,
+                required_capability: declaration.required_capability,
+                restricted_message,
+            },
+        )
+        .await;
+    }
+    let inbound = verified_authorization(headers)?;
+    let installation_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM application_installations WHERE id=$1)")
+            .bind(inbound.payload.installation_id)
+            .fetch_one(&state.pool)
+            .await?;
+    if !installation_exists
+        || inbound.payload.audience
+            != (AuthorizationAudienceV1::CoreInstallation {
+                installation_id: inbound.payload.installation_id,
+            })
+        || inbound.payload.functional_contract.as_str() != declaration.functional_contract
+        || inbound.payload.action != declaration.authorization_action
+        || inbound.payload.operation != declaration.operation
+        || !inbound
+            .payload
+            .capability_scope_bindings
+            .iter()
+            .any(|binding| binding.capability.as_str() == declaration.required_capability)
+    {
+        return Err(restricted());
+    }
+    let revisions = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    inbound
+        .payload
+        .validate_for(&AuthorizationValidationContextV3 {
+            installation_id: inbound.payload.installation_id,
+            correlation_id: inbound.payload.correlation_id,
+            presenting_service: inbound.payload.presenting_service.clone(),
+            audience: AuthorizationAudienceV1::CoreInstallation {
+                installation_id: inbound.payload.installation_id,
+            },
+            dependency_binding: inbound.payload.dependency_binding.clone(),
+            functional_contract: inbound.payload.functional_contract.clone(),
+            action: declaration.authorization_action.into(),
+            operation: declaration.operation,
+            resource_assertion: inbound.payload.resource_assertion.clone(),
+            authorization_revision: revisions.0 as u64,
+            organization_revision: revisions.1 as u64,
+            now: Utc::now(),
+        })
+        .map_err(|_| restricted())?;
+    let presenter = match &inbound.payload.presenting_service {
+        ModuleServicePrincipalV1::ModuleInstance { .. } => {
+            inbound.payload.presenting_service.clone()
+        }
+        ModuleServicePrincipalV1::CoreGateway => return Err(restricted()),
+    };
+    validate_for_principal(
+        state,
+        headers,
+        &inbound,
+        ModuleServiceRequestExpectation {
+            principal: &presenter,
+            grant_consumption: AuthorizationGrantConsumption::OneTimeProviderAudience(
+                inbound.payload.jti,
+            ),
+            method: "POST",
+            path,
+            body,
+        },
+    )
+    .await?;
+    Ok(CoreProviderAuthorizationV1 {
+        payload: CoreProviderAuthorizationPayloadV1 {
+            installation_id: inbound.payload.installation_id,
+            original_actor_id: inbound.payload.original_actor_id,
+            presenting_service: inbound.payload.presenting_service,
+            capability_scope_bindings: inbound.payload.capability_scope_bindings,
+        },
+    })
+}
+
+struct BootstrapCoreProviderExpectation<'a> {
+    functional_contract: &'a str,
+    action: &'a str,
+    path: &'a str,
+    body: &'a [u8],
+    required_capability: &'a str,
+    restricted_message: &'static str,
+}
+
+async fn authorize_bootstrap_core_provider(
+    state: &AppState,
+    headers: &HeaderMap,
+    expectation: BootstrapCoreProviderExpectation<'_>,
+) -> ApiResult<CoreProviderAuthorizationV1> {
+    let restricted = || ApiError::NotFound(expectation.restricted_message.into());
+    let encoded_authorization = headers
+        .get("x-tessara-owner-bootstrap-authorization")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(&restricted)?;
+    let authorization_bytes = URL_SAFE_NO_PAD
+        .decode(encoded_authorization)
+        .map_err(|_| restricted())?;
+    let authorization: SignedEnvelopeV1<OwnerBootstrapAuthorizationV1> =
+        serde_json::from_slice(&authorization_bytes).map_err(|_| restricted())?;
+    crate::core_security::protocol_signer(ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization)?
+        .verifier()
+        .verify(&authorization)
+        .map_err(|_| restricted())?;
+    let AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id,
+        module_definition_id,
+    } = &authorization.payload.owner
+    else {
+        return Err(restricted());
+    };
+    if authorization.payload.owner_definition_id != module_definition_id.as_str()
+        || *module_instance_id
+            != tessara_composition::module_instance_id(
+                authorization.payload.installation_id,
+                module_definition_id.as_str(),
+            )
+        || !authorization
+            .payload
+            .provider_actions
+            .iter()
+            .any(|provider_action| {
+                provider_action.functional_contract == expectation.functional_contract
+                    && provider_action.action == expectation.action
+                    && provider_action.method == ServiceActionMethod::Post
+                    && provider_action.path == expectation.path
+                    && provider_action.audience
+                        == (AuthorizationAudienceV1::CoreInstallation {
+                            installation_id: authorization.payload.installation_id,
+                        })
+            })
+        || !authorization
+            .payload
+            .capability_scope_bindings
+            .iter()
+            .any(|binding| binding.capability.as_str() == expectation.required_capability)
+    {
+        return Err(restricted());
+    }
+    authorization
+        .payload
+        .validate_for(&OwnerBootstrapAuthorizationContextV1 {
+            installation_id: authorization.payload.installation_id,
+            owner: &authorization.payload.owner,
+            owner_definition_id: module_definition_id.as_str(),
+            locked_input_digest: &authorization.payload.locked_input_digest,
+            input_digest: &authorization.payload.input_digest,
+            desired_revision: authorization.payload.desired_revision,
+            apply_sequence: authorization.payload.apply_sequence,
+            target_plan_digest: &authorization.payload.target_plan_digest,
+            idempotency_key: &authorization.payload.idempotency_key,
+            now: Utc::now(),
+        })
+        .map_err(|_| restricted())?;
+    let lockfile_value: serde_json::Value = sqlx::query_scalar(
+        "SELECT document FROM composition_lockfiles
+         WHERE installation_id=$1 AND blueprint_revision=$2",
+    )
+    .bind(authorization.payload.installation_id)
+    .bind(authorization.payload.desired_revision as i64)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(&restricted)?;
+    let lockfile: ApplicationLockfileV1 =
+        serde_json::from_value(lockfile_value).map_err(|_| restricted())?;
+    let selected = lockfile
+        .modules
+        .iter()
+        .find(|module| module.enabled && module.definition_id == module_definition_id.as_str())
+        .ok_or_else(&restricted)?;
+    let provider_action = authorization
+        .payload
+        .provider_actions
+        .iter()
+        .find(|provider_action| {
+            provider_action.functional_contract == expectation.functional_contract
+                && provider_action.action == expectation.action
+                && provider_action.path == expectation.path
+        })
+        .ok_or_else(&restricted)?;
+    let binding = selected
+        .dependency_bindings
+        .get(&provider_action.dependency_binding)
+        .filter(|binding| {
+            binding.provider == "core" && binding.contract_id == expectation.functional_contract
+        })
+        .ok_or_else(&restricted)?;
+    let declared_version =
+        crate::core_service_providers::contract_version(expectation.functional_contract)
+            .ok_or_else(&restricted)?;
+    let revisions = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    if lockfile.materialization_plan_digest != authorization.payload.target_plan_digest
+        || binding.contract_version != declared_version
+        || revisions.0 as u64 != authorization.payload.authorization_revision
+        || revisions.1 as u64 != authorization.payload.organization_revision
+        || !lockfile.materialization_plan.actions.iter().any(|planned| {
+            matches!(planned, MaterializationActionV1::Bootstrap { owner, input_digest }
+                if owner == module_definition_id.as_str()
+                    && input_digest == &authorization.payload.locked_input_digest)
+        })
+    {
+        return Err(restricted());
+    }
+    let correlation_id = verified_correlation_header(headers, authorization.payload.correlation_id)
+        .map_err(|_| restricted())?;
+    let encoded_request = headers
+        .get("x-tessara-module-service-request")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(&restricted)?;
+    let request_bytes = URL_SAFE_NO_PAD
+        .decode(encoded_request)
+        .map_err(|_| restricted())?;
+    let service_request: SignedEnvelopeV1<ModuleServiceRequestV1> =
+        serde_json::from_slice(&request_bytes).map_err(|_| restricted())?;
+    let registry = configured_registry()
+        .map_err(ApiError::Internal)?
+        .ok_or_else(&restricted)?;
+    registry
+        .module_service_verifier(module_definition_id)
+        .map_err(|_| restricted())?
+        .verify(&service_request)
+        .map_err(|_| restricted())?;
+    service_request
+        .payload
+        .validate_for(&ModuleServiceRequestValidationContextV1 {
+            installation_id: authorization.payload.installation_id,
+            module_instance_id: *module_instance_id,
+            module_definition_id: module_definition_id.clone(),
+            method: "POST".into(),
+            path: expectation.path.into(),
+            canonical_body_digest: sha256_hex(expectation.body),
+            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
+            correlation_id: correlation_id.to_string(),
+            now: Utc::now(),
+        })
+        .map_err(|_| restricted())?;
+    let consumed = sqlx::query(
+        "INSERT INTO consumed_module_service_nonces
+           (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+    )
+    .bind(service_request.payload.module_instance_id)
+    .bind(service_request.payload.nonce)
+    .bind(Option::<uuid::Uuid>::None)
+    .bind(&service_request.payload.correlation_id)
+    .bind(service_request.payload.issued_at)
+    .execute(&state.pool)
+    .await?;
+    if consumed.rows_affected() != 1 {
+        return Err(restricted());
+    }
+    Ok(CoreProviderAuthorizationV1 {
+        payload: CoreProviderAuthorizationPayloadV1 {
+            installation_id: authorization.payload.installation_id,
+            original_actor_id: authorization.payload.original_actor_id,
+            presenting_service: ModuleServicePrincipalV1::ModuleInstance {
+                module_instance_id: *module_instance_id,
+                module_definition_id: module_definition_id.clone(),
+            },
+            capability_scope_bindings: authorization.payload.capability_scope_bindings,
+        },
+    })
 }
 
 pub(crate) struct ModuleServiceRequestExpectation<'a> {
@@ -250,90 +573,7 @@ pub(crate) async fn validate_for_principal_with_authorization(
     Ok(())
 }
 
-/// Verifies an apply-bound request from the exact lockfile-selected Module
-/// Instance before final enrollment exists. The configured service registry
-/// supplies only public verification material; the signed bootstrap
-/// authorization supplies the narrow operation authority.
-pub(crate) async fn validate_materializing_principal_with_authorization(
-    state: &AppState,
-    headers: &HeaderMap,
-    installation_id: uuid::Uuid,
-    correlation_id: uuid::Uuid,
-    encoded_authorization: &str,
-    expectation: ModuleServiceRequestExpectation<'_>,
-) -> ApiResult<()> {
-    let ModuleServicePrincipalV1::ModuleInstance {
-        module_instance_id,
-        module_definition_id,
-    } = expectation.principal
-    else {
-        return Err(restricted_authorization());
-    };
-    if !materializing_instance_is_selected(
-        installation_id,
-        module_definition_id,
-        *module_instance_id,
-    ) {
-        return Err(restricted_authorization());
-    }
-    let authorization_jti = expectation
-        .grant_consumption
-        .authorization_jti()
-        .ok_or_else(restricted_authorization)?;
-    let registry = configured_registry()
-        .map_err(|_| restricted_authorization())?
-        .ok_or_else(restricted_authorization)?;
-    let verifier = registry
-        .module_service_verifier(module_definition_id)
-        .map_err(|_| restricted_authorization())?;
-    let correlation_id = verified_correlation_header(headers, correlation_id)?;
-    let encoded = headers
-        .get("x-tessara-module-service-request")
-        .and_then(|value| value.to_str().ok())
-        .ok_or_else(restricted_authorization)?;
-    let bytes = URL_SAFE_NO_PAD
-        .decode(encoded)
-        .map_err(|_| restricted_authorization())?;
-    let envelope: SignedEnvelopeV1<ModuleServiceRequestV1> =
-        serde_json::from_slice(&bytes).map_err(|_| restricted_authorization())?;
-    verifier
-        .verify(&envelope)
-        .map_err(|_| restricted_authorization())?;
-    envelope
-        .payload
-        .validate_for(&ModuleServiceRequestValidationContextV1 {
-            installation_id,
-            module_instance_id: *module_instance_id,
-            module_definition_id: module_definition_id.clone(),
-            method: expectation.method.into(),
-            path: expectation.path.into(),
-            canonical_body_digest: sha256_hex(expectation.body),
-            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
-            correlation_id: correlation_id.to_string(),
-            now: Utc::now(),
-        })
-        .map_err(|_| restricted_authorization())?;
-
-    let consumed = sqlx::query(
-        "INSERT INTO consumed_bootstrap_validation_authorizations
-           (authorization_jti,installation_id,module_instance_id,service_nonce,
-            correlation_id,issued_at)
-         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING",
-    )
-    .bind(authorization_jti)
-    .bind(installation_id)
-    .bind(envelope.payload.module_instance_id)
-    .bind(envelope.payload.nonce)
-    .bind(correlation_id)
-    .bind(envelope.payload.issued_at)
-    .execute(&state.pool)
-    .await?;
-    if consumed.rows_affected() != 1 {
-        return Err(restricted_authorization());
-    }
-    Ok(())
-}
-
+#[cfg(test)]
 fn materializing_instance_is_selected(
     installation_id: uuid::Uuid,
     module_definition_id: &tessara_module_contract::ModuleDefinitionId,

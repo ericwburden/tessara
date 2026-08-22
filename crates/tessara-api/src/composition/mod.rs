@@ -12,6 +12,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
 use tessara_composition::{
     AUTHORIZATION_API_V1, ActorEvidenceV1, ApplicationBlueprintV1, ApplicationLockfileV1,
@@ -22,8 +23,10 @@ use tessara_composition::{
     BootstrapDependencyValidationAuthorizationIssueResponseV1,
     BootstrapDependencyValidationAuthorizationV1, BootstrapDependencyValidationInvocationV1,
     BootstrapDependencyValidationRequestV1, CompositionError, CompositionOperationV1,
-    InstallationReceiptV1, MaterializationActionV1, PLAN_API_V1, ReleaseCatalogV1,
-    canonical_digest, required_effects, resolve_against, resolve_bootstrap_dependency_validation,
+    InstallationReceiptV1, MaterializationActionV1,
+    OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1, OwnerBootstrapAuthorizationV1,
+    OwnerBootstrapProviderActionV1, PLAN_API_V1, ReleaseCatalogV1, canonical_digest,
+    required_effects, resolve_against, resolve_bootstrap_dependency_validation,
 };
 use tessara_module_contract::{
     ArtifactDigest, AuthorizationAudienceV1, ModuleManifest, ProtocolSignaturePurposeV1,
@@ -64,6 +67,10 @@ pub(crate) fn routes() -> Router<AppState> {
             post(project_operation),
         )
         .route("/api/internal/composition/receipts", post(project_receipt))
+        .route(
+            "/api/internal/composition/bootstrap-capabilities",
+            post(enroll_bootstrap_capabilities),
+        )
         .route(
             "/api/internal/composition/bootstrap/core",
             post(apply_core_bootstrap),
@@ -177,55 +184,85 @@ struct ReceiptProjectionRequestV1 {
     receipt: InstallationReceiptV1,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BootstrapCapabilityEnrollmentRequestV1 {
+    lockfile: ApplicationLockfileV1,
+    manifests: BTreeMap<String, ModuleManifest>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CoreBootstrapV1 {
     schema_version: String,
-    root_node_type_id: Uuid,
     root_node_type_external_key: String,
     root_node_type_name: String,
-    root_node_id: Uuid,
     root_node_external_key: String,
     root_node_name: String,
-    dataset_id: Uuid,
-    #[serde(default)]
-    dataset_revision_id: Option<Uuid>,
-    dataset_external_key: String,
-    #[serde(default)]
-    dataset_rows: Vec<CoreBootstrapDatasetRowV1>,
     #[serde(default)]
     additional_nodes: Vec<CoreBootstrapNodeV1>,
     #[serde(default)]
-    additional_datasets: Vec<CoreBootstrapDatasetV1>,
+    forms: Vec<CoreBootstrapFormV1>,
+    #[serde(default)]
+    responses: Vec<CoreBootstrapResponseV1>,
+    #[serde(default)]
+    actors: Vec<CoreBootstrapActorV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CoreBootstrapNodeV1 {
-    node_id: Uuid,
-    node_type_id: Uuid,
-    parent_node_id: Option<Uuid>,
     external_key: String,
     name: String,
+    parent_node_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CoreBootstrapDatasetV1 {
-    dataset_id: Uuid,
-    dataset_revision_id: Uuid,
-    external_key: String,
+struct CoreBootstrapFormV1 {
+    resource_key: String,
+    source_alias: String,
     name: String,
-    scope_node_ids: Vec<Uuid>,
-    rows: Vec<CoreBootstrapDatasetRowV1>,
+    slug: String,
+    version_label: String,
+    published_at: DateTime<Utc>,
+    scope_node_keys: Vec<String>,
+    fields: Vec<CoreBootstrapFormFieldV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CoreBootstrapDatasetRowV1 {
-    row_id: String,
-    restriction_tier: String,
+struct CoreBootstrapFormFieldV1 {
+    key: String,
     label: String,
+    field_type: String,
+    #[serde(default)]
+    required: bool,
+    position: i32,
+    grid_row: i32,
+    grid_column: i32,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapResponseV1 {
+    resource_key: String,
+    form_resource_key: String,
+    node_key: String,
+    created_at: DateTime<Utc>,
+    submitted_at: DateTime<Utc>,
+    values: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CoreBootstrapActorV1 {
+    resource_key: String,
+    email: String,
+    display_name: String,
+    password: String,
+    capabilities: Vec<String>,
+    scope_node_keys: Vec<String>,
 }
 
 async fn summary(
@@ -568,6 +605,32 @@ async fn apply_blueprint(
                 .map_err(|error| ApiError::Internal(error.into()))?,
         )
     };
+    let current_lockfile = if current_receipt.is_some() {
+        let projected: Option<Value> = sqlx::query_scalar(
+            "SELECT lockfile
+             FROM composition_receipt_projections
+             WHERE installation_id=$1
+             ORDER BY revision DESC
+             LIMIT 1",
+        )
+        .bind(installation_id)
+        .fetch_optional(&state.pool)
+        .await?;
+        Some(
+            projected
+                .ok_or_else(|| {
+                    ApiError::BadRequest(
+                        "Supervisor receipt has no matching Core lockfile projection".into(),
+                    )
+                })
+                .and_then(|value| {
+                    serde_json::from_value::<ApplicationLockfileV1>(value)
+                        .map_err(|error| ApiError::Internal(error.into()))
+                })?,
+        )
+    } else {
+        None
+    };
     let now = Utc::now();
     let actor_id = auth.account_id;
     let approved_by: Uuid = row.try_get("approved_by")?;
@@ -615,7 +678,11 @@ async fn apply_blueprint(
         .map_err(|error| ApiError::Internal(error.into()))?;
     let response = client
         .post(format!("{}/v1/apply", supervisor_url.trim_end_matches('/')))
-        .json(&serde_json::json!({"lockfile": lockfile, "authorization": signed}))
+        .json(&serde_json::json!({
+            "lockfile": lockfile,
+            "current_lockfile": current_lockfile,
+            "authorization": signed
+        }))
         .send()
         .await
         .map_err(|_| ApiError::NotFound("Supervisor is unavailable".into()))?;
@@ -842,10 +909,13 @@ async fn issue_bootstrap_dependency_authorization(
     Json(request): Json<BootstrapDependencyValidationAuthorizationIssueRequestV1>,
 ) -> ApiResult<Json<BootstrapDependencyValidationAuthorizationIssueResponseV1>> {
     require_projection_token(&headers)?;
-    apply_authorization_signer()?
+    if apply_authorization_signer()?
         .verifier()
         .verify(&request.apply_authorization)
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+        .is_err()
+    {
+        return Err(reject_bootstrap_authorization("apply_signature"));
+    }
 
     let lockfile_value: Value = sqlx::query_scalar(
         "SELECT document FROM composition_lockfiles
@@ -871,16 +941,21 @@ async fn issue_bootstrap_dependency_authorization(
     .transpose()
     .map_err(|error| ApiError::Internal(error.into()))?;
     let now = Utc::now();
-    request
-        .apply_authorization
-        .payload
-        .validate_for(
-            &lockfile.materialization_plan,
-            &lockfile.materialization_plan_digest,
-            current_receipt_digest.as_ref(),
-            now,
-        )
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
+    if let Err(finding) = request.apply_authorization.payload.validate_for(
+        &lockfile.materialization_plan,
+        &lockfile.materialization_plan_digest,
+        current_receipt_digest.as_ref(),
+        now,
+    ) {
+        tracing::warn!(
+            operation = "bootstrap_dependency_authorization",
+            result = "rejected",
+            reason = "apply_contract",
+            finding_code = %finding.code,
+            "bootstrap dependency authorization rejected"
+        );
+        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+    }
     if request.apply_authorization.payload.operation != ApplyOperationKindV1::Materialize
         || !request
             .apply_authorization
@@ -892,72 +967,185 @@ async fn issue_bootstrap_dependency_authorization(
         || request.apply_sequence != request.apply_authorization.payload.apply_sequence
         || request.desired_revision != request.apply_authorization.payload.desired_revision
         || !lockfile.materialization_plan.actions.iter().any(|action| {
-            matches!(action, MaterializationActionV1::Bootstrap { owner, .. }
-                if owner == &request.owner_definition_id)
+            matches!(action, MaterializationActionV1::Bootstrap { owner, input_digest }
+                if owner == &request.owner_definition_id
+                    && input_digest == &request.locked_input_digest)
         })
     {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("plan_binding"));
     }
 
     let module = lockfile
         .modules
         .iter()
-        .find(|module| module.definition_id == request.owner_definition_id && module.enabled)
-        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
-    let module_instance_id = tessara_composition::module_instance_id(
-        request.installation_id,
-        &request.owner_definition_id,
-    );
-    let endpoint = module_control_endpoints()?
-        .remove(&request.owner_definition_id)
-        .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?;
-    let manifest = reqwest::Client::new()
-        .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
-        .header("x-tessara-module-control-key", module_control_key()?)
-        .send()
-        .await
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
-        .error_for_status()
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?
-        .json::<ModuleManifest>()
-        .await
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
-    let validation = resolve_bootstrap_dependency_validation(&lockfile, module, &manifest)
-        .map_err(|_| ApiError::Forbidden("bootstrap:authorize".into()))?;
-    let Some(validation) = validation else {
-        return Ok(Json(
-            BootstrapDependencyValidationAuthorizationIssueResponseV1 { validation: None },
-        ));
+        .find(|module| module.definition_id == request.owner_definition_id && module.enabled);
+    let module_instance_id = module.map(|_| {
+        tessara_composition::module_instance_id(
+            request.installation_id,
+            &request.owner_definition_id,
+        )
+    });
+    let manifest = if module.is_some() {
+        let endpoint = module_control_endpoints()?
+            .remove(&request.owner_definition_id)
+            .ok_or_else(|| reject_bootstrap_authorization("owner_endpoint"))?;
+        Some(
+            reqwest::Client::new()
+                .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+                .header("x-tessara-module-control-key", module_control_key()?)
+                .send()
+                .await
+                .map_err(|_| reject_bootstrap_authorization("manifest_request"))?
+                .error_for_status()
+                .map_err(|_| reject_bootstrap_authorization("manifest_status"))?
+                .json::<ModuleManifest>()
+                .await
+                .map_err(|_| reject_bootstrap_authorization("manifest_decode"))?,
+        )
+    } else if request.owner_definition_id == "core" {
+        None
+    } else {
+        return Err(reject_bootstrap_authorization("owner_not_enabled"));
     };
-    require_bootstrap_validation_provider_target(&lockfile, &validation.target).await?;
-    if canonical_digest(
-        module
-            .bootstrap
-            .as_ref()
-            .and_then(|bootstrap| match bootstrap {
-                tessara_composition::BootstrapInputV1::Inline { value, .. } => Some(value),
-                tessara_composition::BootstrapInputV1::LocalCas { .. } => None,
-            })
-            .ok_or_else(|| ApiError::Forbidden("bootstrap:authorize".into()))?,
-    )
-    .map_err(|error| ApiError::Internal(error.into()))?
-        != request.input_digest
-        || crate::module_service_requests::configured_registry()
-            .map_err(ApiError::Internal)?
-            .and_then(|registry| registry.identity(&manifest.definition_id).cloned())
-            .is_none()
+    let locked_bootstrap = match module {
+        Some(module) => module.bootstrap.as_ref(),
+        None => lockfile.core.bootstrap.as_ref(),
+    };
+    let (locked_input, receipt_bindings) = locked_bootstrap
+        .and_then(|bootstrap| match bootstrap {
+            tessara_composition::BootstrapInputV1::Inline {
+                value,
+                receipt_bindings,
+                ..
+            } => Some((value, receipt_bindings.as_slice())),
+            tessara_composition::BootstrapInputV1::LocalCas { .. } => None,
+        })
+        .ok_or_else(|| reject_bootstrap_authorization("bootstrap_input"))?;
+    if request.idempotency_key.trim().is_empty()
+        || canonical_digest(locked_input).map_err(|error| ApiError::Internal(error.into()))?
+            != request.locked_input_digest
+        || canonical_digest(&request.input).map_err(|error| ApiError::Internal(error.into()))?
+            != request.input_digest
+        || !resolved_bootstrap_input_matches_lock(locked_input, receipt_bindings, &request.input)
     {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("input_binding"));
+    }
+    if let Some(manifest) = manifest.as_ref() {
+        let registry = crate::module_service_requests::configured_registry()
+            .map_err(ApiError::Internal)?
+            .ok_or_else(|| reject_bootstrap_authorization("service_registry"))?;
+        if registry.identity(&manifest.definition_id).is_none() {
+            return Err(reject_bootstrap_authorization("service_identity"));
+        }
+    }
+    let validation = match (module, manifest.as_ref()) {
+        (Some(module), Some(manifest)) => resolve_bootstrap_dependency_validation(
+            &lockfile,
+            module,
+            manifest,
+            Some(&request.input),
+        )
+        .map_err(|_| reject_bootstrap_authorization("dependency_validation"))?,
+        _ => None,
+    };
+    if let Some(validation) = validation.as_ref() {
+        require_bootstrap_validation_provider_target(&lockfile, &validation.target).await?;
     }
     let expires_at = std::cmp::min(
         now + Duration::seconds(30),
         request.apply_authorization.payload.expires_at,
     );
     if expires_at <= now {
-        return Err(ApiError::Forbidden("bootstrap:authorize".into()));
+        return Err(reject_bootstrap_authorization("authorization_expired"));
     }
-    let validation_request = BootstrapDependencyValidationRequestV1 {
-        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+    let original_actor_id =
+        Uuid::parse_str(&request.apply_authorization.payload.initiator.actor_id)
+            .map_err(|_| reject_bootstrap_authorization("initiator_identity"))?;
+    let provider_actions = match (module, manifest.as_ref()) {
+        (Some(module), Some(manifest)) => manifest
+            .consumed_service_actions
+            .iter()
+            .filter_map(|action| {
+                let binding = module
+                    .dependency_bindings
+                    .get(action.dependency_binding.as_str())?;
+                if binding.provider != "core"
+                    || binding.contract_id != action.functional_contract.as_str()
+                {
+                    return None;
+                }
+                let declaration = crate::core_service_providers::resolve_service_action(
+                    action.functional_contract.as_str(),
+                    &action.authorization_action,
+                )?;
+                Some((
+                    declaration.required_capability,
+                    OwnerBootstrapProviderActionV1 {
+                        dependency_binding: action.dependency_binding.to_string(),
+                        functional_contract: action.functional_contract.to_string(),
+                        action: action.authorization_action.clone(),
+                        method: declaration.method,
+                        path: declaration.path.into(),
+                        audience: AuthorizationAudienceV1::CoreInstallation {
+                            installation_id: request.installation_id,
+                        },
+                    },
+                ))
+            })
+            .collect::<Vec<_>>(),
+        _ => Vec::new(),
+    };
+    let required_capabilities = provider_actions
+        .iter()
+        .map(|(capability, _)| *capability)
+        .collect::<BTreeSet<_>>();
+    let mut capability_scope_bindings = Vec::new();
+    for required_capability in required_capabilities {
+        capability_scope_bindings.extend(
+            crate::core_security::capability_bindings(
+                &state.pool,
+                original_actor_id,
+                required_capability,
+            )
+            .await?,
+        );
+    }
+    let (authorization_revision, organization_revision) = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    if authorization_revision <= 0 || organization_revision <= 0 {
+        return Err(reject_bootstrap_authorization("security_revision"));
+    }
+    let owner = match (module_instance_id, manifest.as_ref()) {
+        (Some(module_instance_id), Some(manifest)) => AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id: manifest.definition_id.clone(),
+        },
+        _ => AuthorizationAudienceV1::CoreInstallation {
+            installation_id: request.installation_id,
+        },
+    };
+    let owner_authorization = crate::core_security::protocol_signer(
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+    )?
+    .sign(OwnerBootstrapAuthorizationV1 {
+        schema_version: OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1,
+        installation_id: request.installation_id,
+        owner,
+        owner_definition_id: request.owner_definition_id.clone(),
+        initiator: request.apply_authorization.payload.initiator.clone(),
+        original_actor_id,
+        capability_scope_bindings,
+        provider_actions: provider_actions
+            .into_iter()
+            .map(|(_, action)| action)
+            .collect(),
+        authorization_revision: authorization_revision as u64,
+        organization_revision: organization_revision as u64,
+        locked_input_digest: request.locked_input_digest.clone(),
         input_digest: request.input_digest.clone(),
         desired_revision: request.desired_revision,
         apply_sequence: request.apply_sequence,
@@ -966,45 +1154,79 @@ async fn issue_bootstrap_dependency_authorization(
             .payload
             .target_plan_digest
             .clone(),
-        payload: validation.payload,
-    };
-    let request_digest =
-        canonical_digest(&validation_request).map_err(|error| ApiError::Internal(error.into()))?;
-    let authorization = crate::core_security::protocol_signer(
-        ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
-    )?
-    .sign(BootstrapDependencyValidationAuthorizationV1 {
-        schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
-        installation_id: request.installation_id,
-        module_instance_id,
-        module_definition_id: request.owner_definition_id,
-        input_digest: request.input_digest,
-        desired_revision: request.desired_revision,
-        apply_sequence: request.apply_sequence,
-        target_plan_digest: validation_request.target_plan_digest.clone(),
-        dependency_binding: validation.target.dependency_binding.clone(),
-        functional_contract: validation.target.functional_contract.clone(),
-        functional_contract_version: validation.target.functional_contract_version.clone(),
-        action: validation.target.action.clone(),
-        method: validation.target.method,
-        path: validation.target.path.clone(),
-        audience: validation.target.audience.clone(),
-        request_digest,
+        idempotency_key: request.idempotency_key,
         correlation_id: Uuid::new_v4(),
         jti: Uuid::new_v4(),
         issued_at: now,
         expires_at,
     })
     .map_err(|error| ApiError::Internal(error.into()))?;
+    let validation = if let Some(validation) = validation {
+        let validation_request = BootstrapDependencyValidationRequestV1 {
+            schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_REQUEST_SCHEMA_VERSION_V1,
+            input_digest: request.input_digest.clone(),
+            desired_revision: request.desired_revision,
+            apply_sequence: request.apply_sequence,
+            target_plan_digest: request
+                .apply_authorization
+                .payload
+                .target_plan_digest
+                .clone(),
+            payload: validation.payload,
+        };
+        let request_digest = canonical_digest(&validation_request)
+            .map_err(|error| ApiError::Internal(error.into()))?;
+        let authorization = crate::core_security::protocol_signer(
+            ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
+        )?
+        .sign(BootstrapDependencyValidationAuthorizationV1 {
+            schema_version: BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_SCHEMA_VERSION_V1,
+            installation_id: request.installation_id,
+            module_instance_id: module_instance_id
+                .ok_or_else(|| reject_bootstrap_authorization("module_instance"))?,
+            module_definition_id: request.owner_definition_id,
+            input_digest: request.input_digest,
+            desired_revision: request.desired_revision,
+            apply_sequence: request.apply_sequence,
+            target_plan_digest: validation_request.target_plan_digest.clone(),
+            dependency_binding: validation.target.dependency_binding.clone(),
+            functional_contract: validation.target.functional_contract.clone(),
+            functional_contract_version: validation.target.functional_contract_version.clone(),
+            action: validation.target.action.clone(),
+            method: validation.target.method,
+            path: validation.target.path.clone(),
+            audience: validation.target.audience.clone(),
+            request_digest,
+            correlation_id: owner_authorization.payload.correlation_id,
+            jti: Uuid::new_v4(),
+            issued_at: now,
+            expires_at,
+        })
+        .map_err(|error| ApiError::Internal(error.into()))?;
+        Some(BootstrapDependencyValidationInvocationV1 {
+            target: validation.target,
+            request: validation_request,
+            authorization,
+        })
+    } else {
+        None
+    };
     Ok(Json(
         BootstrapDependencyValidationAuthorizationIssueResponseV1 {
-            validation: Some(BootstrapDependencyValidationInvocationV1 {
-                target: validation.target,
-                request: validation_request,
-                authorization,
-            }),
+            authorization: owner_authorization,
+            validation,
         },
     ))
+}
+
+fn reject_bootstrap_authorization(reason: &'static str) -> ApiError {
+    tracing::warn!(
+        operation = "bootstrap_dependency_authorization",
+        result = "rejected",
+        reason,
+        "bootstrap dependency authorization rejected"
+    );
+    ApiError::Forbidden("bootstrap:authorize".into())
 }
 
 async fn require_bootstrap_validation_provider_target(
@@ -1088,12 +1310,121 @@ async fn require_bootstrap_validation_provider_target(
     Ok(())
 }
 
+fn resolved_bootstrap_input_matches_lock(
+    locked_input: &Value,
+    receipt_bindings: &[tessara_composition::BootstrapReceiptBindingV1],
+    resolved_input: &Value,
+) -> bool {
+    if receipt_bindings.is_empty() {
+        return locked_input == resolved_input;
+    }
+    let mut normalized = resolved_input.clone();
+    let mut targets = BTreeSet::new();
+    for binding in receipt_bindings {
+        if !binding.target_pointer.starts_with('/')
+            || binding.source_owner.trim().is_empty()
+            || binding.resource_key.trim().is_empty()
+            || !targets.insert(binding.target_pointer.as_str())
+            || locked_input.pointer(&binding.target_pointer) != Some(&Value::Null)
+        {
+            return false;
+        }
+        let Some(target) = normalized.pointer_mut(&binding.target_pointer) else {
+            return false;
+        };
+        if target.is_null() {
+            return false;
+        }
+        *target = Value::Null;
+    }
+    &normalized == locked_input
+}
+
+async fn enroll_bootstrap_capabilities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<BootstrapCapabilityEnrollmentRequestV1>,
+) -> ApiResult<StatusCode> {
+    require_projection_token(&headers)?;
+    let stored_lockfile: Value = sqlx::query_scalar(
+        "SELECT document FROM composition_lockfiles
+         WHERE installation_id=$1 AND blueprint_revision=$2",
+    )
+    .bind(request.lockfile.installation_id)
+    .bind(request.lockfile.blueprint_revision as i64)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or_else(|| ApiError::BadRequest("Bootstrap capability lockfile is unavailable".into()))?;
+    let stored_lockfile: ApplicationLockfileV1 = serde_json::from_value(stored_lockfile)
+        .map_err(|error| ApiError::Internal(error.into()))?;
+    if stored_lockfile != request.lockfile {
+        return Err(ApiError::BadRequest(
+            "Bootstrap capability lockfile is not the source-exact projected lock".into(),
+        ));
+    }
+    validate_bootstrap_capability_manifests(&request.lockfile.modules, &request.manifests)?;
+
+    let service_identities =
+        crate::module_service_requests::configured_registry().map_err(ApiError::Internal)?;
+    let mut transaction = state.pool.begin().await?;
+    crate::modules::project_bootstrap_module_security(
+        &mut transaction,
+        request.lockfile.installation_id,
+        &request.lockfile.modules,
+        &request.manifests,
+        service_identities.as_ref(),
+    )
+    .await
+    .map_err(ApiError::Internal)?;
+    transaction.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn validate_bootstrap_capability_manifests(
+    modules: &[tessara_composition::ResolvedModuleReleaseV1],
+    manifests: &BTreeMap<String, ModuleManifest>,
+) -> ApiResult<()> {
+    let expected_definitions = modules
+        .iter()
+        .filter(|module| module.enabled)
+        .map(|module| module.definition_id.as_str())
+        .collect::<BTreeSet<_>>();
+    if manifests.len() != expected_definitions.len()
+        || manifests
+            .keys()
+            .any(|definition| !expected_definitions.contains(definition.as_str()))
+    {
+        return Err(ApiError::BadRequest(
+            "Bootstrap capability manifests do not exactly cover enabled lockfile modules".into(),
+        ));
+    }
+    for module in modules.iter().filter(|module| module.enabled) {
+        let manifest = manifests.get(&module.definition_id).ok_or_else(|| {
+            ApiError::BadRequest("Bootstrap capability manifest is unavailable".into())
+        })?;
+        if manifest.definition_id.as_str() != module.definition_id
+            || manifest.release_version != module.version
+            || canonical_digest(manifest).map_err(|error| ApiError::Internal(error.into()))?
+                != module.manifest_digest
+        {
+            return Err(ApiError::BadRequest(format!(
+                "Bootstrap capability manifest for '{}' is not source-exact",
+                module.definition_id
+            )));
+        }
+    }
+    Ok(())
+}
+
 async fn apply_core_bootstrap(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<CoreBootstrapV1>>,
 ) -> ApiResult<Json<tessara_composition::OwnerBootstrapResponseV1>> {
     require_projection_token(&headers)?;
+    let core_owner = AuthorizationAudienceV1::CoreInstallation {
+        installation_id: request.installation_id,
+    };
     if request.input.schema_version != "tessara.io/core-bootstrap/v1"
         || request.apply_sequence == 0
         || request.dependency_validation.is_some()
@@ -1101,99 +1432,70 @@ async fn apply_core_bootstrap(
         || !request
             .validate_input_digest()
             .map_err(|error| ApiError::Internal(error.into()))?
+        || request
+            .validate_authorization_for(
+                &crate::core_security::protocol_signer(
+                    ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+                )?
+                .verifier(),
+                &core_owner,
+                "core",
+                Utc::now(),
+            )
+            .is_err()
     {
         return Err(ApiError::BadRequest(
             "Core bootstrap contract or digest is invalid".into(),
         ));
     }
-    if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
-        "SELECT input_digest,receipt FROM core_bootstrap_receipts WHERE idempotency_key=$1",
-    )
-    .bind(&request.idempotency_key)
-    .fetch_optional(&state.pool)
-    .await?
+    if let Some((locked_digest, digest, desired_revision, apply_sequence, receipt)) =
+        sqlx::query_as::<_, (String, String, i64, i64, Value)>(
+            "SELECT locked_input_digest,input_digest,desired_revision,apply_sequence,receipt
+             FROM core_bootstrap_receipts WHERE idempotency_key=$1",
+        )
+        .bind(&request.idempotency_key)
+        .fetch_optional(&state.pool)
+        .await?
     {
-        if digest != request.input_digest.to_string() {
+        if locked_digest != request.locked_input_digest.to_string()
+            || digest != request.input_digest.to_string()
+            || desired_revision != request.desired_revision as i64
+            || apply_sequence != request.apply_sequence as i64
+        {
             return Err(ApiError::BadRequest(
-                "Core bootstrap idempotency key was reused with different input".into(),
+                "Core bootstrap idempotency key was reused with different locked input or apply identity"
+                    .into(),
             ));
         }
         let mut response: tessara_composition::OwnerBootstrapResponseV1 =
             serde_json::from_value(receipt).map_err(|error| ApiError::Internal(error.into()))?;
         response.receipt.changed = false;
+        response.signed_receipt = crate::core_security::protocol_signer(
+            ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+        )?
+        .sign(response.receipt.clone())
+        .map_err(|error| ApiError::Internal(error.into()))?;
         return Ok(Json(response));
     }
     let installation_id = installation_id(&state).await?;
-    if installation_id != request.installation_id
-        || request.input.root_node_type_name.trim().is_empty()
-        || request.input.root_node_name.trim().is_empty()
-    {
+    if installation_id != request.installation_id {
         return Err(ApiError::BadRequest(
             "Core bootstrap input is invalid".into(),
         ));
     }
+    validate_core_bootstrap_input(&request.input)?;
     let mut transaction = state.pool.begin().await?;
-    sqlx::query("INSERT INTO node_types(id,name,slug,plural_label,description) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,plural_label=EXCLUDED.plural_label,description=EXCLUDED.description")
-        .bind(request.input.root_node_type_id).bind(request.input.root_node_type_name.trim())
-        .bind(&request.input.root_node_type_external_key).bind("Organizations").bind("Application composition bootstrap root")
-        .execute(&mut *transaction).await?;
-    sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,NULL,$3) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,name=EXCLUDED.name")
-        .bind(request.input.root_node_id).bind(request.input.root_node_type_id).bind(request.input.root_node_name.trim())
-        .execute(&mut *transaction).await?;
-    for node in &request.input.additional_nodes {
-        if node.external_key.trim().is_empty() || node.name.trim().is_empty() {
-            return Err(ApiError::BadRequest(
-                "Core bootstrap node input is invalid".into(),
-            ));
-        }
-        sqlx::query("INSERT INTO nodes(id,node_type_id,parent_node_id,name) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,parent_node_id=EXCLUDED.parent_node_id,name=EXCLUDED.name")
-            .bind(node.node_id).bind(node.node_type_id).bind(node.parent_node_id).bind(node.name.trim())
-            .execute(&mut *transaction).await?;
-    }
-    let primary_rows = if request.input.dataset_rows.is_empty() {
-        vec![CoreBootstrapDatasetRowV1 {
-            row_id: "composition-bootstrap".into(),
-            restriction_tier: "public".into(),
-            label: "Reference row".into(),
-        }]
-    } else {
-        request.input.dataset_rows.clone()
-    };
-    let primary_dataset = CoreBootstrapDatasetV1 {
-        dataset_id: request.input.dataset_id,
-        dataset_revision_id: request
-            .input
-            .dataset_revision_id
-            .unwrap_or_else(Uuid::new_v4),
-        external_key: request.input.dataset_external_key.clone(),
-        name: "Composition Bootstrap Dataset".into(),
-        scope_node_ids: vec![request.input.root_node_id],
-        rows: primary_rows,
-    };
-    seed_core_bootstrap_dataset(&mut transaction, &primary_dataset).await?;
-    for dataset in &request.input.additional_datasets {
-        seed_core_bootstrap_dataset(&mut transaction, dataset).await?;
-    }
-    let mut resource_ids = std::collections::BTreeMap::from([
-        (
-            request.input.root_node_external_key.clone(),
-            request.input.root_node_id.to_string(),
-        ),
-        (
-            request.input.dataset_external_key.clone(),
-            request.input.dataset_id.to_string(),
-        ),
-    ]);
-    for node in &request.input.additional_nodes {
-        resource_ids.insert(node.external_key.clone(), node.node_id.to_string());
-    }
-    for dataset in &request.input.additional_datasets {
-        resource_ids.insert(dataset.external_key.clone(), dataset.dataset_id.to_string());
-    }
+    let resource_ids = materialize_core_bootstrap(
+        &mut transaction,
+        request.installation_id,
+        request.authorization.payload.original_actor_id,
+        &request.input,
+    )
+    .await?;
     let result_digest =
         canonical_digest(&resource_ids).map_err(|error| ApiError::Internal(error.into()))?;
-    let response = tessara_composition::OwnerBootstrapResponseV1 {
-        receipt: tessara_composition::BootstrapReceiptV1 {
+    let response = tessara_composition::OwnerBootstrapResponseV1::signed(
+        tessara_composition::BootstrapReceiptV1 {
             owner: "core".into(),
             schema_version: request.input.schema_version.clone(),
             input_digest: request.input_digest.clone(),
@@ -1201,108 +1503,762 @@ async fn apply_core_bootstrap(
             changed: true,
             resource_ids,
         },
-    };
-    sqlx::query("INSERT INTO core_bootstrap_receipts(idempotency_key,input_digest,desired_revision,receipt) VALUES($1,$2,$3,$4)")
-        .bind(&request.idempotency_key).bind(request.input_digest.to_string()).bind(request.desired_revision as i64)
+        &crate::core_security::protocol_signer(ProtocolSignaturePurposeV1::OwnerBootstrapReceipt)?,
+    )
+    .map_err(|error| ApiError::Internal(error.into()))?;
+    sqlx::query("INSERT INTO core_bootstrap_receipts(idempotency_key,locked_input_digest,input_digest,desired_revision,apply_sequence,authority_jti,receipt) VALUES($1,$2,$3,$4,$5,$6,$7)")
+        .bind(&request.idempotency_key).bind(request.locked_input_digest.to_string())
+        .bind(request.input_digest.to_string()).bind(request.desired_revision as i64)
+        .bind(request.apply_sequence as i64).bind(request.authorization.payload.jti)
         .bind(serde_json::to_value(&response).map_err(|error| ApiError::Internal(error.into()))?)
         .execute(&mut *transaction).await?;
     transaction.commit().await?;
     Ok(Json(response))
 }
 
-async fn seed_core_bootstrap_dataset(
-    transaction: &mut Transaction<'_, Postgres>,
-    dataset: &CoreBootstrapDatasetV1,
-) -> ApiResult<()> {
-    if dataset.external_key.trim().is_empty()
-        || dataset.name.trim().is_empty()
-        || dataset.scope_node_ids.is_empty()
-        || dataset.rows.is_empty()
-        || dataset.rows.len() > 1_000
+#[derive(Clone)]
+struct BootstrappedForm {
+    form_version_id: Uuid,
+    workflow_version_id: Uuid,
+    workflow_step_id: Uuid,
+    field_ids: BTreeMap<String, Uuid>,
+}
+
+fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
+    if input.schema_version != "tessara.io/core-bootstrap/v1"
+        || !is_core_bootstrap_key(&input.root_node_type_external_key)
+        || !is_core_bootstrap_key(&input.root_node_external_key)
+        || input.root_node_type_name.trim().is_empty()
+        || input.root_node_name.trim().is_empty()
     {
         return Err(ApiError::BadRequest(
-            "Core bootstrap Dataset input is invalid".into(),
+            "Core bootstrap root identity is invalid".into(),
         ));
     }
-    let mut row_ids = BTreeSet::new();
-    for row in &dataset.rows {
-        if row.row_id.trim().is_empty()
-            || row.label.trim().is_empty()
-            || !row_ids.insert(row.row_id.as_str())
-            || !matches!(
-                row.restriction_tier.as_str(),
-                "public" | "internal" | "restricted" | "confidential"
-            )
+
+    let mut node_keys = BTreeSet::from([input.root_node_external_key.as_str()]);
+    for node in &input.additional_nodes {
+        if !is_core_bootstrap_key(&node.external_key)
+            || node.name.trim().is_empty()
+            || !node_keys.insert(&node.external_key)
+            || node
+                .parent_node_key
+                .as_deref()
+                .is_some_and(|parent| !node_keys.contains(parent))
         {
             return Err(ApiError::BadRequest(
-                "Core bootstrap Dataset row input is invalid".into(),
+                "Core bootstrap nodes must have unique logical keys and reference only an earlier parent"
+                    .into(),
             ));
         }
     }
-    let generated_sql = format!(
-        "SELECT * FROM (VALUES {}) AS fixture(__row_id,__restriction_tier,label)",
-        dataset
-            .rows
-            .iter()
-            .map(|row| format!(
-                "({}::text,{}::text,{}::text)",
-                sql_text_literal(&row.row_id),
-                sql_text_literal(&row.restriction_tier),
-                sql_text_literal(&row.label)
-            ))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-    sqlx::query("INSERT INTO datasets(id,name,slug,grain,authority_revision) VALUES($1,$2,$3,'node',2) ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,authority_revision=GREATEST(datasets.authority_revision,2)")
-        .bind(dataset.dataset_id).bind(dataset.name.trim()).bind(dataset.external_key.trim())
-        .execute(&mut **transaction).await?;
-    for node_id in &dataset.scope_node_ids {
-        sqlx::query("INSERT INTO dataset_scope_nodes(dataset_id,node_id) VALUES($1,$2) ON CONFLICT DO NOTHING")
-            .bind(dataset.dataset_id).bind(node_id).execute(&mut **transaction).await?;
+
+    let mut form_keys = BTreeSet::new();
+    let mut form_slugs = BTreeSet::new();
+    for form in &input.forms {
+        let Ok(version) = semver::Version::parse(&form.version_label) else {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap FormVersion label is invalid".into(),
+            ));
+        };
+        let mut field_keys = BTreeSet::new();
+        let mut scope_node_keys = BTreeSet::new();
+        if !is_core_bootstrap_key(&form.resource_key)
+            || !is_core_bootstrap_key(&form.source_alias)
+            || form.name.trim().is_empty()
+            || !is_core_bootstrap_slug(&form.slug)
+            || !form_keys.insert(&form.resource_key)
+            || !form_slugs.insert(&form.slug)
+            || version.major == 0
+            || !version.pre.is_empty()
+            || !version.build.is_empty()
+            || form.scope_node_keys.is_empty()
+            || form.scope_node_keys.iter().any(|key| {
+                !node_keys.contains(key.as_str()) || !scope_node_keys.insert(key.as_str())
+            })
+            || form.fields.is_empty()
+            || form.fields.iter().any(|field| {
+                !is_core_bootstrap_key(&field.key)
+                    || field.label.trim().is_empty()
+                    || !matches!(
+                        field.field_type.as_str(),
+                        "text" | "number" | "boolean" | "date" | "single_choice" | "multi_choice"
+                    )
+                    || !field_keys.insert(&field.key)
+                    || field.position < 0
+                    || field.grid_row <= 0
+                    || field.grid_column <= 0
+            })
+        {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap Form source contract is invalid".into(),
+            ));
+        }
     }
-    let revision_id: Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO dataset_revisions
-            (id,dataset_id,version_number,version_label,version_major,version_minor,
-             version_patch,semantic_bump,started_new_major_line,status,published_at,
-             initial_source,operations,generated_sql,output_fields,definition_metadata,
-             restriction_policy)
-        VALUES ($1,$2,1,'1.0.0',1,0,0,'INITIAL',true,'published',now(),
-                '{"kind":"composition_bootstrap"}'::jsonb,'[]'::jsonb,$3,
-                jsonb_build_array(jsonb_build_object(
-                    'id','01980000-0002-7000-8000-000000000006'::uuid,
-                    'key','label','label','Label','source_alias','composition_bootstrap',
-                    'source_field_key','label','field_type','text','position',0)),
-                jsonb_build_object('name',$4::text,'slug',$5::text,'grain','node',
-                    'visibility_node_ids',to_jsonb($6::uuid[])),
-                NULL)
-        ON CONFLICT (dataset_id,version_number)
-        DO UPDATE SET status=EXCLUDED.status,published_at=EXCLUDED.published_at,
-                      generated_sql=EXCLUDED.generated_sql,output_fields=EXCLUDED.output_fields,
-                      definition_metadata=EXCLUDED.definition_metadata,
-                      restriction_policy=EXCLUDED.restriction_policy
-        RETURNING id
-        "#,
-    )
-    .bind(dataset.dataset_revision_id)
-    .bind(dataset.dataset_id)
-    .bind(&generated_sql)
-    .bind(dataset.name.trim())
-    .bind(dataset.external_key.trim())
-    .bind(&dataset.scope_node_ids)
-    .fetch_one(&mut **transaction)
-    .await?;
-    crate::datasets::materialize_composition_bootstrap_dataset(
-        transaction,
-        dataset.dataset_id,
-        revision_id,
-        &generated_sql,
-    )
-    .await
+
+    let mut response_keys = BTreeSet::new();
+    for response in &input.responses {
+        let Some(form) = input
+            .forms
+            .iter()
+            .find(|form| form.resource_key == response.form_resource_key)
+        else {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap Response references an unknown Form".into(),
+            ));
+        };
+        let field_keys = form
+            .fields
+            .iter()
+            .map(|field| field.key.as_str())
+            .collect::<BTreeSet<_>>();
+        let required_field_keys = form
+            .fields
+            .iter()
+            .filter(|field| field.required)
+            .map(|field| field.key.as_str())
+            .collect::<BTreeSet<_>>();
+        if !is_core_bootstrap_key(&response.resource_key)
+            || !response_keys.insert(&response.resource_key)
+            || !node_keys.contains(response.node_key.as_str())
+            || response.submitted_at < response.created_at
+            || response.values.is_empty()
+            || response
+                .values
+                .keys()
+                .any(|key| !field_keys.contains(key.as_str()))
+            || required_field_keys.iter().any(|key| {
+                response
+                    .values
+                    .get(*key)
+                    .is_none_or(serde_json::Value::is_null)
+            })
+        {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap submitted Response contract is invalid".into(),
+            ));
+        }
+        for (key, value) in &response.values {
+            if value.is_null() {
+                continue;
+            }
+            let field = form
+                .fields
+                .iter()
+                .find(|field| field.key == *key)
+                .expect("unknown Response fields were rejected above");
+            let field_type = crate::hierarchy::parse_field_type(&field.field_type)?;
+            crate::hierarchy::validate_field_value(field_type, value).map_err(|_| {
+                ApiError::BadRequest(
+                    "Core bootstrap submitted Response value type is invalid".into(),
+                )
+            })?;
+        }
+    }
+
+    let mut actor_keys = BTreeSet::from(["actor.admin"]);
+    let mut actor_emails = BTreeSet::new();
+    for actor in &input.actors {
+        let mut capabilities = BTreeSet::new();
+        let mut scope_node_keys = BTreeSet::new();
+        if !is_core_bootstrap_key(&actor.resource_key)
+            || !actor.resource_key.starts_with("actor.")
+            || !actor_keys.insert(&actor.resource_key)
+            || actor.email.trim().is_empty()
+            || !actor_emails.insert(actor.email.to_ascii_lowercase())
+            || actor.display_name.trim().is_empty()
+            || actor.password.len() < 12
+            || actor.capabilities.is_empty()
+            || actor.capabilities.iter().any(|capability| {
+                capability.trim().is_empty() || !capabilities.insert(capability.as_str())
+            })
+            || actor.scope_node_keys.is_empty()
+            || actor.scope_node_keys.iter().any(|key| {
+                !node_keys.contains(key.as_str()) || !scope_node_keys.insert(key.as_str())
+            })
+        {
+            return Err(ApiError::BadRequest(
+                "Core bootstrap actor/RBAC contract is invalid".into(),
+            ));
+        }
+    }
+
+    let mut receipt_keys = node_keys
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    if !receipt_keys.insert("actor.admin".into())
+        || input
+            .actors
+            .iter()
+            .any(|actor| !receipt_keys.insert(actor.resource_key.clone()))
+        || input
+            .responses
+            .iter()
+            .any(|response| !receipt_keys.insert(response.resource_key.clone()))
+    {
+        return Err(ApiError::BadRequest(
+            "Core bootstrap receipt logical keys overlap".into(),
+        ));
+    }
+    for form in &input.forms {
+        for suffix in ["form_id", "form_version_id", "dataset_source", "schema"] {
+            if !receipt_keys.insert(format!("{}.{suffix}", form.resource_key)) {
+                return Err(ApiError::BadRequest(
+                    "Core bootstrap Form receipt logical keys overlap".into(),
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
-fn sql_text_literal(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
+async fn materialize_core_bootstrap(
+    transaction: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    apply_actor_id: Uuid,
+    input: &CoreBootstrapV1,
+) -> ApiResult<BTreeMap<String, String>> {
+    let node_type_id = core_bootstrap_resource_id(
+        installation_id,
+        "node_type",
+        &input.root_node_type_external_key,
+    );
+    sqlx::query(
+        "INSERT INTO node_types(id,name,slug,plural_label,description)
+         VALUES($1,$2,$3,$4,$5)
+         ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
+             plural_label=EXCLUDED.plural_label,description=EXCLUDED.description",
+    )
+    .bind(node_type_id)
+    .bind(input.root_node_type_name.trim())
+    .bind(&input.root_node_type_external_key)
+    .bind(format!("{}s", input.root_node_type_name.trim()))
+    .bind("Application composition bootstrap scope")
+    .execute(&mut **transaction)
+    .await?;
+
+    let mut node_ids = BTreeMap::new();
+    let root_node_id =
+        core_bootstrap_resource_id(installation_id, "node", &input.root_node_external_key);
+    sqlx::query(
+        "INSERT INTO nodes(id,node_type_id,parent_node_id,name)
+         VALUES($1,$2,NULL,$3)
+         ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,
+             parent_node_id=NULL,name=EXCLUDED.name",
+    )
+    .bind(root_node_id)
+    .bind(node_type_id)
+    .bind(input.root_node_name.trim())
+    .execute(&mut **transaction)
+    .await?;
+    node_ids.insert(input.root_node_external_key.clone(), root_node_id);
+    for node in &input.additional_nodes {
+        let node_id = core_bootstrap_resource_id(installation_id, "node", &node.external_key);
+        let parent_id = node
+            .parent_node_key
+            .as_ref()
+            .and_then(|key| node_ids.get(key))
+            .copied();
+        sqlx::query(
+            "INSERT INTO nodes(id,node_type_id,parent_node_id,name)
+             VALUES($1,$2,$3,$4)
+             ON CONFLICT(id) DO UPDATE SET node_type_id=EXCLUDED.node_type_id,
+                 parent_node_id=EXCLUDED.parent_node_id,name=EXCLUDED.name",
+        )
+        .bind(node_id)
+        .bind(node_type_id)
+        .bind(parent_id)
+        .bind(node.name.trim())
+        .execute(&mut **transaction)
+        .await?;
+        node_ids.insert(node.external_key.clone(), node_id);
+    }
+
+    let mut resources = node_ids
+        .iter()
+        .map(|(key, id)| (key.clone(), id.to_string()))
+        .collect::<BTreeMap<_, _>>();
+    resources.insert("actor.admin".into(), apply_actor_id.to_string());
+    materialize_core_bootstrap_actors(
+        transaction,
+        installation_id,
+        &node_ids,
+        &input.actors,
+        &mut resources,
+    )
+    .await?;
+    let forms = materialize_core_bootstrap_forms(
+        transaction,
+        installation_id,
+        node_type_id,
+        &node_ids,
+        &input.forms,
+        &mut resources,
+    )
+    .await?;
+    materialize_core_bootstrap_responses(
+        transaction,
+        installation_id,
+        apply_actor_id,
+        &node_ids,
+        &forms,
+        &input.responses,
+        &mut resources,
+    )
+    .await?;
+    Ok(resources)
+}
+
+async fn materialize_core_bootstrap_actors(
+    transaction: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    node_ids: &BTreeMap<String, Uuid>,
+    actors: &[CoreBootstrapActorV1],
+    resources: &mut BTreeMap<String, String>,
+) -> ApiResult<()> {
+    for actor in actors {
+        let account_id =
+            core_bootstrap_resource_id(installation_id, "account", &actor.resource_key);
+        let role_id = core_bootstrap_resource_id(installation_id, "role", &actor.resource_key);
+        let password_hash = auth::hash_password_for_storage(&actor.password)?;
+        sqlx::query(
+            "INSERT INTO accounts(id,email,display_name,is_active) VALUES($1,$2,$3,true)
+             ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email,
+                 display_name=EXCLUDED.display_name,is_active=true",
+        )
+        .bind(account_id)
+        .bind(actor.email.trim().to_ascii_lowercase())
+        .bind(actor.display_name.trim())
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO account_credentials(account_id,password_hash,password_scheme)
+             VALUES($1,$2,$3)
+             ON CONFLICT(account_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,
+                 password_scheme=EXCLUDED.password_scheme,password_updated_at=now()",
+        )
+        .bind(account_id)
+        .bind(password_hash)
+        .bind(auth::password_scheme())
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO roles(id,name,description) VALUES($1,$2,$3)
+             ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description",
+        )
+        .bind(role_id)
+        .bind(format!(
+            "sprint-8b-{}",
+            actor.resource_key.replace('.', "-")
+        ))
+        .bind("Sprint 8B owner-bootstrap fixture role")
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query("DELETE FROM role_capabilities WHERE role_id=$1")
+            .bind(role_id)
+            .execute(&mut **transaction)
+            .await?;
+        for capability in &actor.capabilities {
+            let capability_id: Uuid =
+                sqlx::query_scalar("SELECT id FROM capabilities WHERE key=$1")
+                    .bind(capability)
+                    .fetch_optional(&mut **transaction)
+                    .await?
+                    .ok_or_else(|| {
+                        ApiError::BadRequest(format!(
+                            "Core bootstrap actor capability '{capability}' is not enrolled"
+                        ))
+                    })?;
+            sqlx::query("INSERT INTO role_capabilities(role_id,capability_id) VALUES($1,$2)")
+                .bind(role_id)
+                .bind(capability_id)
+                .execute(&mut **transaction)
+                .await?;
+        }
+        sqlx::query("DELETE FROM role_assignments WHERE account_id=$1 AND role_id=$2")
+            .bind(account_id)
+            .bind(role_id)
+            .execute(&mut **transaction)
+            .await?;
+        for node_key in &actor.scope_node_keys {
+            let node_id = node_ids[node_key];
+            let assignment_id = core_bootstrap_resource_id(
+                installation_id,
+                "role_assignment",
+                &format!("{}:{node_key}", actor.resource_key),
+            );
+            sqlx::query(
+                "INSERT INTO role_assignments(id,account_id,role_id,node_id)
+                 VALUES($1,$2,$3,$4)",
+            )
+            .bind(assignment_id)
+            .bind(account_id)
+            .bind(role_id)
+            .bind(node_id)
+            .execute(&mut **transaction)
+            .await?;
+        }
+        resources.insert(actor.resource_key.clone(), account_id.to_string());
+    }
+    Ok(())
+}
+
+async fn materialize_core_bootstrap_forms(
+    transaction: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    node_type_id: Uuid,
+    node_ids: &BTreeMap<String, Uuid>,
+    forms: &[CoreBootstrapFormV1],
+    resources: &mut BTreeMap<String, String>,
+) -> ApiResult<BTreeMap<String, BootstrappedForm>> {
+    let mut result = BTreeMap::new();
+    for form in forms {
+        let form_id = core_bootstrap_resource_id(installation_id, "form", &form.resource_key);
+        let compatibility_group_id =
+            core_bootstrap_resource_id(installation_id, "form_compatibility", &form.resource_key);
+        let form_version_id =
+            core_bootstrap_resource_id(installation_id, "form_version", &form.resource_key);
+        let section_id =
+            core_bootstrap_resource_id(installation_id, "form_section", &form.resource_key);
+        let version = semver::Version::parse(&form.version_label)
+            .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+        let version_major = i32::try_from(version.major).map_err(|_| {
+            ApiError::BadRequest("Core bootstrap FormVersion major is too large".into())
+        })?;
+        let version_minor = i32::try_from(version.minor).map_err(|_| {
+            ApiError::BadRequest("Core bootstrap FormVersion minor is too large".into())
+        })?;
+        let version_patch = i32::try_from(version.patch).map_err(|_| {
+            ApiError::BadRequest("Core bootstrap FormVersion patch is too large".into())
+        })?;
+        sqlx::query(
+            "INSERT INTO forms(id,name,slug,scope_node_type_id) VALUES($1,$2,$3,$4)
+             ON CONFLICT(id) DO UPDATE SET name=EXCLUDED.name,slug=EXCLUDED.slug,
+                 scope_node_type_id=EXCLUDED.scope_node_type_id",
+        )
+        .bind(form_id)
+        .bind(form.name.trim())
+        .bind(&form.slug)
+        .bind(node_type_id)
+        .execute(&mut **transaction)
+        .await?;
+        for node_key in &form.scope_node_keys {
+            sqlx::query(
+                "INSERT INTO form_scope_nodes(form_id,node_id) VALUES($1,$2)
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(form_id)
+            .bind(node_ids[node_key])
+            .execute(&mut **transaction)
+            .await?;
+        }
+        sqlx::query(
+            "INSERT INTO compatibility_groups(id,form_id,name) VALUES($1,$2,'Initial')
+             ON CONFLICT(id) DO UPDATE SET form_id=EXCLUDED.form_id,name=EXCLUDED.name",
+        )
+        .bind(compatibility_group_id)
+        .bind(form_id)
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO form_versions(
+                 id,form_id,compatibility_group_id,version_label,status,
+                 version_major,version_minor,version_patch,semantic_bump,
+                 started_new_major_line,published_at)
+             VALUES($1,$2,$3,$4,'published'::form_version_status,$5,$6,$7,'INITIAL',true,$8)
+             ON CONFLICT(id) DO UPDATE SET compatibility_group_id=EXCLUDED.compatibility_group_id,
+                 version_label=EXCLUDED.version_label,status=EXCLUDED.status,
+                 version_major=EXCLUDED.version_major,version_minor=EXCLUDED.version_minor,
+                 version_patch=EXCLUDED.version_patch,semantic_bump=EXCLUDED.semantic_bump,
+                 started_new_major_line=true,published_at=EXCLUDED.published_at",
+        )
+        .bind(form_version_id)
+        .bind(form_id)
+        .bind(compatibility_group_id)
+        .bind(&form.version_label)
+        .bind(version_major)
+        .bind(version_minor)
+        .bind(version_patch)
+        .bind(form.published_at)
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO form_sections(id,form_version_id,title,description,position)
+             VALUES($1,$2,'Response','Sprint 8B source fields',0)
+             ON CONFLICT(id) DO UPDATE SET title=EXCLUDED.title,
+                 description=EXCLUDED.description,position=EXCLUDED.position",
+        )
+        .bind(section_id)
+        .bind(form_version_id)
+        .execute(&mut **transaction)
+        .await?;
+        let mut field_ids = BTreeMap::new();
+        for field in &form.fields {
+            let field_id = core_bootstrap_resource_id(
+                installation_id,
+                "form_field",
+                &format!("{}:{}", form.resource_key, field.key),
+            );
+            sqlx::query(
+                "INSERT INTO form_fields(
+                     field_id,form_version_id,section_id,key,label,field_type,required,
+                     position,grid_row,grid_column,grid_width,grid_height)
+                 VALUES($1,$2,$3,$4,$5,$6::field_type,$7,$8,$9,$10,1,1)
+                 ON CONFLICT(form_version_id,field_id) DO UPDATE SET section_id=EXCLUDED.section_id,
+                     key=EXCLUDED.key,label=EXCLUDED.label,field_type=EXCLUDED.field_type,
+                     required=EXCLUDED.required,position=EXCLUDED.position,
+                     grid_row=EXCLUDED.grid_row,grid_column=EXCLUDED.grid_column",
+            )
+            .bind(field_id)
+            .bind(form_version_id)
+            .bind(section_id)
+            .bind(&field.key)
+            .bind(field.label.trim())
+            .bind(&field.field_type)
+            .bind(field.required)
+            .bind(field.position)
+            .bind(field.grid_row)
+            .bind(field.grid_column)
+            .execute(&mut **transaction)
+            .await?;
+            field_ids.insert(field.key.clone(), field_id);
+        }
+        let (_, workflow_version_id, workflow_step_id) =
+            crate::workflows::ensure_workflow_for_published_form_version_tx(
+                transaction,
+                form_version_id,
+            )
+            .await?;
+        let source = tessara_datasets_contract::DatasetProductSourceV1::Form {
+            alias: form.source_alias.clone(),
+            form_id: form_id.to_string(),
+            form_version_id: form_version_id.to_string(),
+        };
+        let mut source_scope_node_ids = form
+            .scope_node_keys
+            .iter()
+            .map(|key| node_ids[key])
+            .collect::<Vec<_>>();
+        source_scope_node_ids.sort_unstable();
+        let mut schema_fields = form
+            .fields
+            .iter()
+            .map(|field| tessara_forms_contract::FormVersionField {
+                field_id: field_ids[&field.key],
+                key: field.key.clone(),
+                label: field.label.trim().to_string(),
+                field_type: field.field_type.clone(),
+                required: field.required,
+                options: Vec::new(),
+                section_id: Some(section_id),
+                position: field.position,
+                grid_row: field.grid_row,
+                grid_column: field.grid_column,
+            })
+            .collect::<Vec<_>>();
+        schema_fields.sort_by(|left, right| {
+            (
+                left.position,
+                left.grid_row,
+                left.grid_column,
+                &left.label,
+                &left.key,
+                left.field_id,
+            )
+                .cmp(&(
+                    right.position,
+                    right.grid_row,
+                    right.grid_column,
+                    &right.label,
+                    &right.key,
+                    right.field_id,
+                ))
+        });
+        let schema = tessara_forms_contract::FormVersionSchemaResponse {
+            schema_version: tessara_forms_contract::FORM_VERSION_SCHEMA_VERSION,
+            form_id,
+            form_version_id,
+            form_name: form.name.trim().to_string(),
+            form_slug: form.slug.clone(),
+            version_label: Some(form.version_label.clone()),
+            version_major: Some(version_major),
+            source_scope_node_ids,
+            source_scope_revision: String::new(),
+            source_scope_digest: String::new(),
+            content_revision: String::new(),
+            content_digest: String::new(),
+            sections: vec![tessara_forms_contract::FormVersionSection {
+                section_id,
+                key: section_id.to_string(),
+                label: "Response".into(),
+                position: 0,
+            }],
+            fields: schema_fields,
+        }
+        .with_recomputed_digests()
+        .map_err(|error| ApiError::Internal(error.into()))?;
+        resources.insert(
+            format!("{}.form_id", form.resource_key),
+            form_id.to_string(),
+        );
+        resources.insert(
+            format!("{}.form_version_id", form.resource_key),
+            form_version_id.to_string(),
+        );
+        resources.insert(
+            format!("{}.dataset_source", form.resource_key),
+            serde_json::to_string(&source).map_err(|error| ApiError::Internal(error.into()))?,
+        );
+        resources.insert(
+            format!("{}.schema", form.resource_key),
+            serde_json::to_string(&schema).map_err(|error| ApiError::Internal(error.into()))?,
+        );
+        result.insert(
+            form.resource_key.clone(),
+            BootstrappedForm {
+                form_version_id,
+                workflow_version_id,
+                workflow_step_id,
+                field_ids,
+            },
+        );
+    }
+    Ok(result)
+}
+
+async fn materialize_core_bootstrap_responses(
+    transaction: &mut Transaction<'_, Postgres>,
+    installation_id: Uuid,
+    apply_actor_id: Uuid,
+    node_ids: &BTreeMap<String, Uuid>,
+    forms: &BTreeMap<String, BootstrappedForm>,
+    responses: &[CoreBootstrapResponseV1],
+    resources: &mut BTreeMap<String, String>,
+) -> ApiResult<()> {
+    crate::response_owner_actions::defer_export_capture_tx(transaction).await?;
+    for response in responses {
+        let form = &forms[&response.form_resource_key];
+        let node_id = node_ids[&response.node_key];
+        let assignment_key = format!(
+            "{}:{}:{apply_actor_id}",
+            response.form_resource_key, response.node_key
+        );
+        let assignment_id =
+            core_bootstrap_resource_id(installation_id, "workflow_assignment", &assignment_key);
+        let assignment_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO workflow_assignments(
+                 id,workflow_version_id,workflow_step_id,node_id,account_id,
+                 assigned_by_account_id,is_active)
+             VALUES($1,$2,$3,$4,$5,$5,true)
+             ON CONFLICT(workflow_step_id,node_id,account_id) DO UPDATE SET
+                 workflow_version_id=EXCLUDED.workflow_version_id,is_active=true
+             RETURNING id",
+        )
+        .bind(assignment_id)
+        .bind(form.workflow_version_id)
+        .bind(form.workflow_step_id)
+        .bind(node_id)
+        .bind(apply_actor_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+        let response_id =
+            core_bootstrap_resource_id(installation_id, "response", &response.resource_key);
+        sqlx::query(
+            "INSERT INTO submissions(
+                 id,form_version_id,node_id,workflow_assignment_id,status,submitted_at,created_at)
+             VALUES($1,$2,$3,$4,'draft'::submission_status,NULL,$5)",
+        )
+        .bind(response_id)
+        .bind(form.form_version_id)
+        .bind(node_id)
+        .bind(assignment_id)
+        .bind(response.created_at)
+        .execute(&mut **transaction)
+        .await?;
+        for (field_key, value) in &response.values {
+            sqlx::query(
+                "INSERT INTO submission_values(submission_id,form_version_id,field_id,value)
+                 VALUES($1,$2,$3,$4)",
+            )
+            .bind(response_id)
+            .bind(form.form_version_id)
+            .bind(form.field_ids[field_key])
+            .bind(value)
+            .execute(&mut **transaction)
+            .await?;
+        }
+        let audit_id =
+            core_bootstrap_resource_id(installation_id, "response_audit", &response.resource_key);
+        sqlx::query(
+            "INSERT INTO submission_audit_events(id,submission_id,event_type,account_id,created_at)
+             VALUES($1,$2,$3,$4,$5)",
+        )
+        .bind(audit_id)
+        .bind(response_id)
+        .bind(format!("bootstrap:{}", response.resource_key))
+        .bind(apply_actor_id)
+        .bind(response.submitted_at)
+        .execute(&mut **transaction)
+        .await?;
+        // Build the complete aggregate while it is a draft so the generic
+        // table triggers cannot publish partial value/audit snapshots. The
+        // final lifecycle transition emits exactly one immutable upsert with
+        // the complete value set and authoritative audit identity.
+        sqlx::query(
+            "UPDATE submissions
+                SET status='submitted'::submission_status,submitted_at=$2
+              WHERE id=$1 AND status='draft'::submission_status",
+        )
+        .bind(response_id)
+        .bind(response.submitted_at)
+        .execute(&mut **transaction)
+        .await?;
+        crate::response_owner_actions::append_final_upsert_tx(transaction, response_id).await?;
+        resources.insert(response.resource_key.clone(), response_id.to_string());
+    }
+    Ok(())
+}
+
+fn core_bootstrap_resource_id(installation_id: Uuid, kind: &str, key: &str) -> Uuid {
+    let mut digest = Sha256::new();
+    digest.update(b"tessara.core.owner-bootstrap.v1\0");
+    digest.update(installation_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(kind.as_bytes());
+    digest.update(b"\0");
+    digest.update(key.as_bytes());
+    let digest = digest.finalize();
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
+fn is_core_bootstrap_key(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes[0].is_ascii_lowercase()
+        && bytes.iter().all(|byte| {
+            byte.is_ascii_lowercase()
+                || byte.is_ascii_digit()
+                || matches!(byte, b'.' | b'-' | b'/' | b'_' | b':')
+        })
+}
+
+fn is_core_bootstrap_slug(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes[0].is_ascii_lowercase()
+        && bytes
+            .last()
+            .is_some_and(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit())
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
 }
 
 async fn adopt_drift(
@@ -1433,6 +2389,7 @@ async fn emergency_disable(
             "Module is not present in the resolved composition".into(),
         ));
     }
+    let current_lockfile = lockfile.clone();
     lockfile.materialization_plan = tessara_composition::MaterializationPlanV1 {
         api_version: PLAN_API_V1.into(),
         installation_id,
@@ -1501,7 +2458,11 @@ async fn emergency_disable(
         .map_err(|error| ApiError::Internal(error.into()))?;
     let response = client
         .post(format!("{}/v1/apply", supervisor_url.trim_end_matches('/')))
-        .json(&serde_json::json!({"lockfile": lockfile, "authorization": signed}))
+        .json(&serde_json::json!({
+            "lockfile": lockfile,
+            "current_lockfile": current_lockfile,
+            "authorization": signed
+        }))
         .send()
         .await
         .map_err(|_| ApiError::NotFound("Supervisor is unavailable".into()))?;
@@ -1698,8 +2659,196 @@ pub(crate) async fn native_page(State(state): State<AppState>, headers: HeaderMa
 mod tests {
     use super::*;
 
+    fn dataset_bootstrap_manifest_fixture()
+    -> (tessara_composition::ResolvedModuleReleaseV1, ModuleManifest) {
+        let manifest: ModuleManifest = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tessara-dataset-module/manifest.json"
+        )))
+        .expect("Dataset manifest");
+        let manifest_digest = canonical_digest(&manifest).expect("Dataset manifest digest");
+        (
+            tessara_composition::ResolvedModuleReleaseV1 {
+                definition_id: manifest.definition_id.to_string(),
+                version: manifest.release_version.clone(),
+                manifest_digest,
+                runtime_image: ArtifactDigest::new(format!("sha256:{}", "8".repeat(64)))
+                    .expect("runtime digest"),
+                deployment_profile: "tessara-oci-v1".into(),
+                enabled: true,
+                configuration_schema_version: "tessara.io/dataset-configuration/v1".into(),
+                configuration: serde_json::json!({}),
+                configuration_digest: canonical_digest(&serde_json::json!({}))
+                    .expect("configuration digest"),
+                bootstrap_schema_version: Some("tessara.io/dataset-bootstrap/v1".into()),
+                bootstrap: None,
+                bootstrap_digest: None,
+                dependency_bindings: BTreeMap::new(),
+            },
+            manifest,
+        )
+    }
+
     #[test]
-    fn sprint_8a_core_bootstrap_is_typed_and_owns_the_exact_semantic_seed() {
+    fn bootstrap_capability_enrollment_fails_closed_on_unlocked_manifest() {
+        let (module, manifest) = dataset_bootstrap_manifest_fixture();
+        let exact = BTreeMap::from([(module.definition_id.clone(), manifest.clone())]);
+        validate_bootstrap_capability_manifests(std::slice::from_ref(&module), &exact)
+            .expect("source-exact manifest");
+
+        let mut substituted = manifest;
+        substituted.security_capabilities[0]
+            .description
+            .push_str(" substituted");
+        let substituted = BTreeMap::from([(module.definition_id.clone(), substituted)]);
+        assert!(
+            validate_bootstrap_capability_manifests(std::slice::from_ref(&module), &substituted)
+                .is_err(),
+            "an unlocked capability declaration must not be enrolled"
+        );
+        assert!(
+            validate_bootstrap_capability_manifests(
+                std::slice::from_ref(&module),
+                &BTreeMap::new()
+            )
+            .is_err(),
+            "the exact enabled-module manifest set is mandatory"
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn fresh_baseline_enrolls_dataset_security_before_core_actor_bootstrap(
+        pool: sqlx::PgPool,
+    ) {
+        let (mut module, mut manifest) = dataset_bootstrap_manifest_fixture();
+        manifest.consumed_service_actions.clear();
+        module.manifest_digest = canonical_digest(&manifest).expect("fixture manifest digest");
+        let manifests = BTreeMap::from([(module.definition_id.clone(), manifest)]);
+        validate_bootstrap_capability_manifests(std::slice::from_ref(&module), &manifests)
+            .expect("source-exact Dataset manifest");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM capabilities WHERE key='datasets:read'"
+            )
+            .fetch_one(&pool)
+            .await
+            .expect("fresh capability count"),
+            0,
+            "fresh Core must not rely on a retired built-in Dataset capability"
+        );
+        let installation_id: Uuid =
+            sqlx::query_scalar("SELECT id FROM application_installations WHERE singleton=true")
+                .fetch_one(&pool)
+                .await
+                .expect("installation identity");
+        let mut transaction = pool.begin().await.expect("security transaction");
+        crate::modules::project_bootstrap_module_security(
+            &mut transaction,
+            installation_id,
+            std::slice::from_ref(&module),
+            &manifests,
+            None,
+        )
+        .await
+        .expect("enroll source-exact bootstrap security state");
+        transaction.commit().await.expect("commit security state");
+
+        let projected_instance: (Uuid, bool, bool, bool) = sqlx::query_as(
+            "SELECT id,ready,enabled,healthy FROM module_instances
+             WHERE installation_id=$1 AND definition_id=$2",
+        )
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .fetch_one(&pool)
+        .await
+        .expect("pre-bootstrap Dataset ModuleInstance");
+        assert_eq!(
+            projected_instance,
+            (
+                tessara_composition::module_instance_id(installation_id, &module.definition_id),
+                true,
+                true,
+                true,
+            ),
+            "provider nonce consumption requires the exact live ModuleInstance before bootstrap"
+        );
+        let apply_actor_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO accounts(id,email,display_name,is_active)
+             VALUES($1,'bootstrap-applier@example.test','Bootstrap Applier',true)",
+        )
+        .bind(apply_actor_id)
+        .execute(&pool)
+        .await
+        .expect("apply actor");
+        let input = valid_core_bootstrap_fixture();
+        validate_core_bootstrap_input(&input).expect("valid Core fixture");
+        let mut transaction = pool.begin().await.expect("Core bootstrap transaction");
+        let resources =
+            materialize_core_bootstrap(&mut transaction, installation_id, apply_actor_id, &input)
+                .await
+                .expect("Core actor bootstrap after capability enrollment");
+        transaction.commit().await.expect("commit Core bootstrap");
+        let schema: tessara_forms_contract::FormVersionSchemaResponse = serde_json::from_str(
+            resources
+                .get("form.primary/v1.schema")
+                .expect("signed owner receipt FormVersion schema"),
+        )
+        .expect("canonical FormVersion schema receipt value");
+        schema
+            .validate_for(schema.form_version_id)
+            .expect("receipt schema digest and shape");
+        assert_eq!(schema.fields.len(), 1);
+        assert_eq!(schema.fields[0].key, "amount");
+        let assigned: bool = sqlx::query_scalar(
+            "SELECT EXISTS(
+                 SELECT 1 FROM accounts a
+                 JOIN role_assignments ra ON ra.account_id=a.id
+                 JOIN role_capabilities rc ON rc.role_id=ra.role_id
+                 JOIN capabilities c ON c.id=rc.capability_id
+                 WHERE a.email='reader@example.test' AND c.key='datasets:read'
+             )",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("Dataset actor capability assignment");
+        assert!(assigned);
+    }
+
+    #[test]
+    fn resolved_bootstrap_input_can_change_only_declared_null_receipt_targets() {
+        let locked = serde_json::json!({
+            "components": [{"dataset_reference": null, "name": "Reference"}]
+        });
+        let binding = tessara_composition::BootstrapReceiptBindingV1 {
+            target_pointer: "/components/0/dataset_reference".into(),
+            source_owner: "tessara.datasets".into(),
+            resource_key: "dataset.base".into(),
+            value_encoding: tessara_composition::BootstrapReceiptValueEncodingV1::Json,
+        };
+        let resolved = serde_json::json!({
+            "components": [{
+                "dataset_reference": {"reference": {"resource_id": "opaque"}},
+                "name": "Reference"
+            }]
+        });
+        assert!(resolved_bootstrap_input_matches_lock(
+            &locked,
+            std::slice::from_ref(&binding),
+            &resolved,
+        ));
+
+        let mut tampered = resolved;
+        tampered["components"][0]["name"] = Value::String("Substituted".into());
+        assert!(!resolved_bootstrap_input_matches_lock(
+            &locked,
+            &[binding],
+            &tampered,
+        ));
+    }
+
+    #[test]
+    fn core_bootstrap_rejects_retired_dataset_owned_input() {
         let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../deploy/sprint-8a/blueprints/reference.json"
@@ -1710,30 +2859,159 @@ mod tests {
         else {
             panic!("Sprint 8A Core bootstrap must be inline");
         };
-        let bootstrap: CoreBootstrapV1 =
-            serde_json::from_value(value).expect("typed Core bootstrap");
-        assert_eq!(bootstrap.dataset_rows.len(), 30);
-        assert_eq!(
-            bootstrap
-                .dataset_rows
-                .iter()
-                .filter(|row| row.row_id.starts_with("uat7a-page-"))
-                .count(),
-            26
+        assert!(
+            serde_json::from_value::<CoreBootstrapV1>(value).is_err(),
+            "Core bootstrap must fail closed when a historical Blueprint asks Core to own Dataset state"
         );
-        assert_eq!(bootstrap.additional_nodes.len(), 1);
-        assert_eq!(bootstrap.additional_datasets.len(), 1);
-        assert_eq!(bootstrap.additional_datasets[0].rows.len(), 1);
+
+        let bootstrap: CoreBootstrapV1 = serde_json::from_value(serde_json::json!({
+            "schema_version": "tessara.io/core-bootstrap/v1",
+            "root_node_type_external_key": "scope.type",
+            "root_node_type_name": "Organization",
+            "root_node_external_key": "scope.full",
+            "root_node_name": "Reference Organization",
+            "additional_nodes": []
+        }))
+        .expect("current Core-only bootstrap");
+        assert!(bootstrap.additional_nodes.is_empty());
+    }
+
+    fn valid_core_bootstrap_fixture() -> CoreBootstrapV1 {
+        serde_json::from_value(serde_json::json!({
+            "schema_version": "tessara.io/core-bootstrap/v1",
+            "root_node_type_external_key": "scope.type",
+            "root_node_type_name": "Organization",
+            "root_node_external_key": "scope.full",
+            "root_node_name": "Reference Organization",
+            "additional_nodes": [{
+                "external_key": "scope.restricted",
+                "name": "Restricted Division",
+                "parent_node_key": "scope.full"
+            }],
+            "forms": [{
+                "resource_key": "form.primary/v1",
+                "source_alias": "primary",
+                "name": "Primary Responses",
+                "slug": "primary-responses",
+                "version_label": "1.0.0",
+                "published_at": "2026-08-01T12:00:00Z",
+                "scope_node_keys": ["scope.full"],
+                "fields": [{
+                    "key": "amount",
+                    "label": "Amount",
+                    "field_type": "number",
+                    "required": true,
+                    "position": 0,
+                    "grid_row": 1,
+                    "grid_column": 1
+                }]
+            }],
+            "responses": [{
+                "resource_key": "response.initial",
+                "form_resource_key": "form.primary/v1",
+                "node_key": "scope.restricted",
+                "created_at": "2026-08-01T12:01:00Z",
+                "submitted_at": "2026-08-01T12:02:00Z",
+                "values": {"amount": 17}
+            }],
+            "actors": [{
+                "resource_key": "actor.reader",
+                "email": "reader@example.test",
+                "display_name": "Dataset Reader",
+                "password": "fixture-password-123",
+                "capabilities": ["datasets:read"],
+                "scope_node_keys": ["scope.restricted"]
+            }]
+        }))
+        .expect("canonical Core bootstrap fixture")
+    }
+
+    #[test]
+    fn core_bootstrap_accepts_logical_owner_fixture_and_derives_typed_ids() {
+        let input = valid_core_bootstrap_fixture();
+        validate_core_bootstrap_input(&input).expect("logical fixture must validate");
+
+        let installation_id =
+            Uuid::parse_str("11111111-2222-4333-8444-555555555555").expect("installation UUID");
+        let first = core_bootstrap_resource_id(installation_id, "form", "form.primary/v1");
+        let replay = core_bootstrap_resource_id(installation_id, "form", "form.primary/v1");
+        let other_kind =
+            core_bootstrap_resource_id(installation_id, "form_version", "form.primary/v1");
+        let other_key = core_bootstrap_resource_id(installation_id, "form", "form.secondary/v1");
+
+        assert_eq!(
+            first, replay,
+            "owner-derived identity must be replay-stable"
+        );
+        assert_ne!(
+            first, other_kind,
+            "resource kinds must have separate namespaces"
+        );
+        assert_ne!(
+            first, other_key,
+            "logical keys must have separate identities"
+        );
+        assert_eq!(first.as_bytes()[6] >> 4, 8, "owner IDs use UUID version 8");
+        assert_eq!(first.as_bytes()[8] >> 6, 2, "owner IDs use the RFC variant");
+    }
+
+    #[test]
+    fn core_bootstrap_rejects_physical_ids_and_cross_owner_substitution() {
+        let mut raw = serde_json::to_value(valid_core_bootstrap_fixture()).expect("fixture JSON");
+        raw["root_node_id"] = Value::String(Uuid::new_v4().to_string());
+        assert!(
+            serde_json::from_value::<CoreBootstrapV1>(raw).is_err(),
+            "Blueprint input must not predict a Core resource UUID"
+        );
+
+        let mut unknown_parent = valid_core_bootstrap_fixture();
+        unknown_parent.additional_nodes[0].parent_node_key = Some("scope.substituted".into());
+        assert!(validate_core_bootstrap_input(&unknown_parent).is_err());
+
+        let mut substituted_form = valid_core_bootstrap_fixture();
+        substituted_form.responses[0].form_resource_key = "form.substituted/v1".into();
+        assert!(validate_core_bootstrap_input(&substituted_form).is_err());
+
+        let mut substituted_field = valid_core_bootstrap_fixture();
+        substituted_field.responses[0]
+            .values
+            .insert("unknown".into(), Value::String("hidden".into()));
+        assert!(validate_core_bootstrap_input(&substituted_field).is_err());
+
+        let mut missing_required_field = valid_core_bootstrap_fixture();
+        missing_required_field.responses[0].values.clear();
+        assert!(validate_core_bootstrap_input(&missing_required_field).is_err());
+
+        let mut wrong_value_type = valid_core_bootstrap_fixture();
+        wrong_value_type.responses[0]
+            .values
+            .insert("amount".into(), Value::String("seventeen".into()));
+        assert!(validate_core_bootstrap_input(&wrong_value_type).is_err());
+
+        let mut duplicate_actor_scope = valid_core_bootstrap_fixture();
+        duplicate_actor_scope.actors[0]
+            .scope_node_keys
+            .push("scope.restricted".into());
+        assert!(validate_core_bootstrap_input(&duplicate_actor_scope).is_err());
+
+        let mut overlapping_receipt = valid_core_bootstrap_fixture();
+        overlapping_receipt.responses[0].resource_key = "scope.restricted".into();
+        assert!(validate_core_bootstrap_input(&overlapping_receipt).is_err());
     }
 
     #[test]
     fn checked_catalog_manifest_digests_match_runtime_manifests() {
         let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
+            "/../../deploy/sprint-8b/catalogs/local-release-catalog.json"
         )))
-        .expect("valid Sprint 8A catalog");
+        .expect("valid Sprint 8B catalog");
         let manifests = [
+            serde_json::from_str::<ModuleManifest>(include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../tessara-dataset-module/manifest.json"
+            )))
+            .expect("valid Dataset manifest"),
             serde_json::from_str::<ModuleManifest>(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../tessara-component-module/manifest.json"
@@ -1763,6 +3041,37 @@ mod tests {
                 manifest.definition_id
             );
         }
+    }
+
+    #[test]
+    fn component_release_identity_is_forward_only_across_sprint_catalogs() {
+        let sprint_8a: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8a/catalogs/local-release-catalog.json"
+        )))
+        .expect("frozen Sprint 8A catalog");
+        let sprint_8b: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8b/catalogs/local-release-catalog.json"
+        )))
+        .expect("Sprint 8B catalog");
+        let release_8a = sprint_8a
+            .module_releases
+            .iter()
+            .find(|release| release.definition_id == "tessara.components")
+            .expect("Sprint 8A Component release");
+        let release_8b = sprint_8b
+            .module_releases
+            .iter()
+            .find(|release| release.definition_id == "tessara.components")
+            .expect("Sprint 8B Component release");
+        assert_eq!(release_8a.version, semver::Version::new(1, 0, 1));
+        assert_eq!(
+            release_8a.manifest_digest.as_str(),
+            "sha256:59a78aa01356c5119cc23801b85ba47463940b6bd4237c528ecac7f4824f9d48"
+        );
+        assert_eq!(release_8b.version, semver::Version::new(1, 1, 0));
+        assert_ne!(release_8a.manifest_digest, release_8b.manifest_digest);
     }
 
     #[test]

@@ -2,20 +2,20 @@
 
 #[cfg(feature = "hydrate")]
 use super::super::api;
+use super::super::bootstrap::dataset_route_bootstrap;
 use super::super::types::{DatasetSummary, SessionAccount};
 use leptos::prelude::*;
 
-#[cfg(feature = "hydrate")]
 pub(crate) fn load_account(account: RwSignal<Option<SessionAccount>>) {
-    leptos::task::spawn_local(async move {
-        if let Ok(Some(payload)) = api::fetch_account().await {
-            account.set(Some(payload));
-        }
-    });
+    let can_manage = dataset_route_bootstrap().is_some_and(|bootstrap| bootstrap.can_manage());
+    account.set(Some(SessionAccount {
+        capabilities: if can_manage {
+            vec!["admin:all".into()]
+        } else {
+            Vec::new()
+        },
+    }));
 }
-
-#[cfg(not(feature = "hydrate"))]
-pub(crate) fn load_account(_: RwSignal<Option<SessionAccount>>) {}
 
 #[cfg(feature = "hydrate")]
 pub(crate) fn load_datasets(

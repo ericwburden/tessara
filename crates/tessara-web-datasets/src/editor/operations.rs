@@ -1423,6 +1423,12 @@ mod tests {
             provenance: Default::default(),
             materialized_row_count: Some(0),
             materialized_at: None,
+            freshness: tessara_datasets_contract::DatasetProductFreshnessV1 {
+                state: tessara_datasets_contract::DatasetFreshnessState::Current,
+                last_checked_at: None,
+                last_succeeded_at: None,
+                sanitized_failure_code: None,
+            },
             visibility_nodes: Vec::new(),
             source_count: 1,
             field_count: output_fields.len() as i64,

@@ -1,5 +1,5 @@
 use leptos::{context::Provider, prelude::*};
-use tessara_module_contract::ShellContextV1;
+use tessara_module_contract::ShellContextV2;
 use tessara_module_ui::{
     MODULE_UI_CSS_SHA256, ModuleBootstrapData, ModuleDocumentAssets, ModuleReleaseMetadata,
     ShellPresentation, render_module_view_document,
@@ -25,18 +25,18 @@ pub const DASHBOARD_CSS_SHA256: &str =
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
     "838136485a2d0a547d95e520076a039189c2d3fb24d9f15d23a977f98ca0cef3";
 pub const DASHBOARD_JS_SHA256: &str =
-    "24fc0176b75fe04151e3d4d2a0dc712cc0e2c3f330d7bc269b95e451acfdb0d5";
+    "9202af2859d511094717222945b7007311320f30ed0087c2f1001caff2a871db";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "b730edeb6243a78dbd41bf02c3ff95263240804eb02699cebacc613039a37b34";
+    "14e2a5f0a610065369306ddfedf41f26edd605ef8639e9dab0cc5c0d72464593";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "7ffa0035a974311c6cf8d3d30ac915b6e5fff312a5d7378f2f25c6c0b8dcce0c";
+    "37a07f6920432f19ad13f27e8201912daf5fced6bac84582aced39ecc6767673";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")
 }
 
 pub fn render_dashboard_document(
-    context: &ShellContextV1,
+    context: &ShellContextV2,
     path: &str,
     title: &str,
     bootstrap: &DashboardRouteBootstrap,
@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn release_entry_asset_resolves_bindings_and_wasm_from_the_same_release() {
-        assert!(DASHBOARD_JS.contains("/tessara.dashboards/3.0.1/"));
+        assert!(DASHBOARD_JS.contains("/tessara.dashboards/3.0.2/"));
         assert!(!DASHBOARD_JS.contains("/tessara.dashboards/2.1.0/"));
         let digest = format!("{:x}", Sha256::digest(DASHBOARD_JS.as_bytes()));
         assert_eq!(digest, DASHBOARD_JS_SHA256);
@@ -200,8 +200,8 @@ mod tests {
     #[test]
     fn complete_document_is_dashboard_owned_and_release_observable() {
         let now = Utc::now();
-        let context = ShellContextV1 {
-            schema_version: 1,
+        let context = ShellContextV2 {
+            schema_version: tessara_module_contract::SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.dashboards").unwrap(),
             module_instance_id: Uuid::from_u128(2),
@@ -237,11 +237,11 @@ mod tests {
                     can_manage: false,
                 }],
             ),
-            "3.0.1",
+            "3.0.2",
         );
         assert!(html.starts_with("<!doctype html>"));
         assert!(html.contains("Delivery"));
-        assert!(html.contains(r#"name="tessara-module-release" content="3.0.1""#));
+        assert!(html.contains(r#"name="tessara-module-release" content="3.0.2""#));
         assert!(html.contains(DASHBOARD_BOOTSTRAP_SCRIPT_ID));
         assert!(html.contains(r#"class="app-shell""#));
         assert!(html.contains(r#"class="brand-lockup""#));

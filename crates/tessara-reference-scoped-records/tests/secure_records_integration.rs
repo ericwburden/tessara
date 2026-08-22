@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode},
@@ -9,9 +11,10 @@ use sqlx::postgres::PgPoolOptions;
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     CapabilityScopeBindingV1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-    ModuleServicePrincipalV1, NavigationContributionId, NavigationProjectionV1,
-    OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    SecurityCapabilityId, ShellContextV1, ShellDocumentStateV1, ShellThemeV1,
+    ModuleServicePrincipalV1, NavigationContributionId, OriginalActorProjectionV1,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, SHELL_CONTEXT_SCHEMA_VERSION_V2,
+    SecurityCapabilityId, ShellContextV2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+    ShellNavigationItemProjectionV2, ShellThemeV1,
 };
 use tessara_reference_scoped_records::{
     MANAGE_CAPABILITY, ModuleState, OrganizationAccessProjectionV1, READ_CAPABILITY, router,
@@ -57,10 +60,28 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
         [81; 32],
     )
     .unwrap();
+    let owner_bootstrap_signer = PurposeBoundSigningKeyV1::from_secret_bytes(
+        "tessara.core",
+        "core-test-v1",
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+        [81; 32],
+    )
+    .unwrap();
+    let bootstrap_receipt_signer = Arc::new(
+        PurposeBoundSigningKeyV1::from_secret_bytes(
+            tessara_reference_scoped_records::MODULE_DEFINITION_ID,
+            "scoped-records-test-v1",
+            ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+            [82; 32],
+        )
+        .unwrap(),
+    );
     let app = router(ModuleState {
         pool: pool.clone(),
         core_authorization_verifier: signer.verifier(),
+        core_owner_bootstrap_verifier: owner_bootstrap_signer.verifier(),
         core_shell_verifier: shell_signer.verifier(),
+        bootstrap_receipt_signer,
     });
     let actor_id = Uuid::new_v4();
     let correlation_id = Uuid::new_v4();
@@ -72,8 +93,8 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
     };
     let now = Utc::now();
     let shell = shell_signer
-        .sign(ShellContextV1 {
-            schema_version: tessara_module_contract::CONTRACT_SCHEMA_VERSION_V1,
+        .sign(ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id,
             module_definition_id: ModuleDefinitionId::new(
                 tessara_reference_scoped_records::MODULE_DEFINITION_ID,
@@ -86,10 +107,15 @@ async fn mutations_consume_replay_and_reads_filter_by_bound_organization() {
                 email: None,
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new("tessara.core.home").unwrap(),
-                label: "Home".into(),
-                href: "/".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new("tessara.core.home").unwrap(),
+                    key: "home".into(),
+                    label: "Home".into(),
+                    href: "/".into(),
+                }],
             }],
             return_destination: "/".into(),
             locale: "en-US".into(),

@@ -9,11 +9,12 @@ use crate::state::shell_navigation::{
     ShellNavigationGroupV1, ShellNavigationItemV1, ShellNavigationLoadState, ShellNavigationStateV1,
 };
 use crate::ui::empty_view;
-use icons::{
-    Blocks, CircleHelp, Database, File, FileText, GitBranch, House, LayoutDashboard, ListChecks,
-    LogOut, Network, PanelRight, Pencil, ShieldCheck, SlidersHorizontal, Users,
-};
+use icons::LogOut;
 use leptos::prelude::*;
+use tessara_module_ui::{
+    ShellAccountPresentation, ShellNavigationGroupPresentation, ShellNavigationIcon,
+    ShellNavigationItemPresentation, ShellSidebar,
+};
 
 #[component]
 pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
@@ -21,25 +22,82 @@ pub(crate) fn SidebarContent(active_route: &'static str) -> impl IntoView {
     let shell_navigation = shell_navigation_state();
 
     view! {
+        {move || sidebar_content_view(active_route, account.get(), shell_navigation.get())}
+    }
+}
+
+fn sidebar_content_view(
+    active_route: &'static str,
+    account: Option<auth::ShellAccountSummary>,
+    shell_navigation: ShellNavigationLoadState,
+) -> AnyView {
+    let shell_navigation = match shell_navigation {
+        ShellNavigationLoadState::Ready(response) => {
+            let navigation_status =
+                (response.state == ShellNavigationStateV1::Unavailable).then(|| {
+                    response
+                        .unavailable
+                        .map(|state| state.message)
+                        .unwrap_or_else(unavailable_message)
+                });
+            let actor = account
+                .map(|account| ShellAccountPresentation {
+                    display_name: account.display_name,
+                    email: Some(account.email),
+                })
+                .unwrap_or_else(|| ShellAccountPresentation {
+                    display_name: "Signed out".to_string(),
+                    email: Some("No active session".to_string()),
+                });
+            let navigation = response
+                .groups
+                .into_iter()
+                .map(|group| ShellNavigationGroupPresentation {
+                    id: group.id,
+                    label: group.name,
+                    items: group
+                        .items
+                        .into_iter()
+                        .map(|item| {
+                            let document_navigation = item.requires_document_navigation();
+                            ShellNavigationItemPresentation {
+                                key: item.key,
+                                label: item.label,
+                                href: item.href,
+                                document_navigation,
+                            }
+                        })
+                        .collect(),
+                })
+                .collect();
+            return view! {
+                <ShellSidebar
+                    actor
+                    navigation
+                    current_destination=active_route
+                    return_destination="/"
+                    navigation_status
+                    on_sign_out=Callback::new(|()| submit_logout())
+                />
+            }
+            .into_any();
+        }
+        other => other,
+    };
+
+    view! {
         <a class="brand-lockup" href="/">
             <span class="brand-mark" aria-hidden="true">
                 <img src="/assets/tessara-icon-256.svg" alt=""/>
             </span>
-            <span class="brand-copy">
-                <strong>"Tessara"</strong>
-            </span>
+            <span class="brand-copy"><strong>"Tessara"</strong></span>
         </a>
         <nav class="sidebar-nav" aria-label="Primary">
-            {move || {
-                navigation_view(
-                    active_route,
-                    account.get(),
-                    shell_navigation.get(),
-                )
-            }}
+            {navigation_view(active_route, account, shell_navigation)}
         </nav>
-        <AccountCard account/>
+        <AccountCard account=shell_session_account()/>
     }
+    .into_any()
 }
 
 fn navigation_view(
@@ -131,7 +189,7 @@ fn projected_nav_item_link(
     } else {
         "sidebar-link"
     };
-    let icon = nav_icon_for(&item.key);
+    let navigation_key = item.key.clone();
     let rel = item.requires_document_navigation().then_some("external");
     let label = item.label;
     let title = label.clone();
@@ -144,7 +202,7 @@ fn projected_nav_item_link(
             title=title
             aria-label=aria_label
         >
-            {icon}
+            <ShellNavigationIcon navigation_key/>
             <span class="sidebar-link__label">{label}</span>
         </a>
     }
@@ -340,35 +398,15 @@ fn resolved_nav_item_link(
     } else {
         "sidebar-link"
     };
-    let icon = nav_icon_for(&item.key);
+    let navigation_key = item.key.clone();
     let label = item.label;
     let title = label.clone();
     let aria_label = label.clone();
     view! {
         <a class=class href=item.href title=title aria-label=aria_label>
-            {icon}
+            <ShellNavigationIcon navigation_key/>
             <span class="sidebar-link__label">{label}</span>
         </a>
-    }
-}
-
-fn nav_icon_for(route_key: &str) -> impl IntoView + use<> {
-    match route_key {
-        "home" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><House class="sidebar-link__icon"/></span> }.into_any(),
-        "organization" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><GitBranch class="sidebar-link__icon"/></span> }.into_any(),
-        "forms" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><FileText class="sidebar-link__icon"/></span> }.into_any(),
-        "workflows" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><PanelRight class="sidebar-link__icon"/></span> }.into_any(),
-        "responses" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><CircleHelp class="sidebar-link__icon"/></span> }.into_any(),
-        "operations" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ListChecks class="sidebar-link__icon"/></span> }.into_any(),
-        "components" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Pencil class="sidebar-link__icon"/></span> }.into_any(),
-        "dashboards" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><LayoutDashboard class="sidebar-link__icon"/></span> }.into_any(),
-        "datasets" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Database class="sidebar-link__icon"/></span> }.into_any(),
-        "administration" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><SlidersHorizontal class="sidebar-link__icon"/></span> }.into_any(),
-        "user_management" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Users class="sidebar-link__icon"/></span> }.into_any(),
-        "roles_access" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><ShieldCheck class="sidebar-link__icon"/></span> }.into_any(),
-        "node_types" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Network class="sidebar-link__icon"/></span> }.into_any(),
-        "module_management" => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><Blocks class="sidebar-link__icon"/></span> }.into_any(),
-        _ => view! { <span class="sidebar-link__icon-wrap" aria-hidden="true"><File class="sidebar-link__icon"/></span> }.into_any(),
     }
 }
 
@@ -389,6 +427,44 @@ mod tests {
                 .map(|capability| (*capability).to_string())
                 .collect(),
         }
+    }
+
+    #[test]
+    fn ready_core_navigation_renders_the_shared_grouped_shell_sidebar() {
+        let html = Owner::new().with(|| {
+            sidebar_content_view(
+                "datasets",
+                Some(account(&["datasets:read"], &[])),
+                ShellNavigationLoadState::Ready(
+                    crate::state::shell_navigation::ShellNavigationResponseV1 {
+                        schema_version:
+                            crate::state::shell_navigation::SHELL_NAVIGATION_SCHEMA_VERSION_V1,
+                        policy_revision: Some(1),
+                        state: ShellNavigationStateV1::Available,
+                        groups: vec![ShellNavigationGroupV1 {
+                            id: "core.main".into(),
+                            name: "Main".into(),
+                            items: vec![ShellNavigationItemV1 {
+                                key: "datasets".into(),
+                                label: "Datasets".into(),
+                                href: "/datasets".into(),
+                                owner: crate::state::shell_navigation::ShellNavigationItemOwnerV1::Contribution,
+                                contribution_id: Some("tessara.datasets.navigation".into()),
+                                navigation_mode: crate::state::shell_navigation::ShellNavigationModeV1::Shell,
+                            }],
+                        }],
+                        unavailable: None,
+                    },
+                ),
+            )
+            .to_html()
+        });
+
+        assert!(html.contains("brand-lockup"));
+        assert!(html.contains(">Main</p>"));
+        assert!(html.contains("sidebar-link is-active"));
+        assert!(html.contains("reader@tessara.local"));
+        assert!(html.contains("ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\""));
     }
 
     #[test]
@@ -486,11 +562,24 @@ mod tests {
 
     #[test]
     fn module_management_uses_the_canonical_blocks_icon() {
-        let html = Owner::new().with(|| nav_icon_for("module_management").to_html());
+        let html = Owner::new()
+            .with(|| view! { <ShellNavigationIcon navigation_key="module_management"/> }.to_html());
 
         assert!(html.contains("M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"));
         assert!(html.contains("x=\"14\""));
         assert!(html.contains("y=\"2\""));
+    }
+
+    #[test]
+    fn dataset_navigation_retains_its_canonical_database_icon() {
+        let dataset = Owner::new()
+            .with(|| view! { <ShellNavigationIcon navigation_key="datasets"/> }.to_html());
+        let future_module = Owner::new()
+            .with(|| view! { <ShellNavigationIcon navigation_key="future_module"/> }.to_html());
+
+        assert_ne!(dataset, future_module);
+        assert!(dataset.contains("ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\""));
+        assert!(future_module.contains("M15 2H6a2 2 0 0 0-2 2v16"));
     }
 
     #[test]

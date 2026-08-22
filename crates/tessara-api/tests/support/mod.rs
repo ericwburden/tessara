@@ -411,6 +411,7 @@ async fn reset_database(database_url: &str) {
     );
 
     drop_all_public_tables(&pool).await;
+    drop_all_public_routines(&pool).await;
     sqlx::query("DROP SCHEMA IF EXISTS analytics CASCADE")
         .execute(&pool)
         .await
@@ -438,6 +439,34 @@ async fn reset_database(database_url: &str) {
             .execute(&pool)
             .await
             .expect("enum type should be droppable");
+    }
+}
+
+async fn drop_all_public_routines(pool: &PgPool) {
+    let routines = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT procedure.oid::regprocedure::text
+        FROM pg_proc procedure
+        JOIN pg_namespace namespace ON namespace.oid = procedure.pronamespace
+        LEFT JOIN pg_depend extension_dependency
+          ON extension_dependency.classid = 'pg_proc'::regclass
+         AND extension_dependency.objid = procedure.oid
+         AND extension_dependency.deptype = 'e'
+        WHERE namespace.nspname = 'public'
+          AND procedure.prokind IN ('f', 'p')
+          AND extension_dependency.objid IS NULL
+        ORDER BY procedure.oid::regprocedure::text
+        "#,
+    )
+    .fetch_all(pool)
+    .await
+    .expect("public test routines should be enumerable");
+
+    for routine in routines {
+        sqlx::query(&format!("DROP ROUTINE IF EXISTS {routine} CASCADE"))
+            .execute(pool)
+            .await
+            .expect("public test routine should be droppable");
     }
 }
 

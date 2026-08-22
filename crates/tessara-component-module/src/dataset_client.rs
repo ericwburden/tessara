@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use tessara_composition::BootstrapDependencyValidationInvocationV1;
 use tessara_datasets_contract::{
     DATASET_BINDING_KEY, DATASET_CONTRACT_ID, DATASET_CONTRACT_VERSION,
-    DatasetBootstrapValidationResponse,
+    DATASET_MODULE_DEFINITION_ID, DatasetBootstrapValidationResponse, DatasetMajorLineReference,
 };
 use tessara_module_contract::{
     AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2, AuthorizationAudienceV1,
@@ -42,7 +42,7 @@ where
         .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
     let action = dataset_action(path, request)?;
     let reference_digest = request_reference_digest(request)?;
-    let downstream = exchange_dataset_authorization(state, authorization, action).await?;
+    let downstream = exchange_dataset_authorization(state, authorization, action, request).await?;
     let service_request = signed_service_request(state, &downstream, path, &body)?;
     let timeout_seconds: i32 = sqlx::query_scalar(
         "SELECT dataset_request_timeout_seconds FROM component_configuration WHERE singleton=true",
@@ -51,7 +51,7 @@ where
     .await?;
     let response = state
         .dataset_client
-        .post(format!("{}{}", state.core_internal_url, path))
+        .post(format!("{}{}", state.dataset_provider_url, path))
         .timeout(Duration::from_secs(timeout_seconds as u64))
         .header("content-type", "application/json")
         .header("x-tessara-authorization", &downstream.encoded)
@@ -89,7 +89,7 @@ where
                 dependency_binding = DATASET_BINDING_KEY,
                 functional_contract = DATASET_CONTRACT_ID,
                 contract_version = DATASET_CONTRACT_VERSION,
-                provider_owner_kind = "core_installation",
+                provider_owner_kind = "module_instance",
                 reference_digest,
                 timeout_seconds,
                 action,
@@ -128,7 +128,7 @@ where
             dependency_binding = DATASET_BINDING_KEY,
             functional_contract = DATASET_CONTRACT_ID,
             contract_version = DATASET_CONTRACT_VERSION,
-            provider_owner_kind = "core_installation",
+            provider_owner_kind = "module_instance",
             reference_digest,
             timeout_seconds,
             action,
@@ -166,7 +166,7 @@ where
             dependency_binding = DATASET_BINDING_KEY,
             functional_contract = DATASET_CONTRACT_ID,
             contract_version = DATASET_CONTRACT_VERSION,
-            provider_owner_kind = "core_installation",
+            provider_owner_kind = "module_instance",
             reference_digest,
             timeout_seconds,
             action,
@@ -201,7 +201,7 @@ where
         dependency_binding = DATASET_BINDING_KEY,
         functional_contract = DATASET_CONTRACT_ID,
         contract_version = DATASET_CONTRACT_VERSION,
-        provider_owner_kind = "core_installation",
+        provider_owner_kind = "module_instance",
         reference_digest,
         timeout_seconds,
         action,
@@ -253,7 +253,7 @@ pub(super) async fn post_bootstrap_validation(
         .dataset_client
         .post(format!(
             "{}{}",
-            state.core_internal_url, invocation.target.path
+            state.dataset_provider_url, invocation.target.path
         ))
         .timeout(Duration::from_secs(timeout_seconds as u64))
         .header("content-type", "application/json")
@@ -369,10 +369,11 @@ fn update_observation(
     }
 }
 
-async fn exchange_dataset_authorization(
+async fn exchange_dataset_authorization<TRequest: Serialize>(
     state: &ComponentModuleState,
     inbound_authorization: &str,
     action: &str,
+    request: &TRequest,
 ) -> Result<DownstreamAuthorization, ComponentModuleError> {
     let inbound: SignedEnvelopeV1<AuthorizationGrantV3> = decode(inbound_authorization)?;
     state
@@ -404,8 +405,10 @@ async fn exchange_dataset_authorization(
             now: Utc::now(),
         })
         .map_err(|_| ComponentModuleError::Forbidden)?;
-    let target = AuthorizationAudienceV1::CoreInstallation {
-        installation_id: security.installation_id,
+    let target = AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id: dataset_target_module_instance_id(request, security.installation_id)?,
+        module_definition_id: ModuleDefinitionId::new(DATASET_MODULE_DEFINITION_ID)
+            .map_err(|error| ComponentModuleError::Internal(error.to_string()))?,
     };
     let request = AuthorizationExchangeRequestV2 {
         schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
@@ -505,6 +508,26 @@ async fn exchange_dataset_authorization(
     })
 }
 
+fn dataset_target_module_instance_id<TRequest: Serialize>(
+    request: &TRequest,
+    installation_id: Uuid,
+) -> Result<Uuid, ComponentModuleError> {
+    let wire = serde_json::to_value(request)
+        .map_err(|error| ComponentModuleError::Internal(error.to_string()))?;
+    let Some(reference) = wire.get("reference") else {
+        return Ok(tessara_composition::module_instance_id(
+            installation_id,
+            DATASET_MODULE_DEFINITION_ID,
+        ));
+    };
+    let reference: DatasetMajorLineReference =
+        serde_json::from_value(reference.clone()).map_err(|_| ComponentModuleError::Forbidden)?;
+    if reference.reference().installation_id() != installation_id {
+        return Err(ComponentModuleError::Forbidden);
+    }
+    Ok(reference.module_instance_id())
+}
+
 fn signed_service_request(
     state: &ComponentModuleState,
     authorization: &DownstreamAuthorization,
@@ -572,33 +595,69 @@ fn sha256_hex(value: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use tessara_datasets_contract::{
+        DATASET_CONTRACT_SCHEMA_VERSION, DatasetAction, DatasetCatalogRequest, DatasetSchemaRequest,
+    };
 
     use super::*;
 
     #[test]
     fn dependency_reference_observability_is_digest_only_and_stable() {
-        let request = json!({
-            "schema_version": 1,
-            "action": "resolve_schema",
-            "reference": {
-                "reference": {
-                    "installation_id": "01980000-0000-7000-8000-00000000008a",
-                    "resource_type": "tessara.transition.dataset_major_line",
-                    "resource_id": "01980000-0002-7000-8000-000000000003@1"
-                }
-            }
-        });
+        let installation_id = Uuid::from_u128(1);
+        let module_instance_id = Uuid::from_u128(2);
+        let request = DatasetSchemaRequest {
+            schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+            action: DatasetAction::ResolveSchema,
+            reference: DatasetMajorLineReference::from_parts(
+                installation_id,
+                module_instance_id,
+                Uuid::from_u128(3),
+                1,
+            )
+            .expect("Dataset reference"),
+        };
         let first = request_reference_digest(&request).unwrap();
         let second = request_reference_digest(&request).unwrap();
         assert_eq!(first, second);
         assert!(first.starts_with("sha256:"));
         assert_eq!(first.len(), 71);
-        assert!(!first.contains("01980000"));
         assert_eq!(
             dataset_action("/api/private/datasets/schema", &request).unwrap(),
             "datasets.schema"
         );
+        assert_eq!(
+            dataset_target_module_instance_id(&request, installation_id).unwrap(),
+            module_instance_id
+        );
+    }
+
+    #[test]
+    fn catalog_targets_the_selected_dataset_module_instance_without_core_fallback() {
+        let installation_id = Uuid::from_u128(4);
+        let request = DatasetCatalogRequest {
+            schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+            action: DatasetAction::Catalog,
+        };
+        assert_eq!(
+            dataset_target_module_instance_id(&request, installation_id).unwrap(),
+            tessara_composition::module_instance_id(installation_id, DATASET_MODULE_DEFINITION_ID)
+        );
+
+        let foreign_reference = DatasetSchemaRequest {
+            schema_version: DATASET_CONTRACT_SCHEMA_VERSION,
+            action: DatasetAction::ResolveSchema,
+            reference: DatasetMajorLineReference::from_parts(
+                Uuid::from_u128(5),
+                Uuid::from_u128(6),
+                Uuid::from_u128(7),
+                1,
+            )
+            .expect("foreign Dataset reference"),
+        };
+        assert!(matches!(
+            dataset_target_module_instance_id(&foreign_reference, installation_id),
+            Err(ComponentModuleError::Forbidden)
+        ));
     }
 
     #[test]

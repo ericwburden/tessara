@@ -13,7 +13,6 @@ use crate::{
 };
 
 mod accounts;
-mod analytics;
 mod forms;
 mod hierarchy;
 mod responses;
@@ -23,7 +22,6 @@ use accounts::{
     ensure_account_delegation, ensure_account_scope_assignment, ensure_demo_account,
     require_dev_admin_account,
 };
-use analytics::{DatasetFieldBinding, ensure_dataset};
 use forms::{DemoFormSpec, FormFieldDef, ensure_demo_form, replace_form_scope_nodes};
 use hierarchy::{
     DemoNodeSpec, MetadataFieldDef, ensure_demo_node, ensure_metadata_fields, ensure_node_type,
@@ -52,14 +50,10 @@ pub struct DemoSeedSummary {
     pub form_count: i64,
     pub draft_submission_count: i64,
     pub submitted_submission_count: i64,
-    pub dataset_count: i64,
-    pub dataset_revision_count: i64,
     pub organization_node_id: Uuid,
     pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub submission_id: Uuid,
-    pub dataset_id: Uuid,
-    pub dataset_revision_id: Uuid,
     pub partner_node_id: Uuid,
     pub program_node_id: Uuid,
     pub activity_node_id: Uuid,
@@ -1245,89 +1239,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
 
     let analytics_status = crate::analytics::refresh_projection(pool).await?;
 
-    let (_partner_dataset_id, _partner_dataset_revision_id) = ensure_dataset(
-        pool,
-        partner_form.form_id,
-        "Demo Partner Profile Dataset",
-        "demo-partner-profile",
-        "partner",
-        &[partner_a, partner_b],
-        &[DatasetFieldBinding {
-            label: "Contact Name",
-            source_field_key: "contact_name",
-            field_type: "text",
-        }],
-    )
-    .await?;
-    let (_program_dataset_id, _program_dataset_revision_id) = ensure_dataset(
-        pool,
-        program_form.form_id,
-        "Demo Program Snapshot Dataset",
-        "demo-program-snapshot",
-        "program",
-        &[program_a, program_b, program_c, program_d],
-        &[DatasetFieldBinding {
-            label: "Participant Target",
-            source_field_key: "participant_target",
-            field_type: "number",
-        }],
-    )
-    .await?;
-    let (_activity_dataset_id, _activity_dataset_revision_id) = ensure_dataset(
-        pool,
-        activity_form.form_id,
-        "Demo Activity Plan Dataset",
-        "demo-activity-plan",
-        "activity",
-        &[
-            activity_a, activity_b, activity_c, activity_d, activity_e, activity_f,
-        ],
-        &[DatasetFieldBinding {
-            label: "Expected Attendees",
-            source_field_key: "expected_attendees",
-            field_type: "number",
-        }],
-    )
-    .await?;
-    let (session_dataset_id, session_dataset_revision_id) = ensure_dataset(
-        pool,
-        session_form.form_id,
-        "Demo Session Log Dataset",
-        "demo-session-log",
-        "session",
-        &[
-            session_a, session_b, session_c, session_d, session_e, session_f, session_g, session_h,
-        ],
-        &[
-            DatasetFieldBinding {
-                label: "Session Date",
-                source_field_key: "session_date",
-                field_type: "date",
-            },
-            DatasetFieldBinding {
-                label: "Participants",
-                source_field_key: "participants",
-                field_type: "number",
-            },
-            DatasetFieldBinding {
-                label: "Completed As Planned",
-                source_field_key: "completed_as_planned",
-                field_type: "boolean",
-            },
-            DatasetFieldBinding {
-                label: "Facilitator Notes",
-                source_field_key: "facilitator_notes",
-                field_type: "text",
-            },
-            DatasetFieldBinding {
-                label: "Topics Covered",
-                source_field_key: "topics_covered",
-                field_type: "multi_choice",
-            },
-        ],
-    )
-    .await?;
-
     Ok(DemoSeedSummary {
         seed_version: DEMO_SEED_VERSION,
         node_counts: DemoNodeCounts {
@@ -1339,14 +1250,10 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         form_count: 6,
         draft_submission_count: 4,
         submitted_submission_count: 58,
-        dataset_count: 4,
-        dataset_revision_count: 4,
         organization_node_id: session_a,
         form_id: session_form.form_id,
         form_version_id: session_form.form_version_id,
         submission_id: session_submitted_a,
-        dataset_id: session_dataset_id,
-        dataset_revision_id: session_dataset_revision_id,
         partner_node_id: partner_a,
         program_node_id: program_a,
         activity_node_id: activity_a,
@@ -1385,8 +1292,6 @@ async fn require_demo_seed_target_empty(
           + (SELECT COUNT(*) FROM submissions)
           + (SELECT COUNT(*) FROM workflows)
           + (SELECT COUNT(*) FROM workflow_versions)
-          + (SELECT COUNT(*) FROM datasets)
-          + (SELECT COUNT(*) FROM dataset_revisions)
         "#,
     )
     .bind(dev_admin_account_id)

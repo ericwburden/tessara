@@ -2,12 +2,23 @@ use axum::{Json, Router, extract::State, http::HeaderMap, routing::get};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::Row;
+use tessara_datasets_contract::{
+    DATASET_CORE_BINDING_KEY, DATASET_MODULE_DEFINITION_ID, DATASET_OPERATIONAL_STATUS_CONTRACT_ID,
+    DATASET_OPERATIONS_STATUS_ACTION, DATASET_OPERATIONS_STATUS_PATH,
+    DATASET_REVERSE_CONTRACT_VERSION, DatasetFreshnessState, DatasetOperationsStatusItem,
+    DatasetOperationsStatusRequest, DatasetOperationsStatusResponse, DatasetProviderResultState,
+    DatasetReadinessLabel,
+};
 use uuid::Uuid;
 
 use crate::{
-    auth::{self, CapabilityBoundary},
+    auth::{self, AuthenticatedRequest, CapabilityBoundary},
+    core_security::request_correlation_id_or_new,
     db::AppState,
     error::{ApiError, ApiResult},
+    module_gateway::{
+        CorePrivateProviderRequest, CorePrivateProviderResult, call_private_provider,
+    },
 };
 
 #[derive(Serialize)]
@@ -22,7 +33,7 @@ pub struct OperationsStatus {
 pub struct OperationsSummary {
     pub open_workflow_assignment_count: i64,
     pub draft_response_count: i64,
-    pub dataset_attention_count: i64,
+    pub dataset_attention_count: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -48,6 +59,7 @@ pub struct WorkflowAssignmentStatus {
 
 #[derive(Serialize)]
 pub struct DatasetReadiness {
+    pub state: DatasetProviderResultState,
     pub datasets: Vec<DatasetStatus>,
 }
 
@@ -60,6 +72,8 @@ pub struct DatasetStatus {
     pub source_count: i64,
     pub field_count: i64,
     pub ready_response_count: i64,
+    pub freshness: DatasetFreshnessState,
+    pub sanitized_failure_code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -78,16 +92,25 @@ pub(crate) fn routes() -> Router<AppState> {
 pub async fn get_operations_status(
     State(state): State<AppState>,
     headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<OperationsStatus>> {
-    let account = auth::require_capability(&state.pool, &headers, "operations:view").await?;
-    let boundary = auth::capability_boundary(&state.pool, &account, "operations:view").await?;
+    request.require_capability("operations:view")?;
+    let boundary =
+        auth::capability_boundary(&state.pool, &request.account, "operations:view").await?;
 
     if matches!(boundary, CapabilityBoundary::None) {
         return Err(ApiError::Forbidden("operations:view".into()));
     }
 
     let workflow_assignments = load_workflow_assignments(&state.pool, &boundary).await?;
-    let datasets = load_dataset_readiness(&state.pool, &boundary).await?;
+    let requested_scope_node_ids = requested_scope_node_ids(&state.pool, &boundary).await?;
+    let dataset_readiness = load_dataset_readiness(
+        &state,
+        &request,
+        requested_scope_node_ids,
+        request_correlation_id_or_new(&headers),
+    )
+    .await?;
     let reporting_data = load_reporting_data_status(&state.pool, &boundary).await?;
 
     let summary = OperationsSummary {
@@ -99,16 +122,13 @@ pub async fn get_operations_status(
             .iter()
             .map(|assignment| assignment.draft_response_count)
             .sum(),
-        dataset_attention_count: datasets
-            .iter()
-            .filter(|dataset| dataset.readiness != "Ready")
-            .count() as i64,
+        dataset_attention_count: dataset_attention_count(&dataset_readiness),
     };
 
     Ok(Json(OperationsStatus {
         summary,
         workflow_assignments,
-        dataset_readiness: DatasetReadiness { datasets },
+        dataset_readiness,
         reporting_data,
     }))
 }
@@ -286,105 +306,124 @@ fn workflow_assignments_sql(scoped: bool) -> &'static str {
     }
 }
 
-async fn load_dataset_readiness(
+async fn requested_scope_node_ids(
     pool: &sqlx::PgPool,
     boundary: &CapabilityBoundary,
-) -> ApiResult<Vec<DatasetStatus>> {
-    let rows = match boundary {
+) -> ApiResult<Vec<Uuid>> {
+    let mut node_ids = match boundary {
         CapabilityBoundary::Global => {
-            sqlx::query(dataset_readiness_sql(false))
+            sqlx::query_scalar("SELECT id FROM nodes ORDER BY id")
                 .fetch_all(pool)
                 .await?
         }
-        CapabilityBoundary::Scoped(node_ids) => {
-            if node_ids.is_empty() {
-                return Ok(Vec::new());
-            }
-            sqlx::query(dataset_readiness_sql(true))
-                .bind(node_ids)
-                .fetch_all(pool)
-                .await?
-        }
-        CapabilityBoundary::None => return Ok(Vec::new()),
+        CapabilityBoundary::Scoped(node_ids) => node_ids.clone(),
+        CapabilityBoundary::None => Vec::new(),
     };
-
-    rows.into_iter()
-        .map(|row| {
-            let revision_status: Option<String> = row.try_get("revision_status")?;
-            let ready_response_count = row.try_get("ready_response_count")?;
-            let readiness = match revision_status.as_deref() {
-                Some("published") if ready_response_count > 0 => "Ready",
-                Some("published") => "No Ready Responses",
-                Some("draft") => "Draft",
-                Some("superseded") => "Superseded",
-                Some(_) => "Unavailable",
-                None => "No Published Revision",
-            }
-            .to_string();
-
-            Ok(DatasetStatus {
-                dataset_id: row.try_get("dataset_id")?,
-                dataset_name: row.try_get("dataset_name")?,
-                revision_status: revision_status
-                    .map(display_status)
-                    .unwrap_or_else(|| "Unavailable".to_string()),
-                readiness,
-                source_count: row.try_get("source_count")?,
-                field_count: row.try_get("field_count")?,
-                ready_response_count,
-            })
-        })
-        .collect()
+    node_ids.sort_unstable();
+    node_ids.dedup();
+    Ok(node_ids)
 }
 
-fn dataset_readiness_sql(scoped: bool) -> &'static str {
-    if scoped {
-        r#"
-        SELECT
-            datasets.id AS dataset_id,
-            datasets.name AS dataset_name,
-            dataset_revisions.status::text AS revision_status,
-            COUNT(DISTINCT dataset_sources.id) AS source_count,
-            COUNT(DISTINCT dataset_fields.id) AS field_count,
-            COUNT(DISTINCT analytics.submission_fact.submission_id) AS ready_response_count
-        FROM datasets
-        JOIN dataset_scope_nodes ON dataset_scope_nodes.dataset_id = datasets.id
-        LEFT JOIN dataset_revisions
-            ON dataset_revisions.dataset_id = datasets.id
-           AND dataset_revisions.status = 'published'
-        LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
-        LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
-        LEFT JOIN form_versions
-            ON form_versions.id = dataset_sources.form_version_id
-        LEFT JOIN analytics.submission_fact
-            ON analytics.submission_fact.form_version_id = form_versions.id
-           AND analytics.submission_fact.node_id = ANY($1)
-        WHERE dataset_scope_nodes.node_id = ANY($1)
-        GROUP BY datasets.id, datasets.name, dataset_revisions.status
-        ORDER BY datasets.name, datasets.id
-        "#
-    } else {
-        r#"
-        SELECT
-            datasets.id AS dataset_id,
-            datasets.name AS dataset_name,
-            dataset_revisions.status::text AS revision_status,
-            COUNT(DISTINCT dataset_sources.id) AS source_count,
-            COUNT(DISTINCT dataset_fields.id) AS field_count,
-            COUNT(DISTINCT analytics.submission_fact.submission_id) AS ready_response_count
-        FROM datasets
-        LEFT JOIN dataset_revisions
-            ON dataset_revisions.dataset_id = datasets.id
-           AND dataset_revisions.status = 'published'
-        LEFT JOIN dataset_sources ON dataset_sources.dataset_id = datasets.id
-        LEFT JOIN dataset_fields ON dataset_fields.dataset_id = datasets.id
-        LEFT JOIN form_versions
-            ON form_versions.id = dataset_sources.form_version_id
-        LEFT JOIN analytics.submission_fact
-            ON analytics.submission_fact.form_version_id = form_versions.id
-        GROUP BY datasets.id, datasets.name, dataset_revisions.status
-        ORDER BY datasets.name, datasets.id
-        "#
+async fn load_dataset_readiness(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    requested_scope_node_ids: Vec<Uuid>,
+    correlation_id: Uuid,
+) -> ApiResult<DatasetReadiness> {
+    let request = DatasetOperationsStatusRequest {
+        schema_version: 1,
+        requested_scope_node_ids,
+    };
+    let response = call_private_provider::<_, DatasetOperationsStatusResponse>(
+        state,
+        actor,
+        CorePrivateProviderRequest {
+            module_definition_id: DATASET_MODULE_DEFINITION_ID,
+            expected_owner: None,
+            dependency_binding: DATASET_CORE_BINDING_KEY,
+            functional_contract: DATASET_OPERATIONAL_STATUS_CONTRACT_ID,
+            contract_version: DATASET_REVERSE_CONTRACT_VERSION,
+            authorization_action: DATASET_OPERATIONS_STATUS_ACTION,
+            path: DATASET_OPERATIONS_STATUS_PATH,
+            correlation_id,
+            actor_capability: "operations:view",
+            body: &request,
+        },
+    )
+    .await?;
+    Ok(match response {
+        CorePrivateProviderResult::Response(response) => project_dataset_readiness(response),
+        CorePrivateProviderResult::Unavailable => {
+            unavailable_dataset_readiness(DatasetProviderResultState::Unavailable)
+        }
+        CorePrivateProviderResult::Undisclosed => {
+            unavailable_dataset_readiness(DatasetProviderResultState::Undisclosed)
+        }
+    })
+}
+
+fn project_dataset_readiness(response: DatasetOperationsStatusResponse) -> DatasetReadiness {
+    if response.validate().is_err() {
+        return unavailable_dataset_readiness(DatasetProviderResultState::Unavailable);
+    }
+    let state = response.state;
+    let Some(datasets) = response
+        .items
+        .into_iter()
+        .map(project_dataset_status)
+        .collect::<Option<Vec<_>>>()
+    else {
+        return unavailable_dataset_readiness(DatasetProviderResultState::Unavailable);
+    };
+    DatasetReadiness { state, datasets }
+}
+
+fn project_dataset_status(item: DatasetOperationsStatusItem) -> Option<DatasetStatus> {
+    Some(DatasetStatus {
+        dataset_id: item.dataset.dataset_id(),
+        dataset_name: item.dataset_name,
+        revision_status: item
+            .revision_status
+            .map(display_status)
+            .unwrap_or_else(|| "Unavailable".into()),
+        readiness: readiness_label(item.readiness).into(),
+        source_count: i64::try_from(item.source_count).ok()?,
+        field_count: i64::try_from(item.field_count).ok()?,
+        ready_response_count: i64::try_from(item.ready_response_count).ok()?,
+        freshness: item.freshness,
+        sanitized_failure_code: item.sanitized_failure_code,
+    })
+}
+
+const fn readiness_label(readiness: DatasetReadinessLabel) -> &'static str {
+    match readiness {
+        DatasetReadinessLabel::Ready => "Ready",
+        DatasetReadinessLabel::NoReadyResponses => "No Ready Responses",
+        DatasetReadinessLabel::Draft => "Draft",
+        DatasetReadinessLabel::Superseded => "Superseded",
+        DatasetReadinessLabel::Unavailable => "Unavailable",
+        DatasetReadinessLabel::NoPublishedRevision => "No Published Revision",
+    }
+}
+
+fn unavailable_dataset_readiness(state: DatasetProviderResultState) -> DatasetReadiness {
+    DatasetReadiness {
+        state,
+        datasets: Vec::new(),
+    }
+}
+
+fn dataset_attention_count(readiness: &DatasetReadiness) -> Option<i64> {
+    match readiness.state {
+        DatasetProviderResultState::Available | DatasetProviderResultState::Empty => i64::try_from(
+            readiness
+                .datasets
+                .iter()
+                .filter(|dataset| dataset.readiness != "Ready")
+                .count(),
+        )
+        .ok(),
+        DatasetProviderResultState::Unavailable | DatasetProviderResultState::Undisclosed => None,
     }
 }
 
@@ -475,4 +514,64 @@ fn display_status(status: String) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use tessara_datasets_contract::{
+        DatasetOperationsStatusResponse, DatasetProviderResultState, DatasetReadinessLabel,
+    };
+
+    use super::*;
+
+    #[test]
+    fn readiness_vocabulary_is_exactly_the_frozen_operations_vocabulary() {
+        assert_eq!(readiness_label(DatasetReadinessLabel::Ready), "Ready");
+        assert_eq!(
+            readiness_label(DatasetReadinessLabel::NoReadyResponses),
+            "No Ready Responses"
+        );
+        assert_eq!(readiness_label(DatasetReadinessLabel::Draft), "Draft");
+        assert_eq!(
+            readiness_label(DatasetReadinessLabel::Superseded),
+            "Superseded"
+        );
+        assert_eq!(
+            readiness_label(DatasetReadinessLabel::Unavailable),
+            "Unavailable"
+        );
+        assert_eq!(
+            readiness_label(DatasetReadinessLabel::NoPublishedRevision),
+            "No Published Revision"
+        );
+    }
+
+    #[test]
+    fn dataset_outage_never_becomes_an_attention_zero() {
+        for state in [
+            DatasetProviderResultState::Unavailable,
+            DatasetProviderResultState::Undisclosed,
+        ] {
+            let readiness = unavailable_dataset_readiness(state);
+            assert_eq!(dataset_attention_count(&readiness), None);
+            assert!(readiness.datasets.is_empty());
+        }
+        assert_eq!(
+            dataset_attention_count(&unavailable_dataset_readiness(
+                DatasetProviderResultState::Empty
+            )),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn invalid_owner_response_is_projected_as_unavailable() {
+        let readiness = project_dataset_readiness(DatasetOperationsStatusResponse {
+            schema_version: 1,
+            state: DatasetProviderResultState::Available,
+            items: Vec::new(),
+        });
+        assert_eq!(readiness.state, DatasetProviderResultState::Unavailable);
+        assert_eq!(dataset_attention_count(&readiness), None);
+    }
 }

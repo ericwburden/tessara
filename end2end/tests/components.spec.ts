@@ -25,10 +25,11 @@ type DatasetReference = {
   reference: {
     installation_id: string;
     owner: {
-      kind: "core_installation";
+      kind: "module_instance";
       installation_id: string;
+      module_instance_id: string;
     };
-    resource_type: "tessara.transition.dataset_major_line";
+    resource_type: "tessara.datasets.dataset_major_line";
     resource_id: string;
   };
 };
@@ -125,7 +126,7 @@ async function signInAsAdmin(page: Page) {
   );
 }
 
-async function ensureDemoSeed(page: Page) {
+async function ensureReferenceOrLocalFixture(page: Page) {
   const response = await invokeDemoSeedEndpoint(page.request);
   if (response === null) return;
   const text = await response.text();
@@ -143,6 +144,7 @@ async function datasetOption(page: Page) {
   );
   const datasets = catalog.datasets;
   const dataset =
+    datasets.find((candidate) => candidate.dataset_slug === "derived-second-hop") ??
     datasets.find((candidate) =>
       candidate.fields.some(
         (field) => field.field_type.toLowerCase() !== "number",
@@ -153,12 +155,16 @@ async function datasetOption(page: Page) {
     "Component authoring requires one ready Dataset major line",
   ).toBeTruthy();
   expect(dataset!.reference.reference.resource_type).toBe(
-    "tessara.transition.dataset_major_line",
+    "tessara.datasets.dataset_major_line",
   );
-  expect(dataset!.reference.reference.owner).toEqual({
-    kind: "core_installation",
+  expect(dataset!.reference.reference.owner).toMatchObject({
+    kind: "module_instance",
     installation_id: dataset!.reference.reference.installation_id,
   });
+  expect(
+    dataset!.reference.reference.owner.module_instance_id,
+    "Dataset major-line reference must name its owning Dataset Module Instance",
+  ).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(datasetMajor(dataset!.reference)).toBeGreaterThan(0);
   return dataset!;
 }
@@ -314,7 +320,9 @@ function attachConsoleGuard(page: Page) {
 }
 
 async function chooseThemeWithKeyboard(page: Page, theme: "light" | "dark") {
-  const themeTrigger = page.getByRole("button", { name: "Theme options" });
+  const themeTrigger = page
+    .locator(".top-app-bar .theme-toggle__trigger:visible")
+    .first();
   await themeTrigger.focus();
   await page.keyboard.press("Enter");
   const themeOption = page.getByRole("menuitemradio", {
@@ -527,7 +535,9 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
           `.sidebar-link.is-active[href="${route.path}"]`,
         );
         await expect(active).toHaveCount(2);
-        await expect(active.first()).toHaveText(route.label);
+        await expect(active.first().locator(".sidebar-link__label")).toHaveText(
+          route.label,
+        );
         expect(await presentation()).toEqual(core);
         if (route.path === "/components" || route.path === "/dashboards") {
           await expect(page.locator("#module-content")).toHaveAttribute(
@@ -573,7 +583,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(120_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
 
     await page.goto("/components/new");
@@ -741,7 +751,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         );
       });
       await page
-        .getByRole("group", { name: "Visible columns" })
+        .getByRole("dialog", { name: "Visible columns" })
         .getByLabel(secondField.label, { exact: false })
         .uncheck();
       await projectionResponse;
@@ -940,7 +950,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(180_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const field =
       dataset.fields.find(
@@ -1334,7 +1344,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
         "/api/admin/components/datasets/distinct-values",
         {
           data: {
-            schema_version: 1,
+            schema_version: 2,
             action: "distinct_values",
             reference: dataset.reference,
             field_key: fieldKey,
@@ -1452,7 +1462,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(240_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
 
     const components = await expectJson<ComponentSummary[]>(
       await page.request.get("/api/components"),
@@ -1496,6 +1506,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
               "data-hydration",
               "ready",
             );
+            await page.waitForLoadState("networkidle");
             await chooseThemeWithKeyboard(page, theme);
 
             const heading =
@@ -1548,6 +1559,11 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
 
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/components");
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
+    await page.waitForLoadState("networkidle");
     await chooseThemeWithKeyboard(page, "light");
     const createAction = page.getByRole("link", {
       name: "Create Component",
@@ -1569,7 +1585,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
   }) => {
     test.setTimeout(90_000);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const definition = await createComponent(
       page,
@@ -1733,7 +1749,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(60_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
     const dataset = await datasetOption(page);
     const fieldKey = dataset.fields[0].key;
     const definition = await createComponent(
@@ -1747,6 +1763,10 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/components/${definition.slug}/edit`);
+    await expect(page.locator("#module-content")).toHaveAttribute(
+      "data-hydration",
+      "ready",
+    );
     const kindPanel = page.getByRole("group", { name: "Component Kind" });
     const filtersPanel = page.getByRole("group", { name: "Filters" });
     await expect(kindPanel).toBeVisible();
@@ -1808,7 +1828,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     test.setTimeout(90_000);
     const assertNoConsoleErrors = attachConsoleGuard(page);
     await signInAsAdmin(page);
-    await ensureDemoSeed(page);
+    await ensureReferenceOrLocalFixture(page);
 
     const components = await expectJson<ComponentSummary[]>(
       await page.request.get("/api/components"),
@@ -1821,7 +1841,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
     );
     expect(
       component,
-      "demo seed should expose an active published visual Component",
+      "Reference or local fixture should expose an active published visual Component",
     ).toBeTruthy();
 
     const dashboards = await expectJson<DashboardSummary[]>(
@@ -1832,7 +1852,7 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       .sort((left, right) => right.placement_count - left.placement_count)[0];
     expect(
       dashboard,
-      "demo seed should expose a Dashboard with Component placements",
+      "Reference or local fixture should expose a Dashboard with Component placements",
     ).toBeTruthy();
 
     for (const theme of ["light", "dark"] as const) {

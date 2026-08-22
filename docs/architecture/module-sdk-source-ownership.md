@@ -61,6 +61,14 @@ allowed when each artifact is produced from the canonical package source.
 5. Each module owns and serves its product pages and versioned frontend assets.
    It uses the shared UI SDK and authenticated Shell Context to render a
    complete same-origin document.
+   The application shell is nevertheless one platform-owned presentation:
+   Core-hosted lifecycle views and complete module documents must render the
+   same shared shell component, grouped navigation, canonical navigation keys
+   and icons, account context, typography, spacing, themes, responsive
+   behavior, accessibility, and interactions. A module may supply product
+   content, but it must not copy, restyle, omit, or fork the shell. Shell
+   presentation changes advance the shared UI SDK and Shell Context contract
+   across repository consumers together.
 6. Core remains the canonical owner of authentication, authorization
    decisions, Organization scope, shell policy, navigation composition, and
    installation/module lifecycle. SDK code may verify or render those

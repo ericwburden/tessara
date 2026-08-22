@@ -18,7 +18,10 @@ use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Row, postgres::PgPoolOptions};
-use tessara_component_module::{ComponentModuleState, MANAGE_CAPABILITY, READ_CAPABILITY, router};
+use tessara_component_module::{
+    ComponentModuleInit, ComponentModuleState, ComponentServiceEndpoints, MANAGE_CAPABILITY,
+    READ_CAPABILITY, router,
+};
 use tessara_components_contract::{
     COMPONENT_CONTRACT_SCHEMA_VERSION, COMPONENT_RESOURCE_TYPE, ComponentAction,
     ComponentRenderKind, ComponentRenderRequest, ComponentResolutionRequest,
@@ -71,11 +74,18 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     reset_component_product(&pool).await;
 
     let installation_id = Uuid::new_v4();
-    let module_instance_id = Uuid::new_v4();
+    let module_instance_id =
+        tessara_composition::module_instance_id(installation_id, "tessara.components");
+    let dataset_module_instance_id = tessara_composition::module_instance_id(
+        installation_id,
+        tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID,
+    );
     let dashboard_instance_id = Uuid::new_v4();
     let actor_id = Uuid::new_v4();
     let allowed_scope = Uuid::new_v4();
     let hidden_scope = Uuid::new_v4();
+    assert_dataset_v2_baseline_rejects_retired_reference(&pool, installation_id, allowed_scope)
+        .await;
     sqlx::query(
         "INSERT INTO component_security_state
          (singleton,installation_id,module_instance_id,authorization_revision,
@@ -88,9 +98,13 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     .await
     .expect("Component security state is installed");
 
-    let dataset_reference =
-        DatasetMajorLineReference::from_parts(installation_id, Uuid::new_v4(), 1)
-            .expect("canonical Dataset major-line reference");
+    let dataset_reference = DatasetMajorLineReference::from_parts(
+        installation_id,
+        dataset_module_instance_id,
+        Uuid::new_v4(),
+        1,
+    )
+    .expect("canonical Dataset major-line reference");
     let dataset = DatasetStub::new(
         dataset_reference.clone(),
         allowed_scope,
@@ -101,15 +115,15 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             81,
         )),
     );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+    let dataset_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind Dataset stub");
-    let dataset_address = listener.local_addr().expect("Dataset stub address");
+    let dataset_address = dataset_listener.local_addr().expect("Dataset stub address");
     let dataset_server = tokio::spawn({
         let dataset = dataset.clone();
         async move {
             axum::serve(
-                listener,
+                dataset_listener,
                 Router::new()
                     .route("/api/private/datasets/schema", post(dataset_schema))
                     .route(
@@ -121,6 +135,24 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
                         post(dataset_bootstrap_validation),
                     )
                     .route("/api/private/datasets/execute", post(dataset_execute))
+                    .with_state(dataset),
+            )
+            .await
+            .expect("serve Dataset stub");
+        }
+    });
+    let core_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind Core authorization stub");
+    let core_address = core_listener
+        .local_addr()
+        .expect("Core authorization stub address");
+    let core_server = tokio::spawn({
+        let dataset = dataset.clone();
+        async move {
+            axum::serve(
+                core_listener,
+                Router::new()
                     .route(
                         "/api/private/module-authorization/exchange",
                         post(core_authorization_exchange),
@@ -128,7 +160,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
                     .with_state(dataset),
             )
             .await
-            .expect("serve Dataset stub");
+            .expect("serve Core authorization stub");
         }
     });
 
@@ -143,6 +175,12 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         "component-bootstrap-validation-test",
         ProtocolSignaturePurposeV1::BootstrapValidationAuthorization,
         85,
+    );
+    let owner_bootstrap_signer = signing_key(
+        "tessara.core",
+        "component-product-test",
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+        81,
     );
     let shell_signer = signing_key(
         "tessara.core",
@@ -162,6 +200,12 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         84,
     ));
+    let component_bootstrap_receipt_signer = Arc::new(signing_key(
+        "tessara.components",
+        "component-service-test",
+        ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+        84,
+    ));
     let service_identity_registry = ModuleServiceIdentityRegistryV1::from_json(
         &json!({
             "schema_version": 1,
@@ -178,15 +222,20 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     )
     .expect("test service identity registry");
     let app = router(
-        ComponentModuleState::new(
-            pool.clone(),
-            core_signer.verifier(),
-            bootstrap_validation_signer.verifier(),
-            shell_signer.verifier(),
+        ComponentModuleState::new(ComponentModuleInit {
+            pool: pool.clone(),
+            core_authorization_verifier: core_signer.verifier(),
+            core_owner_bootstrap_verifier: owner_bootstrap_signer.verifier(),
+            core_bootstrap_validation_verifier: bootstrap_validation_signer.verifier(),
+            core_shell_verifier: shell_signer.verifier(),
             service_identity_registry,
-            component_service_signer,
-            format!("http://{dataset_address}"),
-        )
+            service_request_signer: component_service_signer,
+            bootstrap_receipt_signer: component_bootstrap_receipt_signer,
+            service_endpoints: ComponentServiceEndpoints::new(
+                format!("http://{core_address}"),
+                format!("http://{dataset_address}"),
+            ),
+        })
         .expect("Component module state"),
     );
 
@@ -207,7 +256,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     );
     let valid_bootstrap_digest = tessara_composition::canonical_digest(&valid_bootstrap_input)
         .expect("valid bootstrap digest");
-    let missing_authorization = control_request(
+    let missing_authorization_status = control_request_status(
         &app,
         "/api/private/bootstrap",
         bootstrap_control_body(
@@ -216,10 +265,11 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-missing-authorization",
             valid_bootstrap_input.clone(),
             None,
+            None,
         ),
     )
     .await;
-    assert_eq!(missing_authorization.status, StatusCode::FORBIDDEN);
+    assert_eq!(missing_authorization_status, StatusCode::BAD_REQUEST);
     assert_component_product_empty(&pool).await;
     assert_eq!(
         dataset.bootstrap_validation_calls.load(Ordering::Relaxed),
@@ -244,6 +294,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-wrong-authorization-digest",
             valid_bootstrap_input.clone(),
             Some(wrong_digest_authorization),
+            Some(&owner_bootstrap_signer),
         ),
     )
     .await;
@@ -275,6 +326,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-non-ready-dataset",
             valid_bootstrap_input.clone(),
             Some(non_ready_validation),
+            Some(&owner_bootstrap_signer),
         ),
     )
     .await;
@@ -316,6 +368,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-mismatched-dataset-metadata",
             valid_bootstrap_input.clone(),
             Some(mismatched_validation),
+            Some(&owner_bootstrap_signer),
         ),
     )
     .await;
@@ -340,8 +393,13 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
         .store(DATASET_METADATA_RESPONSE_READY, Ordering::Relaxed);
 
     let nonexistent_input = component_bootstrap_input(
-        &DatasetMajorLineReference::from_parts(installation_id, Uuid::new_v4(), 1)
-            .expect("nonexistent Dataset major-line reference"),
+        &DatasetMajorLineReference::from_parts(
+            installation_id,
+            dataset_module_instance_id,
+            Uuid::new_v4(),
+            1,
+        )
+        .expect("nonexistent Dataset major-line reference"),
         allowed_scope,
         vec![any_type_field_requirement("label")],
         json!({"visible_columns": ["label"]}),
@@ -365,6 +423,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-nonexistent-dataset",
             nonexistent_input,
             Some(nonexistent_validation),
+            Some(&owner_bootstrap_signer),
         ),
     )
     .await;
@@ -406,6 +465,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
             "bootstrap-incompatible-dataset",
             incompatible_input,
             Some(incompatible_validation),
+            Some(&owner_bootstrap_signer),
         ),
     )
     .await;
@@ -426,7 +486,7 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     let cached_bootstrap_input = json!({
         "schema_version": "tessara.io/component-bootstrap/v1",
         "dependency_validation": {
-            "schema_version": 1,
+            "schema_version": DATASET_CONTRACT_SCHEMA_VERSION,
             "items": []
         },
         "components": []
@@ -457,18 +517,18 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
     .execute(&pool)
     .await
     .expect("cached Component bootstrap receipt");
+    let other_installation_id = Uuid::new_v4();
     let cross_installation_replay = control_request(
         &app,
         "/api/private/bootstrap",
-        json!({
-            "installation_id": Uuid::new_v4(),
-            "desired_revision": 1,
-            "apply_sequence": 1,
-            "target_plan_digest": bootstrap_target_plan_digest(),
-            "idempotency_key": "cross-installation-replay",
-            "input_digest": cached_bootstrap_digest,
-            "input": cached_bootstrap_input
-        }),
+        bootstrap_control_body(
+            other_installation_id,
+            cached_bootstrap_digest,
+            "cross-installation-replay",
+            cached_bootstrap_input,
+            None,
+            Some(&owner_bootstrap_signer),
+        ),
     )
     .await;
     assert_eq!(
@@ -1873,6 +1933,8 @@ async fn extracted_component_product_owns_crud_versions_lifecycle_render_and_non
 
     reset_component_product(&pool).await;
     pool.close().await;
+    core_server.abort();
+    let _ = core_server.await;
 }
 
 #[derive(Clone)]
@@ -1963,6 +2025,7 @@ impl DatasetStub {
             DATASET_METADATA_RESPONSE_MISMATCHED_REFERENCE => {
                 metadata.reference = DatasetMajorLineReference::from_parts(
                     metadata.reference.reference().installation_id(),
+                    metadata.reference.module_instance_id(),
                     Uuid::from_u128(metadata.reference.dataset_id().as_u128() ^ 1),
                     metadata.reference.major(),
                 )
@@ -2161,6 +2224,17 @@ async fn core_authorization_exchange(
 ) -> Result<Json<AuthorizationExchangeResponseV2>, StatusCode> {
     require_forwarded_contract_headers(&headers)?;
     request.validate().map_err(|_| StatusCode::BAD_REQUEST)?;
+    if request.target
+        != (AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: state.metadata.reference.module_instance_id(),
+            module_definition_id: ModuleDefinitionId::new(
+                tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID,
+            )
+            .expect("Dataset identity"),
+        })
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
     let encoded = headers
         .get("x-tessara-authorization")
         .and_then(|value| value.to_str().ok())
@@ -2191,13 +2265,14 @@ async fn core_authorization_exchange(
             original_actor_id: inbound.payload.original_actor_id,
             correlation_id: inbound.payload.correlation_id,
             presenting_service: ModuleServicePrincipalV1::ModuleInstance {
-                module_instance_id: match &inbound.payload.audience {
-                    AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: {
+                    let AuthorizationAudienceV1::ModuleInstance {
                         module_instance_id, ..
-                    } => *module_instance_id,
-                    AuthorizationAudienceV1::CoreInstallation { .. } => {
+                    } = &inbound.payload.audience
+                    else {
                         return Err(StatusCode::FORBIDDEN);
-                    }
+                    };
+                    *module_instance_id
                 },
                 module_definition_id: ModuleDefinitionId::new("tessara.components")
                     .expect("Component identity"),
@@ -2364,6 +2439,26 @@ async fn control_request(app: &Router, path: &str, body: Value) -> TestResponse 
             .expect("Component control request"),
     )
     .await
+}
+
+async fn control_request_status(app: &Router, path: &str, body: Value) -> StatusCode {
+    let control_key = std::env::var("TESSARA_MODULE_CONTROL_SHARED_KEY")
+        .unwrap_or_else(|_| "development-module-control-only".into());
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(path)
+                .header("content-type", "application/json")
+                .header("x-tessara-module-control-key", control_key)
+                .body(Body::from(
+                    serde_json::to_vec(&body).expect("serialize control request"),
+                ))
+                .expect("Component control request"),
+        )
+        .await
+        .expect("Component router response")
+        .status()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2866,7 +2961,7 @@ fn component_bootstrap_input_for_kind(
     json!({
         "schema_version": "tessara.io/component-bootstrap/v1",
         "dependency_validation": {
-            "schema_version": 1,
+            "schema_version": DATASET_CONTRACT_SCHEMA_VERSION,
             "items": [{
                 "validation_key": "bootstrap-validation-component-v1",
                 "reference": dataset_reference,
@@ -2875,13 +2970,11 @@ fn component_bootstrap_input_for_kind(
         },
         "components": [{
             "external_key": "bootstrap-validation-component",
-            "component_id": Uuid::new_v4(),
             "name": "Bootstrap validation component",
             "slug": "bootstrap-validation-component",
             "description": "Exercises Dataset-owned bootstrap validation.",
             "versions": [{
                 "resource_key": "bootstrap-validation-component-v1",
-                "component_version_id": Uuid::new_v4(),
                 "component_type": component_type,
                 "dataset_reference": dataset_reference,
                 "dataset_scope_node_ids": [dataset_scope_node_id],
@@ -2889,7 +2982,7 @@ fn component_bootstrap_input_for_kind(
                 "lifecycle_state": "active",
                 "resource_revision": 1,
                 "authority_revision": 1,
-                "successor_version_id": null,
+                "successor_resource_key": null,
                 "version_number": 1,
                 "version_label": "v1",
                 "version_note": "Bootstrap validation fixture",
@@ -2923,7 +3016,16 @@ fn signed_bootstrap_validation_authorization(
         action: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_ACTION.into(),
         method: tessara_module_contract::ServiceActionMethod::Post,
         path: tessara_datasets_contract::DATASET_BOOTSTRAP_VALIDATION_PATH.into(),
-        audience: AuthorizationAudienceV1::CoreInstallation { installation_id },
+        audience: AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: tessara_composition::module_instance_id(
+                installation_id,
+                tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID,
+            ),
+            module_definition_id: ModuleDefinitionId::new(
+                tessara_datasets_contract::DATASET_MODULE_DEFINITION_ID,
+            )
+            .expect("Dataset identity"),
+        },
         payload_pointer: "/dependency_validation".into(),
     };
     let request = tessara_composition::BootstrapDependencyValidationRequestV1 {
@@ -2980,17 +3082,63 @@ fn bootstrap_control_body(
     idempotency_key: &str,
     input: Value,
     validation: Option<tessara_composition::BootstrapDependencyValidationInvocationV1>,
+    owner_authorization_signer: Option<&PurposeBoundSigningKeyV1>,
 ) -> Value {
-    json!({
+    let owner_authorization = owner_authorization_signer.map(|signer| {
+        let now = Utc::now();
+        signer
+            .sign(tessara_composition::OwnerBootstrapAuthorizationV1 {
+                schema_version:
+                    tessara_composition::OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1,
+                installation_id,
+                owner: AuthorizationAudienceV1::ModuleInstance {
+                    module_instance_id: tessara_composition::module_instance_id(
+                        installation_id,
+                        "tessara.components",
+                    ),
+                    module_definition_id: ModuleDefinitionId::new("tessara.components")
+                        .expect("Component definition identity"),
+                },
+                owner_definition_id: "tessara.components".into(),
+                initiator: tessara_composition::ActorEvidenceV1 {
+                    actor_id: Uuid::from_u128(0x501).to_string(),
+                    actor_kind: "user".into(),
+                    authority: "component-product-integration".into(),
+                },
+                original_actor_id: Uuid::from_u128(0x501),
+                capability_scope_bindings: Vec::new(),
+                provider_actions: Vec::new(),
+                authorization_revision: 1,
+                organization_revision: 1,
+                locked_input_digest: input_digest.clone(),
+                input_digest: input_digest.clone(),
+                desired_revision: 1,
+                apply_sequence: 1,
+                target_plan_digest: bootstrap_target_plan_digest(),
+                idempotency_key: idempotency_key.into(),
+                correlation_id: Uuid::new_v4(),
+                jti: Uuid::new_v4(),
+                issued_at: now,
+                expires_at: now + Duration::seconds(30),
+            })
+            .expect("signed owner bootstrap authorization")
+    });
+    let mut body = json!({
         "installation_id": installation_id,
         "desired_revision": 1,
         "apply_sequence": 1,
         "target_plan_digest": bootstrap_target_plan_digest(),
         "idempotency_key": idempotency_key,
+        "locked_input_digest": input_digest,
         "input_digest": input_digest,
         "dependency_validation": validation,
         "input": input
-    })
+    });
+    if let Some(owner_authorization) = owner_authorization {
+        body["authorization"] = serde_json::to_value(owner_authorization)
+            .expect("serialize owner bootstrap authorization");
+    }
+    body
 }
 
 async fn assert_component_product_empty(pool: &PgPool) {
@@ -3034,6 +3182,63 @@ async fn reset_component_product(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("reset Component configuration fixture");
+}
+
+async fn assert_dataset_v2_baseline_rejects_retired_reference(
+    pool: &PgPool,
+    installation_id: Uuid,
+    scope_node_id: Uuid,
+) {
+    let component_id = Uuid::new_v4();
+    let mut transaction = pool.begin().await.expect("begin baseline constraint proof");
+    sqlx::query(
+        "INSERT INTO components(id,external_key,name,slug,description)
+         VALUES($1,$2,'Retired Dataset reference','retired-dataset-reference',NULL)",
+    )
+    .bind(component_id)
+    .bind(format!("retired-dataset-reference-{component_id}"))
+    .execute(&mut *transaction)
+    .await
+    .expect("insert Component for baseline constraint proof");
+
+    let retired_owner_kind = ["core", "installation"].join("_");
+    let retired_resource_type = ["tessara", "transition", "dataset_major_line"].join(".");
+    let retired_reference = json!({
+        "reference": {
+            "installation_id": installation_id,
+            "owner": {
+                "kind": retired_owner_kind,
+                "installation_id": installation_id
+            },
+            "resource_type": retired_resource_type,
+            "resource_id": format!("{}@1", Uuid::new_v4())
+        }
+    });
+    let error = sqlx::query(
+        "INSERT INTO component_versions
+         (id,component_id,dataset_reference,dataset_scope_node_ids,component_type,status,
+          lifecycle_state,version_number,version_label,config)
+         VALUES($1,$2,$3,$4,'table','published','active',1,'1.0.0','{}'::jsonb)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(component_id)
+    .bind(retired_reference)
+    .bind(vec![scope_node_id])
+    .execute(&mut *transaction)
+    .await
+    .expect_err("Component baseline must reject the retired Dataset reference shape");
+    let database_error = error
+        .as_database_error()
+        .expect("retired Dataset reference failure is a database constraint error");
+    assert_eq!(
+        database_error.code().as_deref(),
+        Some("23514"),
+        "retired Dataset reference must fail a CHECK constraint"
+    );
+    transaction
+        .rollback()
+        .await
+        .expect("rollback baseline constraint proof");
 }
 
 fn assert_database_url_names_a_database(database_url: &str) {

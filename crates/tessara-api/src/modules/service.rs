@@ -20,8 +20,6 @@ use super::{
 };
 
 #[cfg(test)]
-use super::navigation_catalog::DESTINATIONS;
-#[cfg(test)]
 use super::repository::NavigationPolicyEntryRow;
 
 const MODULE_CAPABILITIES: [(&str, &str); 2] = [
@@ -81,6 +79,128 @@ pub(crate) struct CompositionProjectionDocuments<'a> {
     pub(crate) digest: &'a str,
     pub(crate) lockfile: &'a Value,
     pub(crate) receipt: &'a Value,
+}
+
+pub(crate) async fn project_bootstrap_module_security(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    installation_id: Uuid,
+    modules: &[tessara_composition::ResolvedModuleReleaseV1],
+    manifests: &BTreeMap<String, ModuleManifest>,
+    service_identities: Option<&tessara_module_contract::ModuleServiceIdentityRegistryV1>,
+) -> anyhow::Result<()> {
+    for module in modules.iter().filter(|module| module.enabled) {
+        let manifest = manifests.get(&module.definition_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "bootstrap manifest is absent for '{}'",
+                module.definition_id
+            )
+        })?;
+        let display_name = module
+            .definition_id
+            .rsplit(['.', ':'])
+            .next()
+            .unwrap_or(&module.definition_id)
+            .replace(['-', '_'], " ");
+        sqlx::query(
+            "INSERT INTO module_definition_reservations(definition_id,display_name)
+             VALUES($1,$2) ON CONFLICT(definition_id) DO NOTHING",
+        )
+        .bind(&module.definition_id)
+        .bind(display_name)
+        .execute(&mut **transaction)
+        .await?;
+        let release_id = sqlx::query_scalar::<_, Uuid>(
+            "INSERT INTO module_releases
+               (id,definition_id,version,manifest_digest,manifest,runtime_image_digest,
+                publisher,trust_state,compatibility_state)
+             VALUES($1,$2,$3,$4,$5,$6,$7,'curated','compatible')
+             ON CONFLICT(definition_id,manifest_digest) DO UPDATE SET
+               version=EXCLUDED.version,
+               manifest=EXCLUDED.manifest,
+               runtime_image_digest=EXCLUDED.runtime_image_digest,
+               publisher=EXCLUDED.publisher,
+               trust_state='curated',
+               compatibility_state='compatible'
+             RETURNING id",
+        )
+        .bind(Uuid::new_v4())
+        .bind(&module.definition_id)
+        .bind(module.version.to_string())
+        .bind(module.manifest_digest.to_string())
+        .bind(sqlx::types::Json(manifest))
+        .bind(module.runtime_image.to_string())
+        .bind(manifest.publisher.as_str())
+        .fetch_one(&mut **transaction)
+        .await?;
+        for declaration in &manifest.security_capabilities {
+            repository::ensure_declared_module_capability(
+                transaction,
+                declaration.id.as_str(),
+                &declaration.description,
+            )
+            .await?;
+        }
+        sqlx::query("DELETE FROM core_module_action_declarations WHERE target_definition_id=$1")
+            .bind(&module.definition_id)
+            .execute(&mut **transaction)
+            .await?;
+        project_manifest_actions(transaction, &module.definition_id, manifest).await?;
+        let route_prefix = manifest
+            .browser_routes
+            .iter()
+            .filter(|route| !route.path_template.contains('{'))
+            .map(|route| route.path_template.as_str())
+            .min_by_key(|path| path.len())
+            .map(str::to_owned);
+        let instance_id = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM module_instances WHERE installation_id=$1 AND definition_id=$2",
+        )
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .fetch_optional(&mut **transaction)
+        .await?
+        .unwrap_or_else(|| {
+            tessara_composition::module_instance_id(installation_id, &module.definition_id)
+        });
+        sqlx::query(
+            "INSERT INTO module_instances
+               (id,installation_id,definition_id,release_id,identity_state,data_state,
+                database_name,configuration,route_prefix,installed,deployed,configured,
+                ready,enabled,healthy,last_observed_at)
+             VALUES($1,$2,$3,$4,'live','retained',$5,$6,$7,true,true,true,true,true,true,now())
+             ON CONFLICT(installation_id,definition_id) DO UPDATE SET
+               release_id=EXCLUDED.release_id,
+               identity_state='live',
+               data_state='retained',
+               database_name=EXCLUDED.database_name,
+               configuration=EXCLUDED.configuration,
+               route_prefix=EXCLUDED.route_prefix,
+               installed=true,
+               deployed=true,
+               configured=true,
+               ready=true,
+               enabled=true,
+               healthy=true,
+               last_observed_at=EXCLUDED.last_observed_at",
+        )
+        .bind(instance_id)
+        .bind(installation_id)
+        .bind(&module.definition_id)
+        .bind(release_id)
+        .bind(format!("composition:{}", module.definition_id))
+        .bind(sqlx::types::Json(&module.configuration))
+        .bind(route_prefix)
+        .execute(&mut **transaction)
+        .await?;
+        crate::module_service_requests::project_service_identity(
+            transaction,
+            service_identities,
+            instance_id,
+            manifest,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn project_composition_modules(
@@ -1061,22 +1181,6 @@ async fn update_navigation_policy_v2_transaction(
     Ok(updated)
 }
 
-#[cfg(test)]
-fn navigation_policy_v2_model(
-    installation_id: Uuid,
-    revision: i64,
-    groups: Vec<NavigationGroupRow>,
-    placements: Vec<NavigationPlacementRow>,
-) -> Result<NavigationPolicyReadModelV2, ()> {
-    navigation_policy_v2_model_with_catalog(
-        installation_id,
-        revision,
-        groups,
-        placements,
-        &navigation_catalog::resolved_destinations(),
-    )
-}
-
 fn navigation_policy_v2_model_with_catalog(
     installation_id: Uuid,
     revision: i64,
@@ -2018,7 +2122,7 @@ fn navigation_policy_model(
     revision: i64,
     rows: Vec<NavigationPolicyEntryRow>,
 ) -> Result<NavigationPolicyReadModel, ()> {
-    if revision < 0 || rows.len() != 4 {
+    if revision < 0 || rows.len() != 3 {
         return Err(());
     }
     let mut seen = BTreeSet::new();
@@ -2609,46 +2713,54 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventory_rejects_an_exact_dashboard_release_transition_overlap() {
+    fn inventory_accepts_the_exact_sprint_8b_topology_and_rejects_overlap() {
         let current_transitions = [
             "tessara.forms",
             "tessara.workflows",
             "tessara.responses",
-            "tessara.datasets",
             "tessara.migration",
         ];
         ensure_no_inventory_definition_overlap(
             current_transitions,
-            ["tessara.components", "tessara.dashboards"],
+            [
+                "tessara.datasets",
+                "tessara.reference.scoped-records",
+                "tessara.components",
+                "tessara.dashboards",
+            ],
         )
-        .expect("current real modules do not overlap the Core transition catalog");
+        .expect("the four real modules do not overlap the four Core transitions");
 
         let error = ensure_no_inventory_definition_overlap(
-            current_transitions
-                .into_iter()
-                .chain(["tessara.dashboards"]),
-            ["tessara.dashboards"],
+            current_transitions.into_iter().chain(["tessara.datasets"]),
+            ["tessara.datasets"],
         )
-        .expect_err("a real Dashboard release must never hide a Dashboard transition entry");
+        .expect_err("the real Dataset release must never overlap a Dataset transition entry");
         assert_eq!(error.stable_code(), "module_inventory_definition_overlap");
     }
 
     #[test]
     fn composition_managed_navigation_requires_an_active_module_instance() {
+        let dataset_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dataset-module/manifest.json"
+        ))
+        .expect("Dataset manifest fixture is valid JSON");
         let dashboard_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-dashboard-module/manifest.json"
         ))
         .expect("Dashboard manifest fixture is valid JSON");
         let managed = BTreeSet::from([
+            "tessara.datasets".to_string(),
             "tessara.dashboards".to_string(),
             "tessara.reference.scoped-records".to_string(),
         ]);
         let mut reduced = navigation_catalog::resolved_destinations();
         assert!(
-            reduced
-                .iter()
-                .all(|destination| destination.id != "tessara.dashboards.navigation"),
-            "the Core catalog must not contain the independently deployed Dashboard destination"
+            reduced.iter().all(|destination| !matches!(
+                destination.id.as_str(),
+                "tessara.datasets.navigation" | "tessara.dashboards.navigation"
+            )),
+            "the Core catalog must not contain independently deployed destinations"
         );
         retain_active_composition_destinations(&mut reduced, &managed, &BTreeSet::new());
         let reduced_ids = reduced
@@ -2656,14 +2768,16 @@ mod tests {
             .map(|destination| destination.id.as_str())
             .collect::<BTreeSet<_>>();
         assert!(!reduced_ids.contains("tessara.dashboards.navigation"));
+        assert!(!reduced_ids.contains("tessara.datasets.navigation"));
         assert!(!reduced_ids.contains("tessara.reference.scoped-records.navigation"));
         assert!(reduced_ids.contains("tessara.forms.navigation"));
 
-        let mut reference = resolve_navigation_catalog(&[dashboard_manifest]);
+        let mut reference = resolve_navigation_catalog(&[dataset_manifest, dashboard_manifest]);
         retain_active_composition_destinations(
             &mut reference,
             &managed,
             &BTreeSet::from([
+                "tessara.datasets".to_string(),
                 "tessara.dashboards".to_string(),
                 "tessara.reference.scoped-records".to_string(),
             ]),
@@ -2673,7 +2787,25 @@ mod tests {
             .map(|destination| destination.id.as_str())
             .collect::<BTreeSet<_>>();
         assert!(reference_ids.contains("tessara.dashboards.navigation"));
+        assert!(reference_ids.contains("tessara.datasets.navigation"));
         assert!(reference_ids.contains("tessara.reference.scoped-records.navigation"));
+        let dataset = reference
+            .iter()
+            .find(|destination| destination.id == "tessara.datasets.navigation")
+            .expect("the enrolled Dataset manifest contributes navigation");
+        assert_eq!(dataset.owner, NavigationCatalogOwner::Contribution);
+        assert_eq!(dataset.definition_id.as_deref(), Some("tessara.datasets"));
+        assert_eq!(dataset.route, "/datasets");
+        assert_eq!(dataset.key, "datasets");
+        assert_eq!(dataset.default_order, 6);
+        assert_eq!(
+            reference
+                .iter()
+                .filter(|destination| destination.id == "tessara.datasets.navigation")
+                .count(),
+            1,
+            "Dataset navigation must be projected exactly once from its real manifest"
+        );
         let dashboard = reference
             .iter()
             .find(|destination| destination.id == "tessara.dashboards.navigation")
@@ -2710,7 +2842,7 @@ mod tests {
     }
 
     #[test]
-    fn lockfile_navigation_materializes_a_non_default_blueprint_policy_with_exact_identities() {
+    fn lockfile_navigation_materializes_the_sprint_8b_module_topology_with_exact_identities() {
         let mut blueprint: tessara_composition::ApplicationBlueprintV1 = serde_json::from_str(
             include_str!("../../../../deploy/sprint-8a/blueprints/reference.json"),
         )
@@ -2731,9 +2863,19 @@ mod tests {
             destination.order = order;
             destination.visible = visible;
         }
-        let lockfile = tessara_composition::resolve(&blueprint, &release_catalog)
+        let mut lockfile = tessara_composition::resolve(&blueprint, &release_catalog)
             .expect("the non-default Blueprint navigation policy resolves");
+        lockfile.navigation.push(NavigationPolicyEntryV1 {
+            destination_id: "tessara.datasets.navigation".to_string(),
+            group_id: "core.main".to_string(),
+            order: 6,
+            visible: true,
+        });
 
+        let dataset_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dataset-module/manifest.json"
+        ))
+        .expect("Dataset manifest fixture is valid JSON");
         let component_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-component-module/manifest.json"
         ))
@@ -2742,7 +2884,8 @@ mod tests {
             "../../../tessara-dashboard-module/manifest.json"
         ))
         .expect("Dashboard manifest fixture is valid JSON");
-        let catalog = resolve_navigation_catalog(&[component_manifest, dashboard_manifest]);
+        let catalog =
+            resolve_navigation_catalog(&[dataset_manifest, component_manifest, dashboard_manifest]);
         let groups = vec![
             NavigationGroupRow {
                 group_id: "core.main".to_string(),
@@ -2784,7 +2927,8 @@ mod tests {
                 matches!(
                     destination.definition_id.as_deref(),
                     Some(
-                        "tessara.reference.scoped-records"
+                        "tessara.datasets"
+                            | "tessara.reference.scoped-records"
                             | "tessara.components"
                             | "tessara.dashboards"
                     )
@@ -2802,6 +2946,12 @@ mod tests {
         assert_eq!(
             extracted,
             vec![
+                (
+                    "tessara.datasets.navigation",
+                    Some("tessara.datasets"),
+                    6,
+                    true,
+                ),
                 (
                     "tessara.reference.scoped-records.navigation",
                     Some("tessara.reference.scoped-records"),
@@ -2821,15 +2971,15 @@ mod tests {
                     true,
                 ),
             ],
-            "the lockfile controls the exact non-default module order and visibility"
+            "the lockfile controls the exact four-module order and visibility"
         );
         assert_eq!(
             extracted
                 .iter()
-                .filter(|(identity, ..)| *identity == "tessara.dashboards.navigation")
+                .filter(|(identity, ..)| *identity == "tessara.datasets.navigation")
                 .count(),
             1,
-            "Dashboard remains a single manifest-owned navigation identity"
+            "Dataset remains a single manifest-owned navigation identity"
         );
         navigation_policy_v2_model_with_catalog(
             blueprint.installation_id,
@@ -2911,7 +3061,7 @@ mod tests {
         let baseline = include_bytes!("../../migrations/001_baseline.sql");
         assert_eq!(
             format!("{:x}", Sha256::digest(baseline)),
-            "49d1b2af75c5a31335e5cc855a615e571c05d7b352a3e0de96b4aa6829ff8926"
+            "b35d55a0bb502a966f88b8f73856d3cebc30d2d17d8eb6db750c66a02208add4"
         );
     }
 
@@ -2964,7 +3114,7 @@ mod tests {
             &catalog,
         )
         .expect("manifest and transition destinations form one dense policy");
-        assert_eq!(policy.destinations.len(), 14);
+        assert_eq!(policy.destinations.len(), 13);
     }
 
     #[test]
@@ -3040,7 +3190,7 @@ mod tests {
         for (contribution_id, order, visible) in [
             ("tessara.forms.navigation", 1, true),
             ("tessara.workflows.navigation", 0, true),
-            ("tessara.datasets.navigation", 0, false),
+            ("tessara.responses.navigation", 2, false),
         ] {
             let entry = requested
                 .iter_mut()
@@ -3053,7 +3203,7 @@ mod tests {
             .expect("same-band dense reorder is valid");
         assert_eq!(validated["tessara.forms.navigation"].order, 1);
         assert_eq!(validated["tessara.workflows.navigation"].order, 0);
-        assert!(!validated["tessara.datasets.navigation"].visible);
+        assert!(!validated["tessara.responses.navigation"].visible);
     }
 
     #[test]
@@ -3142,8 +3292,15 @@ mod tests {
         let (group_rows, placement_rows) =
             validate_navigation_policy_v2_request(&base, groups, destinations)
                 .expect("fixture with a populated custom group is valid");
-        let current = navigation_policy_v2_model(Uuid::nil(), 1, group_rows, placement_rows)
-            .expect("validated fixture projects back to schema v2");
+        let catalog = example_policy_v2_catalog();
+        let current = navigation_policy_v2_model_with_catalog(
+            Uuid::nil(),
+            1,
+            group_rows,
+            placement_rows,
+            &catalog,
+        )
+        .expect("validated fixture projects back to schema v2");
         let groups_without_custom: Vec<NavigationGroupUpdateV2> = current
             .groups
             .iter()
@@ -3329,13 +3486,12 @@ mod tests {
                 .map(|transition| transition.definition_id.as_str())
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from([
-                "tessara.datasets",
                 "tessara.forms",
                 "tessara.migration",
                 "tessara.responses",
                 "tessara.workflows",
             ]),
-            "Core must retain exactly the five canonical transition entries; independently deployed Dashboard and Components modules are excluded"
+            "Core must retain exactly the four canonical transition entries; independently deployed modules are excluded"
         );
         let canonical_forms_digest = before
             .transitions
@@ -3645,7 +3801,7 @@ mod tests {
         for (contribution_id, order, visible) in [
             ("tessara.forms.navigation", 1, true),
             ("tessara.workflows.navigation", 0, true),
-            ("tessara.datasets.navigation", 0, false),
+            ("tessara.responses.navigation", 2, false),
         ] {
             let entry = changed_policy_request
                 .iter_mut()
@@ -3765,13 +3921,6 @@ mod tests {
                 "main_between_organization_and_operations",
                 2,
             ),
-            (
-                "tessara.datasets.navigation",
-                "tessara.datasets",
-                "Admin",
-                "admin_between_administration_and_module_management",
-                0,
-            ),
         ];
         NavigationPolicyReadModel {
             installation_id: Uuid::nil(),
@@ -3806,7 +3955,16 @@ mod tests {
         "custom.550e8400-e29b-41d4-a716-446655440000"
     }
 
+    fn example_policy_v2_catalog() -> Vec<ResolvedNavigationDestination> {
+        let dataset_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-dataset-module/manifest.json"
+        ))
+        .expect("Dataset manifest fixture is valid JSON");
+        resolve_navigation_catalog(&[dataset_manifest])
+    }
+
     fn example_policy_v2() -> NavigationPolicyReadModelV2 {
+        let catalog = example_policy_v2_catalog();
         let groups = vec![
             NavigationGroupRow {
                 group_id: "core.main".to_string(),
@@ -3821,16 +3979,16 @@ mod tests {
                 owner: "core".to_string(),
             },
         ];
-        let placements = DESTINATIONS
+        let placements = catalog
             .iter()
             .map(|destination| NavigationPlacementRow {
-                destination_id: destination.id.to_string(),
-                group_id: destination.default_group_id.to_string(),
+                destination_id: destination.id.clone(),
+                group_id: destination.default_group_id.clone(),
                 visible: true,
                 display_order: destination.default_order,
             })
             .collect();
-        navigation_policy_v2_model(Uuid::nil(), 0, groups, placements)
+        navigation_policy_v2_model_with_catalog(Uuid::nil(), 0, groups, placements, &catalog)
             .expect("the authoritative catalog defaults form a valid schema-v2 policy")
     }
 

@@ -28,7 +28,6 @@ pub(crate) fn route_is_allowed(active_route: &str, capabilities: &[String]) -> b
             "submissions:manage",
         ],
         "operations" => &["operations:view"],
-        "datasets" => &["datasets:read", "datasets:manage"],
         "administration" => &["admin:all"],
         "module_management" => &["modules:read", "modules:manage_navigation"],
         _ => return true,
@@ -115,7 +114,6 @@ mod tests {
             ("forms", "forms:manage"),
             ("workflows", "workflows:manage"),
             ("responses", "submissions:manage"),
-            ("datasets", "datasets:manage"),
         ] {
             assert!(
                 route_is_allowed(route, &capabilities(&[capability])),
@@ -143,7 +141,7 @@ mod tests {
         for route in ["organization", "administration", "module_management"] {
             assert!(route_is_allowed(route, &core_admin), "{route}");
         }
-        for route in ["forms", "workflows", "responses", "datasets"] {
+        for route in ["forms", "workflows", "responses"] {
             assert!(!route_is_allowed(route, &core_admin), "{route}");
         }
     }

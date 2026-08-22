@@ -4,13 +4,13 @@ use chrono::{Duration, Utc};
 use tessara_module_contract::{
     ArtifactDigest, BrowserLifecycleAssetV1, BrowserLifecycleBootstrapV1, ModuleDefinitionId,
     OriginalActorProjectionV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1,
-    SemanticRouteName, ShellContextV1, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
+    SemanticRouteName, ShellContextV2, ShellDocumentStateV1, ShellThemeV1, SignedEnvelopeV1,
 };
 use uuid::Uuid;
 
 pub struct SignedShellFixture {
     pub signer: PurposeBoundSigningKeyV1,
-    pub envelope: SignedEnvelopeV1<ShellContextV1>,
+    pub envelope: SignedEnvelopeV1<ShellContextV2>,
 }
 
 /// Deterministic lifecycle-v1 projection for host, gateway, and module
@@ -51,8 +51,8 @@ pub fn signed_shell_fixture(definition_id: &str) -> SignedShellFixture {
     )
     .expect("fixed signing key");
     let now = Utc::now();
-    let context = ShellContextV1 {
-        schema_version: 1,
+    let context = ShellContextV2 {
+        schema_version: tessara_module_contract::SHELL_CONTEXT_SCHEMA_VERSION_V2,
         installation_id: Uuid::from_u128(1),
         module_definition_id: ModuleDefinitionId::new(definition_id).expect("definition ID"),
         module_instance_id: Uuid::from_u128(2),
@@ -77,7 +77,7 @@ pub fn signed_shell_fixture(definition_id: &str) -> SignedShellFixture {
 
 #[cfg(test)]
 mod tests {
-    use tessara_module_contract::ShellContextValidationContextV1;
+    use tessara_module_contract::ShellContextValidationContextV2;
     use tessara_module_runtime::verify_shell_context;
 
     use super::*;
@@ -89,7 +89,7 @@ mod tests {
         verify_shell_context(
             &fixture.envelope,
             &fixture.signer.verifier(),
-            &ShellContextValidationContextV1 {
+            &ShellContextValidationContextV2 {
                 installation_id: context.installation_id,
                 module_definition_id: context.module_definition_id.clone(),
                 module_instance_id: context.module_instance_id,

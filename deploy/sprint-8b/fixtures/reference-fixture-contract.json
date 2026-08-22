@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8b.reference-fixture",
+  "mutation_policy": "owner-apis-and-owner-bootstrap-only",
+  "identity_policy": "logical-keys-resolve-only-from-signed-owner-receipts-and-typed-read-back",
+  "actors": [
+    { "key": "actor.admin", "capabilities": ["admin:all", "datasets:read", "datasets:manage", "operations:view"] },
+    { "key": "actor.dataset-manager", "capabilities": ["datasets:read", "datasets:manage"], "scope": "scope.full" },
+    { "key": "actor.operations", "capabilities": ["operations:view"], "scope": "scope.full" },
+    { "key": "actor.full", "capabilities": ["components:read", "dashboards:read", "datasets:read"], "scope": "scope.full", "restriction_tier": "public" },
+    { "key": "actor.restricted", "capabilities": ["datasets:read", "datasets:read_restricted"], "scope": "scope.restricted", "restriction_tier": "restricted" },
+    { "key": "actor.confidential", "capabilities": ["datasets:read", "datasets:read_restricted", "datasets:read_confidential"], "scope": "scope.confidential", "restriction_tier": "confidential" },
+    { "key": "actor.disjoint", "capabilities": ["datasets:read"], "scope": "scope.disjoint", "restriction_tier": "public" },
+    { "key": "actor.delegate", "capabilities": ["submissions:read_own", "submissions:respond", "workflows:read"], "scope": "scope.full" }
+  ],
+  "form_versions": [
+    { "key": "form.primary/v1", "state": "published", "scope": "scope.full", "requires_exact_field_type_option_layout_digest": true },
+    { "key": "form.secondary/v1", "state": "published", "scope": "scope.full", "requires_exact_field_type_option_layout_digest": true },
+    { "key": "form.disjoint/v1", "state": "published", "scope": "scope.disjoint", "requires_exact_field_type_option_layout_digest": true }
+  ],
+  "response_changes": [
+    { "key": "response.initial", "kind": "upsert", "source": "form.primary/v1" },
+    { "key": "response.same-time-a", "kind": "upsert", "timestamp_group": "tied", "source": "form.primary/v1" },
+    { "key": "response.same-time-b", "kind": "upsert", "timestamp_group": "tied", "source": "form.primary/v1" },
+    { "key": "response.new", "kind": "upsert", "created_after_initial_snapshot": true, "source": "form.primary/v1" },
+    { "key": "response.corrected", "kind": "upsert", "source": "form.primary/v1" },
+    { "key": "response.status-out", "kind": "tombstone", "reason": "status_excluded", "source": "form.primary/v1" },
+    { "key": "response.status-in", "kind": "upsert", "source": "form.primary/v1" },
+    { "key": "response.redacted", "kind": "tombstone", "reason": "redacted", "source": "form.primary/v1" },
+    { "key": "response.deleted", "kind": "tombstone", "reason": "deleted", "source": "form.primary/v1" },
+    { "key": "response.outside-scope", "kind": "upsert", "source": "form.disjoint/v1", "must_not_advance_authorized_head": true }
+  ],
+  "source_bindings": [
+    { "key": "binding.primary", "form_version": "form.primary/v1", "scope": "scope.full", "cursor_partition": "cursor.primary" },
+    { "key": "binding.independent", "form_version": "form.secondary/v1", "scope": "scope.full", "cursor_partition": "cursor.independent", "requires_authorized_empty_page_advancement": true }
+  ],
+  "datasets": [
+    { "key": "dataset.base", "sources": ["binding.primary"], "expected": "published-ready" },
+    { "key": "dataset.derived", "sources": ["dataset.base"], "expected": "published-ready" },
+    { "key": "dataset.derived-second-hop", "sources": ["dataset.derived"], "expected": "published-ready" },
+    { "key": "dataset.independent-binding", "sources": ["binding.independent"], "expected": "published-ready-and-byte-stable-during-primary-refresh" },
+    { "key": "dataset.disjoint-binding", "sources": ["form.disjoint/v1"], "expected": "published-ready-and-disjoint" },
+    { "key": "dataset.incompatible", "sources": ["dataset.base"], "expected": "incompatible-binding-rejected-without-write" },
+    { "key": "dataset.cycle-candidate", "sources": ["dataset.derived-second-hop", "dataset.cycle-candidate"], "expected": "cycle-rejected-before-staging" }
+  ],
+  "downstream": {
+    "components": [
+      { "key": "component.dataset-table", "kind": "table", "release": "1.1.0", "dataset": "dataset.derived-second-hop", "expected": "compatible" },
+      { "key": "component.dataset-chart", "kind": "chart", "release": "1.1.0", "dataset": "dataset.derived-second-hop", "expected": "compatible" },
+      { "key": "component.dataset-stat", "kind": "stat_card", "release": "1.1.0", "dataset": "dataset.derived-second-hop", "expected": "compatible" },
+      { "key": "component.dataset-disjoint", "kind": "table", "release": "1.1.0", "dataset": "dataset.disjoint-binding", "expected": "undisclosed-for-full-actor" },
+      { "key": "component.dataset-incompatible", "kind": "table", "release": "1.1.0", "dataset": "dataset.incompatible", "expected": "incompatible" }
+    ],
+    "dashboard": {
+      "key": "dashboard.dataset-components",
+      "release": "3.0.2",
+      "viewer_actor": "actor.full",
+      "components": ["component.dataset-table", "component.dataset-chart", "component.dataset-stat", "component.dataset-disjoint"],
+      "placements": [
+        { "key": "dataset-stat", "component": "component.dataset-stat", "column": 0, "row": 0, "width": 4, "height": 2, "expected": "available" },
+        { "key": "dataset-table", "component": "component.dataset-table", "column": 0, "row": 2, "width": 12, "height": 6, "expected": "available" },
+        { "key": "dataset-chart", "component": "component.dataset-chart", "column": 0, "row": 8, "width": 8, "height": 4, "expected": "available" },
+        { "key": "dataset-disjoint", "component": "component.dataset-disjoint", "column": 8, "row": 8, "width": 4, "height": 4, "expected": "redacted" }
+      ],
+      "expected": "healthy-outage-recovery-and-scoped-redaction"
+    }
+  },
+  "reverse_consumers": ["forms.source-usage", "operations.dataset-readiness", "app-summary.dataset-counts"],
+  "resource_observation_types": ["tessara.datasets.dataset", "tessara.datasets.dataset_revision", "tessara.datasets.dataset_major_line"],
+  "forbidden": ["predicted-uuid", "foreign-owner-database-write", "response-sql-mutation", "copied-count-as-identity"]
+}

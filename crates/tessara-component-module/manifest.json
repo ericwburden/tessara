@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "definition_id": "tessara.components",
-  "release_version": "1.0.1",
+  "release_version": "1.1.0",
   "publisher": "tessara.first_party",
   "support": {
     "support_tier": "first_party",
@@ -143,7 +143,7 @@
   "dependencies": [
     {
       "contract_id": "tessara.datasets.dataset-major-line",
-      "version_requirement": "=1.0.0",
+      "version_requirement": "=2.0.0",
       "binding_key": "tessara.components.dataset-major-line",
       "optional": false
     }
@@ -292,7 +292,7 @@
   "shell_contribution_contracts": null,
   "platform_versions": {
     "core_release": "0.1.0",
-    "shell_context_schema": "1.0.0",
+    "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
     "module_contract": "0.3.0",
     "module_runtime": "0.3.0",
@@ -640,7 +640,7 @@
   "bootstrap_dependency_validation": {
     "dependency_binding": "tessara.components.dataset-major-line",
     "functional_contract": "tessara.datasets.dataset-major-line",
-    "contract_version": "1.0.0",
+    "contract_version": "2.0.0",
     "authorization_action": "datasets.bootstrap_validate",
     "method": "POST",
     "path": "/api/private/datasets/bootstrap-validation",
@@ -657,7 +657,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe",
+      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -672,17 +672,17 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:bc5237617aec365549741171d86da5557cbde4936e862ccf438cf763e646d221",
+      "digest": "sha256:afe97c66ca0aa0b1d2fadc2e608a5900dfef1c916b05a337063b421152fad790",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component-bindings.js",
-      "digest": "sha256:078447da476b377cdf26d4f7351723377e5a041e3206cb39c62af0e77203c033",
+      "digest": "sha256:a5196691684f715ba0450f824d5fae5034d2e2b5a96f83e827603b314238f453",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:29b8b29a4ac6ddb4366aa18ce889a8bd50b18c14f7a6002d1147a77e1d670d15",
+      "digest": "sha256:39a1ab97a0c78a226a72dac338f92884045e73c329e2df9b885e8fcd4c47829b",
       "content_type": "application/wasm"
     }
   ]

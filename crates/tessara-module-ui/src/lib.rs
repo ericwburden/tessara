@@ -32,6 +32,8 @@ mod searchable_data_table;
 #[cfg(feature = "components")]
 mod segmented_toggle;
 #[cfg(feature = "components")]
+mod shell_sidebar;
+#[cfg(feature = "components")]
 mod side_sheet;
 #[cfg(feature = "components")]
 mod skeleton;
@@ -49,10 +51,15 @@ mod tabs;
 mod timestamp;
 
 #[cfg(feature = "components")]
-use leptos::prelude::{AnyView, Fragment, IntoView, Owner};
+use leptos::prelude::{
+    AnyView, Fragment, GlobalAttributes, InnerHtmlAttribute, IntoAny, IntoView, Owner, RenderHtml,
+    view,
+};
+#[cfg(feature = "components")]
+use std::sync::Arc;
 use tessara_module_contract::{
-    NavigationProjectionV1, OriginalActorProjectionV1, ShellContextV1, ShellDocumentStateV1,
-    ShellThemeV1,
+    OriginalActorProjectionV1, ShellContextV2, ShellDocumentStateV1,
+    ShellNavigationGroupProjectionV2, ShellThemeV1,
 };
 use uuid::Uuid;
 
@@ -93,6 +100,11 @@ pub use searchable_data_table::SearchableDataTable;
 #[cfg(feature = "components")]
 pub use segmented_toggle::{SegmentedToggle, SegmentedToggleOption};
 #[cfg(feature = "components")]
+pub use shell_sidebar::{
+    ShellAccountPresentation, ShellNavigationGroupPresentation, ShellNavigationIcon,
+    ShellNavigationItemPresentation, ShellSidebar,
+};
+#[cfg(feature = "components")]
 pub use side_sheet::{SideSheet, SideSheetSide};
 #[cfg(feature = "components")]
 pub use skeleton::Skeleton;
@@ -121,7 +133,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
 pub const MODULE_UI_CSS_SHA256: &str =
-    "76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe";
+    "21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -132,7 +144,7 @@ pub struct ShellPresentation {
     pub theme: ShellThemeV1,
     pub locale: String,
     pub time_zone: String,
-    pub navigation: Vec<NavigationProjectionV1>,
+    pub navigation: Vec<ShellNavigationGroupProjectionV2>,
     pub return_destination: String,
     pub correlation_id: Uuid,
     pub document_state: ShellDocumentStateV1,
@@ -142,7 +154,7 @@ pub struct ShellPresentation {
 
 impl ShellPresentation {
     pub fn from_verified_context(
-        context: &ShellContextV1,
+        context: &ShellContextV2,
         current_destination: impl Into<String>,
         document_title: impl Into<String>,
     ) -> Self {
@@ -196,6 +208,7 @@ where
     F: FnOnce() -> V,
     V: IntoView + 'static,
 {
+    let _ = any_spawner::Executor::init_futures_executor();
     let content = Owner::new().with(|| product_view().to_html());
     let mut document = render_document_markup(presentation, assets, release, &content);
     let bootstrap_markup = bootstrap
@@ -230,30 +243,12 @@ fn render_document_markup(
     let top_bar_title = presentation
         .navigation
         .iter()
+        .flat_map(|group| &group.items)
         .filter(|item| navigation_path_matches(&presentation.current_destination, &item.href))
         .max_by_key(|item| item.href.len())
         .map_or(presentation.document_title.as_str(), |item| {
             item.label.as_str()
         });
-    let navigation = presentation
-        .navigation
-        .iter()
-        .map(|item| {
-            let active = if navigation_path_matches(&presentation.current_destination, &item.href) {
-                " sidebar-link is-active"
-            } else {
-                ""
-            };
-            format!(
-                r#"<a class="sidebar-link{}" href="{}" title="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#,
-                active,
-                escape_attribute(&item.href),
-                escape_attribute(&item.label),
-                navigation_icon(),
-                escape_text(&item.label)
-            )
-        })
-        .collect::<String>();
     let stylesheets = assets
         .stylesheets
         .iter()
@@ -279,8 +274,39 @@ fn render_document_markup(
             )
         })
         .unwrap_or_default();
+    let actor = ShellAccountPresentation::from(presentation.actor.clone());
+    let navigation = presentation
+        .navigation
+        .clone()
+        .into_iter()
+        .map(ShellNavigationGroupPresentation::from)
+        .collect::<Vec<_>>();
+    let current_destination = presentation.current_destination.clone();
+    let return_destination = presentation.return_destination.clone();
+    let shell_title = top_bar_title.to_string();
+    let body_html = body_html.to_string();
+    let shell = Owner::new().with(|| {
+        let navigation_view = Arc::new(move || {
+            view! {
+                <ShellSidebar
+                    actor=actor.clone()
+                    navigation=navigation.clone()
+                    current_destination=current_destination.clone()
+                    return_destination=return_destination.clone()
+                    navigation_status=None
+                />
+            }
+            .into_any()
+        });
+        view! {
+            <ApplicationShell title=shell_title navigation=navigation_view>
+                <div id="module-content" inner_html=body_html></div>
+            </ApplicationShell>
+        }
+        .to_html()
+    });
     format!(
-        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script>{}{}</head><body class="tessara-app {}" data-shell-state="{}" data-correlation-id="{}"><main class="app-shell"><aside class="sidebar" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside><section class="app-main" aria-label="Application content"><header class="top-app-bar"><div class="top-app-bar__title-row"><button class="icon-button mobile-nav__toggle" type="button" aria-label="Open navigation" aria-expanded="false">{}</button><span class="top-app-bar__title">{}</span></div><div class="top-app-bar__actions"><label class="search-field"><span class="sr-only">Search Tessara</span><input type="search" placeholder="Search Tessara"></label><div class="theme-toggle"><button class="icon-button theme-toggle__trigger" type="button" aria-label="Theme options" aria-haspopup="menu" aria-expanded="false">{}</button><button class="theme-toggle__scrim" type="button" aria-label="Close theme options"></button><div class="theme-toggle__menu blurred-surface" role="menu" aria-label="Theme options"><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="system">System</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="light">Light</button><button class="theme-toggle__option" type="button" role="menuitemradio" data-theme-value="dark">Dark</button></div></div><button class="icon-button" type="button" aria-label="Notifications" title="Notifications">{}</button><button class="icon-button" type="button" aria-label="Help" title="Help">{}</button></div></header><div class="app-page"><div id="module-content">{}</div></div></section><button class="mobile-nav__scrim" type="button" aria-label="Close navigation"></button><aside class="mobile-nav__panel blurred-surface" aria-label="Primary navigation">{}<nav class="sidebar-nav" aria-label="Primary"><div class="sidebar-navigation-projection"><p class="sidebar-section">Main</p>{}</div></nav>{}</aside></main>{}<script>{}</script></body></html>"##,
+        r##"<!doctype html><html lang="{}" data-theme="{}" data-theme-preference="{}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0F172A"><title>{} · Tessara</title><script>{}</script>{}{}</head><body class="tessara-app {}" data-shell-state="{}" data-correlation-id="{}">{}{}<script>{}</script></body></html>"##,
         escape_attribute(&presentation.locale),
         theme,
         theme,
@@ -291,21 +317,7 @@ fn render_document_markup(
         escape_attribute(&module_scope_class(&release.definition_id)),
         document_state_name(presentation.document_state),
         presentation.correlation_id,
-        brand_markup(&presentation.return_destination),
-        navigation,
-        account_markup(&presentation.actor.display_name),
-        menu_icon(),
-        escape_text(top_bar_title),
-        theme_icon(),
-        bell_icon(),
-        help_icon(),
-        body_html,
-        brand_markup(&presentation.return_destination),
-        presentation.navigation.iter().map(|item| {
-            let active = if navigation_path_matches(&presentation.current_destination, &item.href) { " is-active" } else { "" };
-            format!(r#"<a class="sidebar-link{}" href="{}"><span class="sidebar-link__icon-wrap" aria-hidden="true">{}</span><span class="sidebar-link__label">{}</span></a>"#, active, escape_attribute(&item.href), navigation_icon(), escape_text(&item.label))
-        }).collect::<String>(),
-        account_markup(&presentation.actor.display_name),
+        shell,
         hydration,
         shell_interaction_script(),
     )
@@ -353,52 +365,8 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
 }
 
 #[cfg(feature = "components")]
-fn brand_markup(href: &str) -> String {
-    format!(
-        r#"<a class="brand-lockup" href="{}"><span class="brand-mark" aria-hidden="true"><img src="/assets/tessara-icon-256.svg" alt=""></span><span class="brand-copy"><strong>Tessara</strong></span></a>"#,
-        escape_attribute(href)
-    )
-}
-
-#[cfg(feature = "components")]
-fn account_markup(display_name: &str) -> String {
-    let initials = display_name
-        .split_whitespace()
-        .filter_map(|part| part.chars().next())
-        .take(2)
-        .collect::<String>()
-        .to_uppercase();
-    format!(
-        r#"<section class="account-card" aria-label="Account context"><span class="account-avatar">{}</span><span class="account-copy"><strong>{}</strong><small>Active session</small></span></section>"#,
-        escape_text(&initials),
-        escape_text(display_name)
-    )
-}
-
-#[cfg(feature = "components")]
-fn navigation_icon() -> &'static str {
-    r#"<svg class="sidebar-link__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>"#
-}
-#[cfg(feature = "components")]
-fn menu_icon() -> &'static str {
-    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>"#
-}
-#[cfg(feature = "components")]
-fn theme_icon() -> &'static str {
-    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>"#
-}
-#[cfg(feature = "components")]
-fn bell_icon() -> &'static str {
-    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>"#
-}
-#[cfg(feature = "components")]
-fn help_icon() -> &'static str {
-    r#"<svg class="icon-button__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 1-1 1.7M12 17h.01"/></svg>"#
-}
-
-#[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
-    r#"(function(){const root=document.documentElement;const shell=document.querySelector('.app-shell');const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{shell?.classList.remove('mobile-nav-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{shell?.classList.add('mobile-nav-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu)})();"#
+    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);document.querySelector('[data-shell-sign-out]')?.addEventListener('click',()=>{const form=document.createElement('form');form.method='post';form.action='/api/logout';document.body.appendChild(form);form.submit()})})();"#
 }
 
 #[cfg(feature = "components")]
@@ -448,8 +416,9 @@ mod tests {
     use sha2::{Digest, Sha256};
     #[cfg(feature = "components")]
     use tessara_module_contract::{
-        ModuleDefinitionId, NavigationContributionId, NavigationProjectionV1,
-        OriginalActorProjectionV1, ShellDocumentStateV1, ShellThemeV1,
+        ModuleDefinitionId, NavigationContributionId, OriginalActorProjectionV1,
+        SHELL_CONTEXT_SCHEMA_VERSION_V2, ShellDocumentStateV1, ShellNavigationGroupProjectionV2,
+        ShellNavigationItemProjectionV2, ShellThemeV1,
     };
 
     use super::*;
@@ -459,25 +428,43 @@ mod tests {
     fn complete_document_is_escaped_and_no_javascript_useful() {
         use leptos::prelude::*;
         let now = Utc::now();
-        let context = ShellContextV1 {
-            schema_version: 1,
+        let context = ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.reference.module-sdk").unwrap(),
             module_instance_id: Uuid::from_u128(2),
             original_actor: OriginalActorProjectionV1 {
                 actor_id: Uuid::from_u128(3),
                 display_name: "<Operator>".into(),
-                email: None,
+                email: Some("operator@tessara.local".into()),
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new(
-                    "tessara.reference.module-sdk.navigation",
-                )
-                .unwrap(),
-                label: "SDK Reference".into(),
-                href: "/reference/module-sdk".into(),
-            }],
+            navigation: vec![
+                ShellNavigationGroupProjectionV2 {
+                    id: "core.main".into(),
+                    label: "Main".into(),
+                    items: vec![ShellNavigationItemProjectionV2 {
+                        contribution_id: NavigationContributionId::new(
+                            "tessara.reference.module-sdk.navigation",
+                        )
+                        .unwrap(),
+                        key: "reference_sdk".into(),
+                        label: "SDK Reference".into(),
+                        href: "/reference/module-sdk".into(),
+                    }],
+                },
+                ShellNavigationGroupProjectionV2 {
+                    id: "core.admin".into(),
+                    label: "Admin".into(),
+                    items: vec![ShellNavigationItemProjectionV2 {
+                        contribution_id: NavigationContributionId::new("core.module-management")
+                            .unwrap(),
+                        key: "module_management".into(),
+                        label: "Module Management".into(),
+                        href: "/administration/modules".into(),
+                    }],
+                },
+            ],
             return_destination: "/administration/modules".into(),
             locale: "en-US".into(),
             time_zone: "America/New_York".into(),
@@ -512,13 +499,20 @@ mod tests {
         assert!(html.contains("data-shell-state=\"recovery\""));
         assert!(html.contains("data-theme-preference=\"dark\""));
         assert!(html.contains("tessara.themePreference"));
+        assert_eq!(html.matches("data-theme-value=").count(), 3);
         assert!(html.contains("&lt;Operator&gt;"));
+        assert!(html.contains("operator@tessara.local"));
+        assert_eq!(html.matches(">Main</p>").count(), 2);
+        assert_eq!(html.matches(">Admin</p>").count(), 2);
+        assert!(html.contains("Module Management"));
         assert!(html.contains("<div id=\"module-content\"><p>Recovery</p></div>"));
         assert!(html.contains("module-ui.css"));
         assert!(html.contains("<script src=\"/assets/shared.js\" defer></script>"));
         assert!(html.contains("module-scope--tessara-reference-module-sdk"));
         assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
         assert_eq!(html.matches("sidebar-link is-active").count(), 2);
+        assert!(html.contains("mobileNavigation?.classList.add('is-open')"));
+        assert!(!html.contains("shell?.classList.add('mobile-nav-open')"));
         assert!(html.contains(r#"name="tessara-module-release" content="1.0.1""#));
         assert!(!html.contains("type=\"module\""));
     }
@@ -548,6 +542,19 @@ mod tests {
         ));
         assert!(!navigation_path_matches("/dashboards-old", "/dashboards"));
         assert!(!navigation_path_matches("/", "/dashboards"));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn dataset_navigation_uses_database_icon_in_complete_module_documents() {
+        let dataset = Owner::new()
+            .with(|| view! { <ShellNavigationIcon navigation_key="datasets"/> }.to_html());
+        let generic = Owner::new()
+            .with(|| view! { <ShellNavigationIcon navigation_key="reference_sdk"/> }.to_html());
+
+        assert!(dataset.contains("<ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\""));
+        assert_ne!(dataset, generic);
+        assert!(generic.contains("M15 2H6a2 2 0 0 0-2 2v16"));
     }
 
     #[test]

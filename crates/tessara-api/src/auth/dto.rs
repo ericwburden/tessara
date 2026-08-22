@@ -181,7 +181,6 @@ pub fn implied_manage_capability(required: &str) -> Option<String> {
         "hierarchy:read" => Some("hierarchy:manage"),
         "forms:read" => Some("forms:manage"),
         "workflows:read" => Some("workflows:manage"),
-        "datasets:read" => Some("datasets:manage"),
         _ => None,
     }
     .map(str::to_string)
@@ -206,10 +205,7 @@ mod tests {
         assert_eq!(implied_manage_capability("dashboards:read"), None);
         assert_eq!(implied_manage_capability("components:read"), None);
         assert_eq!(implied_manage_capability("example:read"), None);
-        assert_eq!(
-            implied_manage_capability("datasets:read").as_deref(),
-            Some("datasets:manage")
-        );
+        assert_eq!(implied_manage_capability("datasets:read"), None);
     }
 
     #[test]

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tessara_module_contract::{
     ModuleManifest, ProtocolEnvelopeError, ProtocolSignaturePurposeV1, PurposeBoundVerifyingKeyV1,
-    ShellContextV1, ShellContextValidationContextV1, ShellContextValidationError, SignedEnvelopeV1,
+    ShellContextV2, ShellContextValidationContextV2, ShellContextValidationError, SignedEnvelopeV1,
 };
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
@@ -175,9 +175,9 @@ pub fn request_correlation_id(headers: &HeaderMap) -> Result<Uuid, ModuleRequest
 }
 
 pub fn verify_shell_context(
-    envelope: &SignedEnvelopeV1<ShellContextV1>,
+    envelope: &SignedEnvelopeV1<ShellContextV2>,
     verifier: &PurposeBoundVerifyingKeyV1,
-    expected: &ShellContextValidationContextV1,
+    expected: &ShellContextValidationContextV2,
 ) -> Result<(), ModuleShellError> {
     verifier.verify(envelope)?;
     envelope.payload.validate_for(expected)?;
@@ -303,7 +303,7 @@ where
     };
     match provider.apply(normalized).await {
         Ok(normalized) => Json(ConfigurationValidationEnvelope {
-            schema_version: 1,
+            schema_version: tessara_module_contract::SHELL_CONTEXT_SCHEMA_VERSION_V2,
             valid: true,
             normalized: Some(normalized),
             findings: Vec::new(),
@@ -486,8 +486,8 @@ mod tests {
         )
         .unwrap();
         let now = Utc::now();
-        let context = ShellContextV1 {
-            schema_version: 1,
+        let context = ShellContextV2 {
+            schema_version: tessara_module_contract::SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: Uuid::from_u128(1),
             module_definition_id: ModuleDefinitionId::new("tessara.reference.module-sdk").unwrap(),
             module_instance_id: Uuid::from_u128(2),
@@ -510,7 +510,7 @@ mod tests {
         verify_shell_context(
             &envelope,
             &signer.verifier(),
-            &ShellContextValidationContextV1 {
+            &ShellContextValidationContextV2 {
                 installation_id: context.installation_id,
                 module_definition_id: context.module_definition_id,
                 module_instance_id: context.module_instance_id,

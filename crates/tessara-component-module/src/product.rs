@@ -2365,6 +2365,7 @@ mod tests {
                 dataset_reference: DatasetMajorLineReference::from_parts(
                     Uuid::from_u128(1),
                     Uuid::from_u128(2),
+                    Uuid::from_u128(3),
                     1,
                 )
                 .expect("valid Dataset reference"),

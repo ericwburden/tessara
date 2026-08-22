@@ -12,9 +12,10 @@ export function shouldInvokeDemoSeedEndpoint(): boolean {
     );
   }
 
-  // Gate 4 proves the restored Sprint 5A demo rows survived migration 3. It
-  // must never invoke a demo mutation path after that migration.
-  return dataState === "fresh";
+  // Acceptance always consumes the source-exact topology selected by its
+  // materialization receipt. Neither a fresh Reference apply nor a restored
+  // upgrade topology may be mutated through the legacy demo seed endpoint.
+  return false;
 }
 
 export async function invokeDemoSeedEndpoint(

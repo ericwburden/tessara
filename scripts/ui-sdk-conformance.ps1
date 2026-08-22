@@ -16,6 +16,7 @@ try {
     $manifests = @(Get-ChildItem -LiteralPath "crates" -Recurse -File -Filter "manifest.json" | Sort-Object FullName)
     if ($manifests.Count -eq 0) { throw "No first-party manifests were found" }
     $expectedTuple = [ordered]@{
+        shell_context_schema = "2.0.0";
         module_contract = "0.3.0"; module_runtime = "0.3.0"; module_ui = "0.3.0";
         design_system_asset_abi = "2.0.0"; conformance_suite = "1.2.0"
     }
@@ -53,6 +54,7 @@ try {
     $productSources = @(
         "crates/tessara-component-module", "crates/tessara-component-ui",
         "crates/tessara-dashboard-module", "crates/tessara-dashboard-ui",
+        "crates/tessara-dataset-module", "crates/tessara-web-datasets",
         "crates/tessara-reference-scoped-records", "crates/tessara-reference-module-sdk"
     )
     foreach ($sourceRoot in $productSources) {
@@ -80,6 +82,23 @@ try {
     }
     if ($sdkCss -notmatch 'body\.tessara-app[\s\S]*background:\s*var\(--color-bg\)') {
         Add-Finding "canonical_canvas_missing" "crates/tessara-module-ui/assets/module-ui.css" "SDK must own the application canvas background"
+    }
+
+    $coreCss = Get-Content -LiteralPath "style/core.css" -Raw
+    if ($coreCss -match '(?m)^[^{]*\.dataset[-_A-Za-z0-9]*') {
+        Add-Finding "dataset_css_owned_by_core" "style/core.css" "Dataset product selectors must be owned by the Dataset module asset"
+    }
+    $moduleDocumentSource = Get-Content -LiteralPath "crates/tessara-module-ui/src/lib.rs" -Raw
+    $sharedSidebarSource = Get-Content -LiteralPath "crates/tessara-module-ui/src/shell_sidebar.rs" -Raw
+    $coreNavigationSource = Get-Content -LiteralPath "crates/tessara-web/src/ui/shell/nav.rs" -Raw
+    foreach ($required in @("ApplicationShell", "ShellSidebar")) {
+        if (-not $moduleDocumentSource.Contains($required)) {
+            Add-Finding "module_shell_not_shared" "crates/tessara-module-ui/src/lib.rs" "complete module documents must render the shared $required component"
+        }
+    }
+    if (-not $sharedSidebarSource.Contains("ShellNavigationIcon") -or
+        -not $coreNavigationSource.Contains("ShellNavigationIcon")) {
+        Add-Finding "navigation_icon_mapping_not_shared" "crates/tessara-module-ui/src/shell_sidebar.rs" "Core and complete module documents must consume the canonical navigation icon component"
     }
 
     $result = [pscustomobject][ordered]@{

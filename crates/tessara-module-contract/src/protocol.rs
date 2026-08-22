@@ -12,6 +12,7 @@ use crate::{
 };
 
 pub const SHELL_CONTEXT_MAX_LIFETIME_SECONDS: i64 = 60;
+pub const SHELL_CONTEXT_SCHEMA_VERSION_V2: u16 = 2;
 pub const AUTHORIZATION_READ_MAX_LIFETIME_SECONDS: i64 = 60;
 pub const AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS: i64 = 30;
 pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V2: u16 = 2;
@@ -33,6 +34,9 @@ pub enum ProtocolSignaturePurposeV1 {
     ReleaseCatalog,
     ResolvedComposition,
     ApplyAuthorization,
+    OwnerBootstrapAuthorization,
+    OwnerBootstrapReceipt,
+    ResponseOwnerActionReceipt,
     BootstrapValidationAuthorization,
     SupervisorRequest,
     SupervisorResponse,
@@ -268,22 +272,31 @@ pub struct OriginalActorProjectionV1 {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct NavigationProjectionV1 {
+pub struct ShellNavigationItemProjectionV2 {
     pub contribution_id: NavigationContributionId,
+    pub key: String,
     pub label: String,
     pub href: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ShellContextV1 {
+pub struct ShellNavigationGroupProjectionV2 {
+    pub id: String,
+    pub label: String,
+    pub items: Vec<ShellNavigationItemProjectionV2>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShellContextV2 {
     pub schema_version: u16,
     pub installation_id: Uuid,
     pub module_definition_id: ModuleDefinitionId,
     pub module_instance_id: Uuid,
     pub original_actor: OriginalActorProjectionV1,
     pub theme: ShellThemeV1,
-    pub navigation: Vec<NavigationProjectionV1>,
+    pub navigation: Vec<ShellNavigationGroupProjectionV2>,
     pub return_destination: String,
     pub locale: String,
     pub time_zone: String,
@@ -294,7 +307,7 @@ pub struct ShellContextV1 {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ShellContextValidationContextV1 {
+pub struct ShellContextValidationContextV2 {
     pub installation_id: Uuid,
     pub module_definition_id: ModuleDefinitionId,
     pub module_instance_id: Uuid,
@@ -302,12 +315,12 @@ pub struct ShellContextValidationContextV1 {
     pub now: DateTime<Utc>,
 }
 
-impl ShellContextV1 {
+impl ShellContextV2 {
     pub fn validate_for(
         &self,
-        expected: &ShellContextValidationContextV1,
+        expected: &ShellContextValidationContextV2,
     ) -> Result<(), ShellContextValidationError> {
-        if self.schema_version != CONTRACT_SCHEMA_VERSION_V1 {
+        if self.schema_version != SHELL_CONTEXT_SCHEMA_VERSION_V2 {
             return Err(ShellContextValidationError::UnsupportedSchemaVersion);
         }
         if self.installation_id != expected.installation_id {
@@ -335,6 +348,30 @@ impl ShellContextV1 {
         {
             return Err(ShellContextValidationError::MissingDisplayContext);
         }
+        let mut group_ids = BTreeSet::new();
+        let mut item_keys = BTreeSet::new();
+        let mut contribution_ids = BTreeSet::new();
+        for group in &self.navigation {
+            if group.id.trim().is_empty()
+                || group.label.trim().is_empty()
+                || group.items.is_empty()
+                || !group_ids.insert(group.id.as_str())
+            {
+                return Err(ShellContextValidationError::InvalidNavigation);
+            }
+            for item in &group.items {
+                if item.key.trim().is_empty()
+                    || item.label.trim().is_empty()
+                    || !item.href.starts_with('/')
+                    || item.href.starts_with("//")
+                    || item.href.contains(['\r', '\n'])
+                    || !item_keys.insert(item.key.as_str())
+                    || !contribution_ids.insert(item.contribution_id.as_str())
+                {
+                    return Err(ShellContextValidationError::InvalidNavigation);
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -351,6 +388,8 @@ pub enum ShellContextValidationError {
     WrongCorrelation,
     #[error("shell context display projection is incomplete")]
     MissingDisplayContext,
+    #[error("shell context navigation projection is invalid")]
+    InvalidNavigation,
     #[error(transparent)]
     Window(#[from] SignedWindowError),
 }
@@ -536,7 +575,7 @@ pub enum AuthorizationAudienceV1 {
 }
 
 impl AuthorizationAudienceV1 {
-    fn is_valid_for_installation(&self, installation_id: Uuid) -> bool {
+    pub fn is_valid_for_installation(&self, installation_id: Uuid) -> bool {
         match self {
             Self::CoreInstallation {
                 installation_id: audience_installation_id,
@@ -799,6 +838,36 @@ pub struct ModuleServiceRequestValidationContextV1 {
     pub now: DateTime<Utc>,
 }
 
+/// One-use request proof emitted by Core when it calls a module-owned private
+/// provider action. This is deliberately a different wire type from a module
+/// service request: Core is the presenting service and therefore cannot claim
+/// a synthetic Module Instance identity.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoreServiceRequestV1 {
+    pub schema_version: u16,
+    pub installation_id: Uuid,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub correlation_id: String,
+    pub nonce: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CoreServiceRequestValidationContextV1 {
+    pub installation_id: Uuid,
+    pub method: String,
+    pub path: String,
+    pub canonical_body_digest: String,
+    pub inbound_grant_digest: String,
+    pub correlation_id: String,
+    pub now: DateTime<Utc>,
+}
+
 impl ModuleServiceRequestV1 {
     pub fn validate_for(
         &self,
@@ -841,6 +910,46 @@ impl ModuleServiceRequestV1 {
             MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
         )
         .map_err(ModuleServiceRequestValidationError::Window)
+    }
+}
+
+impl CoreServiceRequestV1 {
+    pub fn validate_for(
+        &self,
+        expected: &CoreServiceRequestValidationContextV1,
+    ) -> Result<(), CoreServiceRequestValidationError> {
+        if self.schema_version != CONTRACT_SCHEMA_VERSION_V1 {
+            return Err(CoreServiceRequestValidationError::UnsupportedSchemaVersion);
+        }
+        if self.installation_id != expected.installation_id {
+            return Err(CoreServiceRequestValidationError::WrongInstallation);
+        }
+        if self.method != expected.method || self.path != expected.path {
+            return Err(CoreServiceRequestValidationError::WrongTarget);
+        }
+        if self.canonical_body_digest != expected.canonical_body_digest
+            || self.inbound_grant_digest != expected.inbound_grant_digest
+        {
+            return Err(CoreServiceRequestValidationError::WrongDigest);
+        }
+        if !is_sha256_digest(&self.canonical_body_digest)
+            || !is_sha256_digest(&self.inbound_grant_digest)
+        {
+            return Err(CoreServiceRequestValidationError::InvalidDigest);
+        }
+        if self.correlation_id.trim().is_empty() || self.nonce.is_nil() {
+            return Err(CoreServiceRequestValidationError::MissingReplayIdentity);
+        }
+        if self.correlation_id != expected.correlation_id {
+            return Err(CoreServiceRequestValidationError::WrongCorrelation);
+        }
+        validate_window(
+            self.issued_at,
+            self.expires_at,
+            expected.now,
+            MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+        )
+        .map_err(CoreServiceRequestValidationError::Window)
     }
 }
 
@@ -899,6 +1008,26 @@ pub enum ModuleServiceRequestValidationError {
     #[error("module service request correlation identity does not match its grant")]
     WrongCorrelation,
     #[error("module service request is missing correlation or nonce identity")]
+    MissingReplayIdentity,
+    #[error(transparent)]
+    Window(#[from] SignedWindowError),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum CoreServiceRequestValidationError {
+    #[error("Core service request schema version is unsupported")]
+    UnsupportedSchemaVersion,
+    #[error("Core service request is bound to another installation")]
+    WrongInstallation,
+    #[error("Core service request target does not match")]
+    WrongTarget,
+    #[error("Core service request digest does not match")]
+    WrongDigest,
+    #[error("Core service request digest is not a SHA-256 hex digest")]
+    InvalidDigest,
+    #[error("Core service request correlation identity does not match its grant")]
+    WrongCorrelation,
+    #[error("Core service request is missing correlation or nonce identity")]
     MissingReplayIdentity,
     #[error(transparent)]
     Window(#[from] SignedWindowError),
@@ -981,10 +1110,10 @@ mod tests {
             .with_timezone(&Utc)
     }
 
-    fn shell_context() -> ShellContextV1 {
+    fn shell_context() -> ShellContextV2 {
         let now = now();
-        ShellContextV1 {
-            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+        ShellContextV2 {
+            schema_version: SHELL_CONTEXT_SCHEMA_VERSION_V2,
             installation_id: id(1),
             module_definition_id: module("tessara.reference.scoped-records"),
             module_instance_id: id(2),
@@ -994,13 +1123,18 @@ mod tests {
                 email: Some("admin@tessara.local".into()),
             },
             theme: ShellThemeV1::Dark,
-            navigation: vec![NavigationProjectionV1 {
-                contribution_id: NavigationContributionId::new(
-                    "tessara.reference.scoped-records.main",
-                )
-                .unwrap(),
-                label: "Scoped Records".into(),
-                href: "/modules/scoped-records/".into(),
+            navigation: vec![ShellNavigationGroupProjectionV2 {
+                id: "core.main".into(),
+                label: "Main".into(),
+                items: vec![ShellNavigationItemProjectionV2 {
+                    contribution_id: NavigationContributionId::new(
+                        "tessara.reference.scoped-records.main",
+                    )
+                    .unwrap(),
+                    key: "scoped_records".into(),
+                    label: "Scoped Records".into(),
+                    href: "/modules/scoped-records/".into(),
+                }],
             }],
             return_destination: "/admin/modules".into(),
             locale: "en-US".into(),
@@ -1118,6 +1252,35 @@ mod tests {
         }
     }
 
+    fn core_service_request() -> CoreServiceRequestV1 {
+        let now = now();
+        CoreServiceRequestV1 {
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+            installation_id: id(1),
+            method: "POST".into(),
+            path: "/api/private/datasets/summary".into(),
+            canonical_body_digest: "a".repeat(64),
+            inbound_grant_digest: "b".repeat(64),
+            correlation_id: id(4).to_string(),
+            nonce: id(51),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        }
+    }
+
+    fn core_service_request_validation() -> CoreServiceRequestValidationContextV1 {
+        let request = core_service_request();
+        CoreServiceRequestValidationContextV1 {
+            installation_id: request.installation_id,
+            method: request.method,
+            path: request.path,
+            canonical_body_digest: request.canonical_body_digest,
+            inbound_grant_digest: request.inbound_grant_digest,
+            correlation_id: request.correlation_id,
+            now: now() + Duration::seconds(1),
+        }
+    }
+
     #[test]
     fn purpose_bound_ed25519_envelope_is_deterministic_and_tamper_evident() {
         let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
@@ -1167,7 +1330,7 @@ mod tests {
             .unwrap()
             .insert("unexpected".into(), serde_json::json!(true));
         assert!(
-            serde_json::from_value::<SignedEnvelopeV1<ShellContextV1>>(wire).is_err(),
+            serde_json::from_value::<SignedEnvelopeV1<ShellContextV2>>(wire).is_err(),
             "unknown envelope fields must fail at the wire boundary"
         );
 
@@ -1177,15 +1340,26 @@ mod tests {
             .unwrap()
             .insert("authoritative".into(), serde_json::json!(true));
         assert!(
-            serde_json::from_value::<ShellContextV1>(payload_wire).is_err(),
+            serde_json::from_value::<ShellContextV2>(payload_wire).is_err(),
             "shell context cannot acquire product authority through an unknown field"
+        );
+
+        let mut retired_flat_navigation = serde_json::to_value(shell_context()).unwrap();
+        retired_flat_navigation["navigation"] = serde_json::json!([{
+            "contribution_id": "tessara.reference.scoped-records.main",
+            "label": "Scoped Records",
+            "href": "/modules/scoped-records/"
+        }]);
+        assert!(
+            serde_json::from_value::<ShellContextV2>(retired_flat_navigation).is_err(),
+            "the flat Shell Context v1 navigation shape must not bypass grouped shell projection"
         );
     }
 
     #[test]
     fn shell_context_validates_installation_audience_correlation_and_window() {
         let shell = shell_context();
-        let expected = ShellContextValidationContextV1 {
+        let expected = ShellContextValidationContextV2 {
             installation_id: id(1),
             module_definition_id: module("tessara.reference.scoped-records"),
             module_instance_id: id(2),
@@ -1426,6 +1600,54 @@ mod tests {
         assert_eq!(
             request.validate_for(&service_request_validation()),
             Err(ModuleServiceRequestValidationError::Window(
+                SignedWindowError::LifetimeTooLong
+            ))
+        );
+    }
+
+    #[test]
+    fn core_service_request_binds_installation_target_body_grant_and_correlation() {
+        let request = core_service_request();
+        request
+            .validate_for(&core_service_request_validation())
+            .unwrap();
+
+        let mut expected = core_service_request_validation();
+        expected.installation_id = id(99);
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongInstallation)
+        );
+
+        expected = core_service_request_validation();
+        expected.path = "/api/private/datasets/operations-status".into();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongTarget)
+        );
+
+        expected = core_service_request_validation();
+        expected.canonical_body_digest = "c".repeat(64);
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongDigest)
+        );
+
+        expected = core_service_request_validation();
+        expected.correlation_id = id(98).to_string();
+        assert_eq!(
+            request.validate_for(&expected),
+            Err(CoreServiceRequestValidationError::WrongCorrelation)
+        );
+    }
+
+    #[test]
+    fn core_service_request_lifetime_is_capped_at_thirty_seconds() {
+        let mut request = core_service_request();
+        request.expires_at += Duration::seconds(1);
+        assert_eq!(
+            request.validate_for(&core_service_request_validation()),
+            Err(CoreServiceRequestValidationError::Window(
                 SignedWindowError::LifetimeTooLong
             ))
         );

@@ -1,15 +1,15 @@
 {
   "schema_version": 2,
-  "expected_total": 84,
+  "expected_total": 95,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
       "tests": [
-        "Sprint 7A scoped analytics boundary › source-exact reference inventory exposes the canonical Dataset Components and Dashboard",
-        "Sprint 7A scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
-        "Sprint 7A scoped analytics boundary › Dashboard and Component scopes must share a governing node before disclosure or render",
-        "Sprint 7A scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources",
-        "Sprint 7A scoped analytics boundary › mixed-scope Component lookups make known blocked and random identities indistinguishable"
+        "source-exact scoped analytics boundary › Reference inventory exposes the canonical Dataset Components and Dashboard",
+        "source-exact scoped analytics boundary › real Dashboard mediation renders exact stat and table results",
+        "source-exact scoped analytics boundary › Dashboard and Component scopes must share a governing node before disclosure or render",
+        "source-exact scoped analytics boundary › private compatibility endpoints reject browser authority without disclosing resources",
+        "source-exact scoped analytics boundary › disjoint Component lookups make known blocked and random identities indistinguishable"
       ]
     },
     {
@@ -52,7 +52,14 @@
         "canonical module UI visual baselines › Components editor at 390 px (dark)",
         "canonical module UI visual baselines › Components versions at 768 px",
         "canonical module UI visual baselines › Components viewer at 1280 px",
-        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas"
+        "canonical module UI visual baselines › Components, Dashboards, and Scoped Records share one module canvas",
+        "canonical module UI visual baselines › Datasets directory at 1440 px (light)",
+        "canonical module UI visual baselines › Datasets editor at 390 px (light)",
+        "canonical module UI visual baselines › Datasets directory at 1440 px (dark)",
+        "canonical module UI visual baselines › Datasets editor at 390 px (dark)",
+        "canonical module UI visual baselines › Datasets revisions at 1024 px",
+        "canonical module UI visual baselines › Datasets preview at 1440 px",
+        "canonical module UI visual baselines › Datasets, Components, Dashboards, and Scoped Records share one module canvas"
       ]
     },
     {
@@ -82,6 +89,15 @@
         "dataset source picker keeps Version N major-line fields after a newer major exists",
         "admin can review and publish a dataset draft revision",
         "frozen Dataset document routes preserve direct-load and refresh ownership"
+      ]
+    },
+    {
+      "path": "datasets-module.spec.ts",
+      "tests": [
+        "Sprint 8B independent Dataset module › editor options use only Dataset-owned browser routes",
+        "Sprint 8B independent Dataset module › synchronous refresh preserves last-good data and atomically promotes the full Dataset dependency closure",
+        "Sprint 8B independent Dataset module › reverse consumers distinguish authorized empty unavailable and undisclosed states",
+        "Sprint 8B independent Dataset module › mutation replay and static route precedence remain exact"
       ]
     },
     {
@@ -120,7 +136,7 @@
         "capability + scope + ownership permissions › scoped component manager cannot bind or publish out-of-scope dataset major lines",
         "capability + scope + ownership permissions › explicit historical component table checks selected version dataset scope",
         "capability + scope + ownership permissions › dashboard native routes and APIs exercise scoped manage permission",
-        "capability + scope + ownership permissions › dashboard composition excludes hidden Components before viewer execution",
+        "capability + scope + ownership permissions › dashboard composition redacts reader-hidden Components before viewer execution",
         "capability + scope + ownership permissions › JavaScript-disabled Core, Organization, and direct Admin routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Form and Workflow routes preserve native SSR ownership",
         "capability + scope + ownership permissions › JavaScript-disabled Response and Dataset routes preserve native SSR ownership",

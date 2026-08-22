@@ -10,11 +10,12 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-components = ["dep:icons", "dep:js-sys", "dep:leptos", "dep:wasm-bindgen", "dep:web-sys"]
+components = ["dep:any_spawner", "dep:icons", "dep:js-sys", "dep:leptos", "dep:wasm-bindgen", "dep:web-sys"]
 ssr = ["components", "leptos/ssr"]
 hydrate = ["components", "leptos/hydrate"]
 
 [dependencies]
+any_spawner = { version = "0.3", optional = true }
 icons = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 leptos = { workspace = true, optional = true }

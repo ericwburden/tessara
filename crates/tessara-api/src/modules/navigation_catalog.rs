@@ -74,7 +74,7 @@ pub(crate) fn is_frozen_destination(id: &str) -> bool {
     DESTINATIONS.iter().any(|destination| destination.id == id)
 }
 
-pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 13] = [
+pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 12] = [
     NavigationCatalogDestination {
         id: "core.home",
         key: "home",
@@ -151,16 +151,6 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 13] = [
         can_hide: true,
         can_move_between_groups: true,
     },
-    contribution(ContributionSpec {
-        id: "tessara.datasets.navigation",
-        key: "datasets",
-        label: "Datasets",
-        route: "/datasets",
-        semantic_destination: "datasets.directory",
-        definition_id: "tessara.datasets",
-        capabilities: &["datasets:read", "datasets:manage"],
-        default_order: 6,
-    }),
     contribution(ContributionSpec {
         id: "tessara.reference.scoped-records.navigation",
         key: "scoped_records",

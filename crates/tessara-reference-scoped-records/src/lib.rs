@@ -1,8 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    body::to_bytes,
+    extract::{Path, Query, Request, State},
     http::{HeaderMap, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::{get, put},
@@ -17,8 +21,9 @@ use sqlx::{FromRow, PgPool, Row};
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
-    ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, PurposeBoundVerifyingKeyV1,
-    SecurityCapabilityId, ShellContextV1, ShellContextValidationContextV1, SignedEnvelopeV1,
+    ModuleDefinitionId, ModuleManifest, ModuleServicePrincipalV1, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, ShellContextV2,
+    ShellContextValidationContextV2, SignedEnvelopeV1,
 };
 use tessara_module_runtime::{
     decode_signed_envelope_header, request_correlation_id, verify_shell_context,
@@ -31,12 +36,12 @@ use tessara_module_ui::{
 use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
-pub const MODULE_RELEASE_VERSION: &str = "1.0.1";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css";
+pub const MODULE_RELEASE_VERSION: &str = "1.0.2";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css";
 pub const SCOPED_RECORDS_CSS: &str = include_str!("../assets/scoped-records.css");
 pub const SCOPED_RECORDS_CSS_SHA256: &str =
     "ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77";
-pub const SCOPED_RECORDS_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.1/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css";
+pub const SCOPED_RECORDS_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77/scoped-records.css";
 pub const READ_CAPABILITY: &str = "tessara.reference.scoped-records:read";
 pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 
@@ -44,7 +49,9 @@ pub const MANAGE_CAPABILITY: &str = "tessara.reference.scoped-records:manage";
 pub struct ModuleState {
     pub pool: PgPool,
     pub core_authorization_verifier: PurposeBoundVerifyingKeyV1,
+    pub core_owner_bootstrap_verifier: PurposeBoundVerifyingKeyV1,
     pub core_shell_verifier: PurposeBoundVerifyingKeyV1,
+    pub bootstrap_receipt_signer: Arc<PurposeBoundSigningKeyV1>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -221,7 +228,6 @@ pub struct ScopedRecordsBootstrapV1 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScopedRecordBootstrapEntryV1 {
-    pub record_id: Uuid,
     pub external_key: String,
     pub label: String,
     pub organization_owner_id: Uuid,
@@ -229,10 +235,16 @@ pub struct ScopedRecordBootstrapEntryV1 {
 
 async fn apply_bootstrap(
     State(state): State<ModuleState>,
-    headers: HeaderMap,
-    Json(request): Json<tessara_composition::OwnerBootstrapRequestV1<ScopedRecordsBootstrapV1>>,
+    request: Request,
 ) -> Result<Json<tessara_composition::OwnerBootstrapResponseV1>, ApiError> {
-    require_private_key(&headers)?;
+    require_private_key(request.headers())?;
+    require_exact_json(request.headers())?;
+    let body = to_bytes(request.into_body(), 1024 * 1024)
+        .await
+        .map_err(|_| ApiError::bad_request("Scoped Records bootstrap payload is too large"))?;
+    let request: tessara_composition::OwnerBootstrapRequestV1<ScopedRecordsBootstrapV1> =
+        serde_json::from_slice(&body)
+            .map_err(|_| ApiError::bad_request("Scoped Records bootstrap payload is invalid"))?;
     if request.input.schema_version != "tessara.io/scoped-records-bootstrap/v1"
         || request.idempotency_key.trim().is_empty()
         || !request
@@ -243,6 +255,20 @@ async fn apply_bootstrap(
             "Scoped Records bootstrap contract is invalid",
         ));
     }
+    let security = load_security_state(&state.pool).await?;
+    let owner = AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id: security.module_instance_id,
+        module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
+            .map_err(|_| ApiError::stale_or_restricted())?,
+    };
+    request
+        .validate_authorization_for(
+            &state.core_owner_bootstrap_verifier,
+            &owner,
+            MODULE_DEFINITION_ID,
+            Utc::now(),
+        )
+        .map_err(|_| ApiError::stale_or_restricted())?;
     if let Some((digest, receipt)) = sqlx::query_as::<_, (String, Value)>(
         "SELECT input_digest,receipt FROM scoped_records_bootstrap_receipts WHERE idempotency_key=$1",
     )
@@ -256,34 +282,56 @@ async fn apply_bootstrap(
         let mut response: tessara_composition::OwnerBootstrapResponseV1 =
             serde_json::from_value(receipt)?;
         response.receipt.changed = false;
+        response.signed_receipt = state
+            .bootstrap_receipt_signer
+            .sign(response.receipt.clone())
+            .map_err(|_| ApiError::stale_or_restricted())?;
         return Ok(Json(response));
     }
-    if request
-        .input
-        .records
-        .iter()
-        .any(|record| record.external_key.trim().is_empty() || record.label.trim().is_empty())
-    {
+    let mut external_keys = BTreeSet::new();
+    if request.input.records.iter().any(|record| {
+        record.external_key.trim().is_empty()
+            || record.label.trim().is_empty()
+            || record.organization_owner_id.is_nil()
+            || !external_keys.insert(record.external_key.as_str())
+    }) {
         return Err(ApiError::bad_request(
-            "Bootstrap record keys and labels are required",
+            "Bootstrap record keys, labels, and resolved owners must be unique and valid",
         ));
     }
     let mut transaction = state.pool.begin().await?;
     for record in &request.input.records {
+        let record_id = tessara_composition::owner_resource_id(
+            request.installation_id,
+            MODULE_DEFINITION_ID,
+            "scoped-record",
+            &record.external_key,
+        );
         sqlx::query("INSERT INTO scoped_records(id,label,scope,organization_owner_id) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET label=EXCLUDED.label,scope=EXCLUDED.scope,organization_owner_id=EXCLUDED.organization_owner_id,updated_at=now()")
-            .bind(record.record_id).bind(record.label.trim()).bind(&record.external_key)
+            .bind(record_id).bind(record.label.trim()).bind(&record.external_key)
             .bind(record.organization_owner_id).execute(&mut *transaction).await?;
     }
     let resource_ids = request
         .input
         .records
         .iter()
-        .map(|record| (record.external_key.clone(), record.record_id.to_string()))
+        .map(|record| {
+            (
+                record.external_key.clone(),
+                tessara_composition::owner_resource_id(
+                    request.installation_id,
+                    MODULE_DEFINITION_ID,
+                    "scoped-record",
+                    &record.external_key,
+                )
+                .to_string(),
+            )
+        })
         .collect();
     let result_digest = tessara_composition::canonical_digest(&resource_ids)
         .map_err(|_| ApiError::bad_request("Bootstrap result is invalid"))?;
-    let response = tessara_composition::OwnerBootstrapResponseV1 {
-        receipt: tessara_composition::BootstrapReceiptV1 {
+    let response = tessara_composition::OwnerBootstrapResponseV1::signed(
+        tessara_composition::BootstrapReceiptV1 {
             owner: MODULE_DEFINITION_ID.into(),
             schema_version: request.input.schema_version.clone(),
             input_digest: request.input_digest.clone(),
@@ -291,7 +339,9 @@ async fn apply_bootstrap(
             changed: true,
             resource_ids,
         },
-    };
+        &state.bootstrap_receipt_signer,
+    )
+    .map_err(|_| ApiError::stale_or_restricted())?;
     sqlx::query("INSERT INTO scoped_records_bootstrap_receipts(idempotency_key,input_digest,desired_revision,receipt) VALUES($1,$2,$3,$4)")
         .bind(&request.idempotency_key).bind(request.input_digest.to_string())
         .bind(request.desired_revision as i64).bind(serde_json::to_value(&response)?)
@@ -1183,14 +1233,14 @@ async fn shell_page(
 ) -> Result<Response, ApiError> {
     let correlation_id =
         request_correlation_id(headers).map_err(|_| ApiError::shell_unavailable())?;
-    let envelope: SignedEnvelopeV1<ShellContextV1> =
+    let envelope: SignedEnvelopeV1<ShellContextV2> =
         decode_signed_envelope_header(headers, "x-tessara-shell-context")
             .map_err(|_| ApiError::shell_unavailable())?;
     let security = load_security_state(&state.pool).await?;
     verify_shell_context(
         &envelope,
         &state.core_shell_verifier,
-        &ShellContextValidationContextV1 {
+        &ShellContextValidationContextV2 {
             installation_id: security.installation_id,
             module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                 .map_err(|_| ApiError::shell_unavailable())?,
@@ -1276,6 +1326,19 @@ fn require_private_key(headers: &HeaderMap) -> Result<(), ApiError> {
             message: "Request unavailable".into(),
         })
     }
+}
+
+fn require_exact_json(headers: &HeaderMap) -> Result<(), ApiError> {
+    if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some("application/json")
+    {
+        return Err(ApiError::bad_request(
+            "Content-Type must be application/json",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]

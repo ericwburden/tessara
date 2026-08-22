@@ -1,160 +1,133 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIResponse, type Page } from "@playwright/test";
 
-const fixture = {
-  sharedScopeNodeId: "01980000-0002-7000-8000-000000000002",
-  blockedScopeNodeId: "01980000-0002-7000-8000-000000000007",
-  datasetId: "01980000-0002-7000-8000-000000000003",
-  blockedDatasetId: "01980000-0002-7000-8000-000000000008",
-  metricComponentId: "01980000-0002-7000-8000-000000000004",
-  metricComponentVersionId: "01980000-0001-7000-8000-000000000011",
-  tableComponentId: "01980000-0002-7000-8000-000000000005",
-  chartComponentId: "01980000-0002-7000-8000-000000000006",
-  blockedComponentId: "01980000-0002-7000-8000-00000000000b",
-  blockedComponentVersionId: "01980000-0001-7000-8000-000000000004",
-  dashboardId: "01980000-0003-7000-8000-000000000001",
-  metricPlacementId: "01980000-0003-7000-8000-000000000002",
-  tablePlacementId: "01980000-0003-7000-8000-000000000003",
-  chartPlacementId: "01980000-0003-7000-8000-000000000004",
-  blockedPlacementId: "01980000-0003-7000-8000-000000000005",
-  lifecycleUpgradePlacementId: "01980000-0003-7000-8000-000000000006",
-  lifecycleReplacePlacementId: "01980000-0003-7000-8000-000000000007",
-  lifecycleRemovePlacementId: "01980000-0003-7000-8000-000000000008",
+type DatasetSummary = { id: string; slug: string };
+type ComponentSummary = { component_id: string; slug: string };
+type DashboardSummary = { id: string; name: string };
+type DashboardPlacement = {
+  placement_id: string;
+  availability: string;
+  resolution_state: string;
+  title?: string;
+  component?: {
+    component_id: string;
+    component_version_id: string;
+    scope_node_ids: string[];
+  };
 };
+type DashboardDetail = { id: string; placements: DashboardPlacement[] };
 
-async function signInAsAdmin(page: import("@playwright/test").Page) {
+async function signIn(page: Page, email: string, password: string) {
   const response = await page.request.post("/api/auth/login", {
-    data: { email: "admin@tessara.local", password: "tessara-dev-admin" },
+    data: { email, password },
   });
-  expect(response.ok()).toBeTruthy();
+  expect(response.ok(), await response.text()).toBeTruthy();
 }
 
-async function signInAsMixedScope(page: import("@playwright/test").Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: { email: "mixed-sprint7a@tessara.local", password: "tessara-sprint-7a-mixed" },
-  });
-  expect(response.ok()).toBeTruthy();
+async function json<T>(response: APIResponse): Promise<T> {
+  const text = await response.text();
+  expect(response.ok(), `${response.url()} returned ${response.status()}: ${text}`).toBeTruthy();
+  return JSON.parse(text) as T;
 }
 
-test.describe("Sprint 7A scoped analytics boundary", () => {
-  test("source-exact reference inventory exposes the canonical Dataset Components and Dashboard", async ({ page }) => {
-    await signInAsAdmin(page);
-    const datasets = await (await page.request.get("/api/datasets")).json();
-    expect(datasets.some((dataset: { id: string }) => dataset.id === fixture.datasetId)).toBeTruthy();
-    const components = await (await page.request.get("/api/components")).json();
-    const componentIds = components.map((component: { component_id: string }) => component.component_id);
-    expect(componentIds).toEqual(expect.arrayContaining([
-      fixture.metricComponentId,
-      fixture.tableComponentId,
-      fixture.chartComponentId,
-      fixture.blockedComponentId,
-    ]));
-    const dashboard = await (await page.request.get(`/api/dashboards/${fixture.dashboardId}`)).json();
-    expect(dashboard.placements.map((placement: { placement_id: string }) => placement.placement_id)).toEqual([
-      fixture.metricPlacementId,
-      fixture.tablePlacementId,
-      fixture.chartPlacementId,
-      fixture.blockedPlacementId,
-      fixture.lifecycleUpgradePlacementId,
-      fixture.lifecycleReplacePlacementId,
-      fixture.lifecycleRemovePlacementId,
-    ]);
+async function referenceInventory(page: Page) {
+  const datasets = await json<DatasetSummary[]>(await page.request.get("/api/datasets"));
+  const components = await json<ComponentSummary[]>(await page.request.get("/api/components"));
+  const dashboards = await json<DashboardSummary[]>(await page.request.get("/api/dashboards"));
+  const dataset = datasets.find((item) => item.slug === "derived-second-hop");
+  const table = components.find((item) => item.slug === "dataset-table");
+  const chart = components.find((item) => item.slug === "dataset-chart");
+  const stat = components.find((item) => item.slug === "dataset-row-count");
+  const disjoint = components.find((item) => item.slug === "dataset-disjoint-probe");
+  const dashboard = dashboards.find((item) => item.name === "Dataset Components");
+  for (const [label, value] of Object.entries({ dataset, table, chart, stat, disjoint, dashboard })) {
+    expect(value, `Reference topology should expose ${label}`).toBeTruthy();
+  }
+  const detail = await json<DashboardDetail>(
+    await page.request.get(`/api/dashboards/${dashboard!.id}`),
+  );
+  const placementFor = (componentId: string) => {
+    const placement = detail.placements.find(
+      (item) => item.component?.component_id === componentId,
+    );
+    expect(placement, `Dashboard should bind Component ${componentId}`).toBeTruthy();
+    return placement!;
+  };
+  const disjointPlacement = detail.placements.find(
+    (item) =>
+      item.availability === "unavailable" &&
+      item.resolution_state === "restricted" &&
+      item.component === undefined,
+  );
+  expect(
+    disjointPlacement,
+    "Dashboard should retain one nondisclosing disjoint placement",
+  ).toBeTruthy();
+  return {
+    dataset: dataset!, table: table!, chart: chart!, stat: stat!, disjoint: disjoint!,
+    dashboard: dashboard!, detail,
+    tablePlacement: placementFor(table!.component_id),
+    chartPlacement: placementFor(chart!.component_id),
+    statPlacement: placementFor(stat!.component_id),
+    disjointPlacement: disjointPlacement!,
+  };
+}
+
+test.describe("source-exact scoped analytics boundary", () => {
+  test("Reference inventory exposes the canonical Dataset Components and Dashboard", async ({ page }) => {
+    await signIn(page, "admin@tessara.local", "tessara-dev-admin");
+    const fixture = await referenceInventory(page);
+    expect(fixture.detail.placements).toHaveLength(4);
+    expect(fixture.detail.placements.map((item) => item.component?.component_id)).toEqual(
+      expect.arrayContaining([
+        fixture.table.component_id,
+        fixture.chart.component_id,
+        fixture.stat.component_id,
+        undefined,
+      ]),
+    );
   });
 
   test("real Dashboard mediation renders exact stat and table results", async ({ page }) => {
-    await signInAsAdmin(page);
-    const statResponse = await page.request.get(
-      `/api/dashboards/${fixture.dashboardId}/placements/${fixture.metricPlacementId}/render/stat-card`,
-    );
-    expect(statResponse.ok()).toBeTruthy();
-    const stat = await statResponse.json();
+    await signIn(page, "admin@tessara.local", "tessara-dev-admin");
+    const fixture = await referenceInventory(page);
+    const stat = await json<any>(await page.request.get(
+      `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.statPlacement.placement_id}/render/stat-card`,
+    ));
     expect(stat.materialization_state).toBe("ready");
-    expect(stat.stat.display_value).toBe("30");
-    const tableResponse = await page.request.get(
-      `/api/dashboards/${fixture.dashboardId}/placements/${fixture.tablePlacementId}/render/table?page_size=100`,
-    );
-    expect(tableResponse.ok()).toBeTruthy();
-    const table = await tableResponse.json();
+    expect(stat.stat.display_value).toBe("3");
+    const table = await json<any>(await page.request.get(
+      `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.tablePlacement.placement_id}/render/table?page_size=100`,
+    ));
     expect(table.materialization_state).toBe("ready");
+    expect(table.rows).toHaveLength(3);
     const rows = JSON.stringify(table.rows);
-    expect(rows).toContain("UAT7A-PUBLIC");
-    expect(rows).toContain("UAT7A-INTERNAL");
-    expect(rows).toContain("UAT7A-RESTRICTED");
-    expect(rows).toContain("UAT7A-CONFIDENTIAL-BLOCKED");
+    expect(rows).toContain("Initial");
+    expect(rows).toContain("Same time A");
+    expect(rows).toContain("Same time B");
+    expect(rows).not.toContain("New after initial sync");
+    expect(rows).not.toContain("Outside scope");
   });
 
   test("Dashboard and Component scopes must share a governing node before disclosure or render", async ({ page }) => {
-    await signInAsAdmin(page);
-
-    const dashboardResponse = await page.request.get(`/api/dashboards/${fixture.dashboardId}`);
-    expect(dashboardResponse.ok()).toBeTruthy();
-    const dashboard = await dashboardResponse.json() as {
-      placements: Array<{
-        placement_id: string;
-        availability: string;
-        resolution_state: string;
-        title?: string;
-        component?: {
-          component_id: string;
-          component_version_id: string;
-          scope_node_ids: string[];
-        };
-      }>;
-    };
-
-    const sharedPlacement = dashboard.placements.find(
-      (placement) => placement.placement_id === fixture.metricPlacementId,
+    await signIn(page, "full-reader@tessara.local", "sprint-8b-full-reader");
+    const dashboards = await json<DashboardSummary[]>(await page.request.get("/api/dashboards"));
+    const dashboard = dashboards.find((item) => item.name === "Dataset Components");
+    expect(dashboard).toBeTruthy();
+    const detail = await json<DashboardDetail>(
+      await page.request.get(`/api/dashboards/${dashboard!.id}`),
     );
-    expect(sharedPlacement).toMatchObject({
-      availability: "available",
-      resolution_state: "available",
-      component: {
-        component_id: fixture.metricComponentId,
-        component_version_id: fixture.metricComponentVersionId,
-        scope_node_ids: [fixture.sharedScopeNodeId],
-      },
-    });
-
-    const blockedPlacement = dashboard.placements.find(
-      (placement) => placement.placement_id === fixture.blockedPlacementId,
-    );
-    expect(blockedPlacement).toMatchObject({
-      availability: "unavailable",
-      resolution_state: "restricted",
-    });
-    expect(blockedPlacement?.component).toBeUndefined();
-    expect(blockedPlacement?.title).toBeUndefined();
-
-    const restrictedMarkers = [
-      fixture.blockedScopeNodeId,
-      fixture.blockedDatasetId,
-      fixture.blockedComponentId,
-      fixture.blockedComponentVersionId,
-      "UAT7A-BLOCKED-DATASET",
-    ];
-    const blockedProjection = JSON.stringify(blockedPlacement);
-    for (const marker of restrictedMarkers) {
-      expect(blockedProjection).not.toContain(marker);
-    }
-
-    const sharedRender = await page.request.get(
-      `/api/dashboards/${fixture.dashboardId}/placements/${fixture.metricPlacementId}/render/stat-card`,
-    );
-    expect(sharedRender.ok()).toBeTruthy();
-    expect(await sharedRender.json()).toMatchObject({
-      component_id: fixture.metricComponentId,
-      component_version_id: fixture.metricComponentVersionId,
-      component_type: "stat_card",
-      materialization_state: "ready",
-    });
-
+    const available = detail.placements.filter((item) => item.availability === "available");
+    const blocked = detail.placements.filter((item) => item.availability !== "available");
+    expect(available).toHaveLength(3);
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]).toMatchObject({ resolution_state: "restricted" });
+    expect(blocked[0].component).toBeUndefined();
+    expect(blocked[0].title).toBeUndefined();
     const blockedRender = await page.request.get(
-      `/api/dashboards/${fixture.dashboardId}/placements/${fixture.blockedPlacementId}/render/table`,
+      `/api/dashboards/${dashboard!.id}/placements/${blocked[0].placement_id}/render/table`,
     );
     expect([403, 404]).toContain(blockedRender.status());
-    const blockedRenderBody = await blockedRender.text();
-    for (const marker of restrictedMarkers) {
-      expect(blockedRenderBody).not.toContain(marker);
-    }
+    expect(await blockedRender.text()).not.toContain("dataset-disjoint-probe");
   });
 
   test("private compatibility endpoints reject browser authority without disclosing resources", async ({ request }) => {
@@ -165,18 +138,18 @@ test.describe("Sprint 7A scoped analytics boundary", () => {
     ]) {
       const response = await request.post(path, { data: {} });
       expect([401, 403, 422]).toContain(response.status());
-      const body = await response.text();
-      expect(body).not.toContain(fixture.datasetId);
-      expect(body).not.toContain(fixture.metricComponentId);
-      expect(body).not.toContain(fixture.dashboardId);
+      expect(await response.text()).not.toContain("derived-second-hop");
     }
   });
 
-  test("mixed-scope Component lookups make known blocked and random identities indistinguishable", async ({ page }) => {
-    await signInAsMixedScope(page);
-    const known = await page.request.get(`/api/components/${fixture.blockedComponentId}`);
+  test("disjoint Component lookups make known blocked and random identities indistinguishable", async ({ page }) => {
+    await signIn(page, "admin@tessara.local", "tessara-dev-admin");
+    const components = await json<ComponentSummary[]>(await page.request.get("/api/components"));
+    const disjoint = components.find((item) => item.slug === "dataset-disjoint-probe");
+    expect(disjoint).toBeTruthy();
+    await signIn(page, "full-reader@tessara.local", "sprint-8b-full-reader");
+    const known = await page.request.get(`/api/components/${disjoint!.component_id}`);
     const random = await page.request.get("/api/components/01980000-ffff-7000-8000-000000000001");
-
     expect(known.status()).toBe(404);
     expect(random.status()).toBe(known.status());
     expect(random.headers()["content-type"]).toBe(known.headers()["content-type"]);

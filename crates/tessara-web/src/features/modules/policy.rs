@@ -1,9 +1,9 @@
 //! Group-aware navigation composer for reader and manager modes.
 
 use icons::{
-    ArrowDown, ArrowUp, Blocks, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Database,
-    Ellipsis, Eye, EyeOff, File, FileText, GitBranch, House, Info, LayoutDashboard, ListChecks,
-    Lock, PanelRight, Pencil, Plus, Trash2,
+    ArrowDown, ArrowUp, Blocks, ChevronRight, CircleAlert, CircleCheck, CircleHelp, Ellipsis, Eye,
+    EyeOff, File, FileText, GitBranch, House, Info, LayoutDashboard, ListChecks, Lock, PanelRight,
+    Pencil, Plus, Trash2,
 };
 use leptos::prelude::*;
 use tessara_module_ui::ModalDialog;
@@ -1011,7 +1011,6 @@ fn navigation_destination_icon(destination: &NavigationDestinationV2) -> AnyView
         "/workflows" => view! { <PanelRight/> }.into_any(),
         "/responses" => view! { <CircleHelp/> }.into_any(),
         "/operations" => view! { <ListChecks/> }.into_any(),
-        "/datasets" => view! { <Database/> }.into_any(),
         "/dashboards" => view! { <LayoutDashboard/> }.into_any(),
         "/administration/modules" => view! { <Blocks/> }.into_any(),
         _ => view! { <File/> }.into_any(),

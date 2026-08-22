@@ -13,7 +13,7 @@ if (-not (Test-Path $composeFile)) {
 
 Push-Location $repoRoot
 try {
-    Write-Host "`n==> Seeding UAT demo dataset" -ForegroundColor Cyan
+    Write-Host "`n==> Seeding Core-owned UAT provider fixtures" -ForegroundColor Cyan
     $rawOutput = docker compose exec -T api tessara-api seed-demo | Out-String
 
     if ($LASTEXITCODE -ne 0) {
@@ -40,13 +40,9 @@ try {
     Write-Host ("Responses: {0} drafts, {1} submitted" -f `
         $summary.draft_submission_count, `
         $summary.submitted_submission_count)
-    Write-Host ("Datasets: {0} ({1} published revisions)" -f `
-        $summary.dataset_count, `
-        $summary.dataset_revision_count)
     Write-Host ("Primary demo node:      {0}" -f $summary.organization_node_id)
     Write-Host ("Primary form version:   {0}" -f $summary.form_version_id)
     Write-Host ("Primary submission:     {0}" -f $summary.submission_id)
-    Write-Host ("Primary dataset:        {0}" -f $summary.dataset_id)
     Write-Host "Demo accounts: admin / operator / delegator / respondent / delegate"
 } finally {
     Pop-Location

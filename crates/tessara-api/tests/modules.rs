@@ -23,19 +23,14 @@ use support::{
 use support::{cookie_authenticated_request, login_cookie_for};
 
 const PASSWORD: &str = "tessara-test-password-123";
-const CORE_TRANSITION_DEFINITION_IDS: [&str; 5] = [
-    "tessara.datasets",
+const CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
     "tessara.forms",
     "tessara.migration",
     "tessara.responses",
     "tessara.workflows",
 ];
-const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
-    "tessara.datasets",
-    "tessara.forms",
-    "tessara.responses",
-    "tessara.workflows",
-];
+const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 3] =
+    ["tessara.forms", "tessara.responses", "tessara.workflows"];
 const FORMS_DEFINITION: &str = "tessara.forms";
 const RESPONSES_DEFINITION: &str = "tessara.responses";
 const MIGRATION_DEFINITION: &str = "tessara.migration";
@@ -166,6 +161,10 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert!(
         shell_item(&admin_shell, "dashboards").is_none(),
         "Dashboard navigation requires an enrolled live Module Instance and must not come from Core"
+    );
+    assert!(
+        shell_item(&admin_shell, "datasets").is_none(),
+        "Dataset navigation requires an enrolled live Module Instance and must not come from Core"
     );
     for (name, actor) in [
         ("scoped read", &scoped_reader),
@@ -451,7 +450,6 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
             "core.home",
             "core.operations",
             "core.organization",
-            "tessara.datasets.navigation",
             "tessara.forms.navigation",
             "tessara.reference.scoped-records.navigation",
             "tessara.responses.navigation",
@@ -685,8 +683,10 @@ async fn navigation_policy_http_rejections_are_atomic_and_exactly_audited() {
     navigation_mutation_mut(&mut changed_request, "tessara.forms.navigation")["order"] = json!(3);
     navigation_mutation_mut(&mut changed_request, "tessara.workflows.navigation")["order"] =
         json!(2);
-    navigation_mutation_mut(&mut changed_request, "tessara.datasets.navigation")["visible"] =
-        json!(false);
+    navigation_mutation_mut(
+        &mut changed_request,
+        "tessara.reference.scoped-records.navigation",
+    )["visible"] = json!(false);
     let changed_policy = request_json(
         app.clone(),
         authorized_request(

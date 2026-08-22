@@ -7,10 +7,10 @@ use super::types::DatasetSqlPreviewResponse;
 #[cfg(feature = "hydrate")]
 use super::types::{
     DatasetDefinition, DatasetDraftRevisionResponse, DatasetFormOption, DatasetPayload,
-    DatasetPublishRevisionResponse, DatasetRenderedForm, DatasetRevisionDetail,
-    DatasetRevisionLabelRequest, DatasetRevisionLabelResponse, DatasetRevisionOptionsRequest,
-    DatasetRevisionSummary, DatasetSummary, DatasetTable, DatasetUserOption, NodeResponse,
-    SessionAccount, UpdateDatasetTagsRequest,
+    DatasetPublishRevisionResponse, DatasetRefreshResponse, DatasetRenderedForm,
+    DatasetRevisionDetail, DatasetRevisionLabelRequest, DatasetRevisionLabelResponse,
+    DatasetRevisionOptionsRequest, DatasetRevisionSummary, DatasetSummary, DatasetTable,
+    DatasetUserOption, NodeResponse, UpdateDatasetTagsRequest,
 };
 
 #[cfg(feature = "hydrate")]
@@ -23,12 +23,6 @@ where
     T: serde::de::DeserializeOwned,
 {
     fetch_json_request(url, action).await
-}
-
-#[cfg(feature = "hydrate")]
-/// Fetches the fetch account data.
-pub(super) async fn fetch_account() -> Result<Option<SessionAccount>, String> {
-    fetch_json("/api/me", "account").await
 }
 
 #[cfg(feature = "hydrate")]
@@ -81,18 +75,26 @@ pub(super) async fn fetch_dataset_revision(
 #[cfg(feature = "hydrate")]
 /// Fetches the fetch forms data.
 pub(super) async fn fetch_forms() -> Result<Option<Vec<DatasetFormOption>>, String> {
-    fetch_json("/api/forms", "Form options").await
+    fetch_json("/api/admin/datasets/editor-options/forms", "Form options").await
 }
 
 #[cfg(feature = "hydrate")]
 /// Fetches the fetch nodes data.
 pub(super) async fn fetch_nodes() -> Result<Option<Vec<NodeResponse>>, String> {
-    fetch_json("/api/nodes", "Visibility nodes").await
+    fetch_json(
+        "/api/admin/datasets/editor-options/scopes",
+        "Visibility nodes",
+    )
+    .await
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_users() -> Result<Option<Vec<DatasetUserOption>>, String> {
-    fetch_json("/api/admin/users", "User options").await
+    fetch_json(
+        "/api/admin/datasets/editor-options/principals",
+        "User options",
+    )
+    .await
 }
 
 #[cfg(feature = "hydrate")]
@@ -101,7 +103,7 @@ pub(super) async fn fetch_rendered_form(
     form_version_id: &str,
 ) -> Result<Option<DatasetRenderedForm>, String> {
     fetch_json(
-        &format!("/api/form-versions/{form_version_id}/render"),
+        &format!("/api/admin/datasets/editor-options/forms/{form_version_id}"),
         "Rendered form",
     )
     .await
@@ -149,6 +151,16 @@ pub(super) async fn publish_dataset_revision(
         )),
         None,
         "dataset revision publish",
+    )
+    .await
+}
+
+#[cfg(feature = "hydrate")]
+pub(super) async fn refresh_dataset(dataset_id: &str) -> Result<DatasetRefreshResponse, String> {
+    send_json_request(
+        gloo_net::http::Request::post(&format!("/api/admin/datasets/{dataset_id}/refresh")),
+        None,
+        "dataset refresh",
     )
     .await
 }

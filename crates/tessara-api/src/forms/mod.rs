@@ -11,7 +11,12 @@ use axum::{
     routing::{get, post},
 };
 use sqlx::{Postgres, Row, Transaction};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use tessara_datasets_contract::{
+    DATASET_CORE_BINDING_KEY, DATASET_MODULE_DEFINITION_ID, DATASET_REVERSE_CONTRACT_VERSION,
+    DATASET_SOURCE_USAGE_ACTION, DATASET_SOURCE_USAGE_CONTRACT_ID, DATASET_SOURCE_USAGE_PATH,
+    DatasetProviderResultState, DatasetSourceUsageRequest, DatasetSourceUsageResponse,
+};
 use tessara_forms::{
     ensure_form_version_editable, ensure_form_version_publishable,
     ensure_section_belongs_to_form_version,
@@ -20,16 +25,20 @@ use uuid::Uuid;
 
 use crate::{
     auth::{self, AuthenticatedRequest},
+    core_security::request_correlation_id_or_new,
     db::AppState,
     error::{ApiError, ApiResult},
     hierarchy::{IdResponse, parse_field_type, require_text},
+    module_gateway::{
+        CorePrivateProviderRequest, CorePrivateProviderResult, call_private_provider,
+    },
     workflows,
 };
 
 mod dto;
 use dto::{
     CreateFormFieldRequest, CreateFormRequest, CreateFormSectionRequest, CreateFormVersionRequest,
-    FormDatasetSourceLink, FormDefinition, FormPublishPreview, FormSummary,
+    FormDatasetSourcesState, FormDefinition, FormPublishPreview, FormSummary,
     FormVersionAssignmentNodeSummary, FormVersionSummary, FormVisibilityNodeSummary,
     FormWorkflowLink, PublishFormVersionResponse, PublishedFormVersionSummary, RenderedField,
     RenderedForm, RenderedSection, UpdateFormFieldRequest, UpdateFormRequest,
@@ -324,12 +333,21 @@ pub async fn list_forms(
 /// Returns a form definition with versions plus downstream reporting links.
 pub async fn get_form(
     State(state): State<AppState>,
+    headers: HeaderMap,
     request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
     let account = request.require_capability("forms:manage")?;
     require_form_fully_in_capability_scope(&state.pool, account, "forms:manage", form_id).await?;
-    Ok(Json(get_form_definition(&state.pool, form_id).await?))
+    let mut form = get_form_definition(&state.pool, form_id).await?;
+    load_form_dataset_sources(
+        &state,
+        &request,
+        request_correlation_id_or_new(&headers),
+        &mut form,
+    )
+    .await?;
+    Ok(Json(form))
 }
 
 /// Lists published form versions available for submission.
@@ -539,6 +557,7 @@ pub async fn list_readable_forms(
 /// Loads one form definition when it is visible to the caller.
 pub async fn get_readable_form(
     State(state): State<AppState>,
+    headers: HeaderMap,
     request: AuthenticatedRequest,
     Path(form_id): Path<Uuid>,
 ) -> ApiResult<Json<FormDefinition>> {
@@ -550,10 +569,17 @@ pub async fn get_readable_form(
         _ => None,
     };
 
-    Ok(Json(
+    let mut form =
         get_form_definition_with_visibility_filter(&state.pool, form_id, scoped_node_filter)
-            .await?,
-    ))
+            .await?;
+    load_form_dataset_sources(
+        &state,
+        &request,
+        request_correlation_id_or_new(&headers),
+        &mut form,
+    )
+    .await?;
+    Ok(Json(form))
 }
 
 async fn get_form_definition(pool: &sqlx::PgPool, form_id: Uuid) -> ApiResult<FormDefinition> {
@@ -728,30 +754,6 @@ async fn get_form_definition_with_visibility_filter(
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    let dataset_sources = sqlx::query(
-        r#"
-        SELECT
-            datasets.id AS dataset_id,
-            datasets.name AS dataset_name,
-            dataset_sources.source_alias
-        FROM dataset_sources
-        JOIN datasets ON datasets.id = dataset_sources.dataset_id
-        WHERE dataset_sources.form_id = $1
-        ORDER BY datasets.name, dataset_sources.position
-        "#,
-    )
-    .bind(form_id)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(FormDatasetSourceLink {
-            dataset_id: row.try_get("dataset_id")?,
-            dataset_name: row.try_get("dataset_name")?,
-            source_alias: row.try_get("source_alias")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let visibility_nodes =
         load_form_visibility_nodes(pool, &[form_id], visible_node_filter).await?;
 
@@ -764,8 +766,109 @@ async fn get_form_definition_with_visibility_filter(
         visibility_nodes: visibility_nodes.get(&form_id).cloned().unwrap_or_default(),
         versions,
         workflows,
-        dataset_sources,
+        dataset_sources_state: FormDatasetSourcesState::Unavailable,
+        dataset_sources: Vec::new(),
     })
+}
+
+fn project_dataset_source_usage(
+    response: DatasetSourceUsageResponse,
+    form_version_ids: &BTreeSet<Uuid>,
+) -> Result<(FormDatasetSourcesState, Vec<dto::FormDatasetSourceLink>), &'static str> {
+    response
+        .validate()
+        .map_err(|_| "invalid Dataset source-usage response")?;
+
+    let state = match response.state {
+        DatasetProviderResultState::Available => FormDatasetSourcesState::Available,
+        DatasetProviderResultState::Empty => FormDatasetSourcesState::Empty,
+        DatasetProviderResultState::Unavailable => FormDatasetSourcesState::Unavailable,
+        DatasetProviderResultState::Undisclosed => FormDatasetSourcesState::Undisclosed,
+    };
+    if state != FormDatasetSourcesState::Available {
+        return Ok((state, Vec::new()));
+    }
+
+    let mut links = Vec::with_capacity(response.items.len());
+    for item in response.items {
+        if !form_version_ids.contains(&item.pinned_form_version_id) {
+            return Err("Dataset source-usage response substituted a FormVersion");
+        }
+        let dataset_id = item.dataset.dataset_id();
+        if item.semantic_destination != format!("datasets.detail:{dataset_id}") {
+            return Err("Dataset source-usage response carried an invalid semantic destination");
+        }
+        links.push(dto::FormDatasetSourceLink {
+            dataset_id,
+            dataset_name: item.dataset_name,
+            source_alias: item.source_alias,
+            pinned_form_version_id: item.pinned_form_version_id,
+            lifecycle_state: item.lifecycle_state,
+            semantic_destination: item.semantic_destination,
+        });
+    }
+
+    Ok((state, links))
+}
+
+async fn load_form_dataset_sources(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+    form: &mut FormDefinition,
+) -> ApiResult<()> {
+    let request = DatasetSourceUsageRequest {
+        schema_version: 1,
+        form_id: form.id,
+        form_version_id: None,
+    };
+    let result = call_private_provider(
+        state,
+        actor,
+        CorePrivateProviderRequest {
+            module_definition_id: DATASET_MODULE_DEFINITION_ID,
+            expected_owner: None,
+            dependency_binding: DATASET_CORE_BINDING_KEY,
+            functional_contract: DATASET_SOURCE_USAGE_CONTRACT_ID,
+            contract_version: DATASET_REVERSE_CONTRACT_VERSION,
+            authorization_action: DATASET_SOURCE_USAGE_ACTION,
+            path: DATASET_SOURCE_USAGE_PATH,
+            correlation_id,
+            actor_capability: "forms:read",
+            body: &request,
+        },
+    )
+    .await?;
+
+    let projection = match result {
+        CorePrivateProviderResult::Response(response) => {
+            let version_ids = form
+                .versions
+                .iter()
+                .map(|version| version.id)
+                .collect::<BTreeSet<_>>();
+            match project_dataset_source_usage(response, &version_ids) {
+                Ok(projection) => projection,
+                Err(reason) => {
+                    tracing::warn!(
+                        form_id = %form.id,
+                        reason,
+                        "Dataset source-usage response rejected"
+                    );
+                    (FormDatasetSourcesState::Unavailable, Vec::new())
+                }
+            }
+        }
+        CorePrivateProviderResult::Unavailable => {
+            (FormDatasetSourcesState::Unavailable, Vec::new())
+        }
+        CorePrivateProviderResult::Undisclosed => {
+            (FormDatasetSourcesState::Undisclosed, Vec::new())
+        }
+    };
+    form.dataset_sources_state = projection.0;
+    form.dataset_sources = projection.1;
+    Ok(())
 }
 
 /// Creates a new editable draft version from a form's latest structure.
@@ -2131,4 +2234,112 @@ async fn load_direct_dependency_warnings(
 ) -> ApiResult<Vec<String>> {
     let _ = (pool, form_id);
     Ok(Vec::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FormDatasetSourcesState, project_dataset_source_usage};
+    use std::collections::BTreeSet;
+    use tessara_datasets_contract::{
+        DatasetProviderResultState, DatasetReference, DatasetSourceUsageItem,
+        DatasetSourceUsageResponse,
+    };
+    use uuid::Uuid;
+
+    fn source_usage_response(
+        state: DatasetProviderResultState,
+        form_version_id: Uuid,
+    ) -> DatasetSourceUsageResponse {
+        let dataset_id = Uuid::parse_str("018f032a-1f76-7f15-9f31-f1cfec675bbe").unwrap();
+        DatasetSourceUsageResponse {
+            schema_version: 1,
+            state,
+            items: (state == DatasetProviderResultState::Available)
+                .then(|| DatasetSourceUsageItem {
+                    dataset: DatasetReference::from_parts(
+                        Uuid::parse_str("018f032a-1f76-7f15-9f31-f1cfec675bb0").unwrap(),
+                        Uuid::parse_str("018f032a-1f76-7f15-9f31-f1cfec675bb1").unwrap(),
+                        dataset_id,
+                    )
+                    .unwrap(),
+                    dataset_name: "Cases".into(),
+                    source_alias: "case_form".into(),
+                    pinned_form_version_id: form_version_id,
+                    lifecycle_state: "active".into(),
+                    semantic_destination: format!("datasets.detail:{dataset_id}"),
+                })
+                .into_iter()
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn dataset_source_usage_projection_preserves_exact_provider_fields() {
+        let form_version_id = Uuid::parse_str("018f032a-1f76-7f15-9f31-f1cfec675bbf").unwrap();
+        let (state, links) = project_dataset_source_usage(
+            source_usage_response(DatasetProviderResultState::Available, form_version_id),
+            &BTreeSet::from([form_version_id]),
+        )
+        .unwrap();
+
+        assert_eq!(state, FormDatasetSourcesState::Available);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].dataset_name, "Cases");
+        assert_eq!(links[0].source_alias, "case_form");
+        assert_eq!(links[0].pinned_form_version_id, form_version_id);
+        assert_eq!(links[0].lifecycle_state, "active");
+        assert_eq!(
+            links[0].semantic_destination,
+            "datasets.detail:018f032a-1f76-7f15-9f31-f1cfec675bbe"
+        );
+    }
+
+    #[test]
+    fn dataset_source_usage_projection_distinguishes_empty_and_provider_failure_states() {
+        let form_version_id = Uuid::new_v4();
+        for (provider, expected) in [
+            (
+                DatasetProviderResultState::Empty,
+                FormDatasetSourcesState::Empty,
+            ),
+            (
+                DatasetProviderResultState::Unavailable,
+                FormDatasetSourcesState::Unavailable,
+            ),
+            (
+                DatasetProviderResultState::Undisclosed,
+                FormDatasetSourcesState::Undisclosed,
+            ),
+        ] {
+            let (actual, links) = project_dataset_source_usage(
+                source_usage_response(provider, form_version_id),
+                &BTreeSet::from([form_version_id]),
+            )
+            .unwrap();
+            assert_eq!(actual, expected);
+            assert!(links.is_empty());
+        }
+    }
+
+    #[test]
+    fn dataset_source_usage_projection_rejects_substituted_versions_and_destinations() {
+        let form_version_id = Uuid::new_v4();
+        let valid_versions = BTreeSet::from([form_version_id]);
+        let malformed = DatasetSourceUsageResponse {
+            schema_version: 1,
+            state: DatasetProviderResultState::Available,
+            items: Vec::new(),
+        };
+        assert!(project_dataset_source_usage(malformed, &valid_versions).is_err());
+
+        let substituted =
+            source_usage_response(DatasetProviderResultState::Available, Uuid::new_v4());
+        assert!(project_dataset_source_usage(substituted, &valid_versions).is_err());
+
+        let mut invalid_destination =
+            source_usage_response(DatasetProviderResultState::Available, form_version_id);
+        invalid_destination.items[0].semantic_destination =
+            format!("datasets.detail:{}", Uuid::new_v4());
+        assert!(project_dataset_source_usage(invalid_destination, &valid_versions).is_err());
+    }
 }

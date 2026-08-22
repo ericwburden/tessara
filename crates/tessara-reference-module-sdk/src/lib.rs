@@ -9,15 +9,15 @@ use tessara_module_ui::{
 use uuid::Uuid;
 
 pub const DEFINITION_ID: &str = "tessara.reference.module-sdk";
-pub const RELEASE_VERSION: &str = "1.0.1";
+pub const RELEASE_VERSION: &str = "1.0.2";
 pub const READ_CAPABILITY: &str = "tessara.reference.module-sdk:read";
 pub const ROOT_PATH: &str = "/reference/module-sdk";
 pub const MODULE_UI_CSS_DIGEST: &str =
-    "sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:76e0cb7b9ffa09ed5029daa87578e11043d7df966ce248282d9f619d17375abe/module-ui.css";
+    "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css";
 pub const MODULE_SHELL_JS_DIGEST: &str =
     "sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
-pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.1/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";
+pub const MODULE_SHELL_JS_PATH: &str = "/_tessara/modules/tessara.reference.module-sdk/1.0.2/sha256:8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff/module-shell.js";
 
 pub fn manifest() -> ModuleManifest {
     serde_json::from_str(include_str!("../manifest.json"))

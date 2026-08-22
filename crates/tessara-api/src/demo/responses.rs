@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde_json::Value;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::{
@@ -9,7 +9,7 @@ use crate::{
     workflows,
 };
 
-use super::workflows::ensure_single_form_workflow_assignment;
+use super::workflows::ensure_single_form_workflow_assignment_tx;
 
 pub(super) struct SeedSubmissionSpec<'a> {
     pub(super) seed_key: &'a str,
@@ -24,6 +24,8 @@ pub(super) async fn ensure_seed_submission(
     node_id: Uuid,
     spec: SeedSubmissionSpec<'_>,
 ) -> ApiResult<Uuid> {
+    let mut transaction = pool.begin().await?;
+    crate::response_owner_actions::defer_export_capture_tx(&mut transaction).await?;
     let submission_id = if let Some(id) = sqlx::query_scalar(
         r#"
         SELECT submission_id
@@ -33,14 +35,18 @@ pub(super) async fn ensure_seed_submission(
         "#,
     )
     .bind(spec.seed_key)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *transaction)
     .await?
     {
         id
     } else {
-        let workflow_assignment_id =
-            ensure_single_form_workflow_assignment(pool, form_version_id, node_id, account_id)
-                .await?;
+        let workflow_assignment_id = ensure_single_form_workflow_assignment_tx(
+            &mut transaction,
+            form_version_id,
+            node_id,
+            account_id,
+        )
+        .await?;
 
         let submission_id: Uuid = sqlx::query_scalar(
             r#"
@@ -65,7 +71,7 @@ pub(super) async fn ensure_seed_submission(
         .bind(node_id)
         .bind(workflow_assignment_id)
         .bind(spec.status)
-        .fetch_one(pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
         sqlx::query(
@@ -77,7 +83,7 @@ pub(super) async fn ensure_seed_submission(
         .bind(submission_id)
         .bind(spec.seed_key)
         .bind(account_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
 
         submission_id
@@ -91,7 +97,7 @@ pub(super) async fn ensure_seed_submission(
         "#,
     )
     .bind(form_version_id)
-    .fetch_all(pool)
+    .fetch_all(&mut *transaction)
     .await?;
 
     let mut field_ids_by_key = HashMap::new();
@@ -108,7 +114,14 @@ pub(super) async fn ensure_seed_submission(
             .copied()
             .ok_or_else(|| ApiError::BadRequest(format!("unknown demo seed field '{key}'")))?;
         retained_field_ids.push(field_id);
-        upsert_submission_value(pool, submission_id, form_version_id, field_id, value).await?;
+        upsert_submission_value(
+            &mut transaction,
+            submission_id,
+            form_version_id,
+            field_id,
+            value,
+        )
+        .await?;
     }
 
     sqlx::query(
@@ -120,7 +133,7 @@ pub(super) async fn ensure_seed_submission(
     )
     .bind(submission_id)
     .bind(&retained_field_ids)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
 
     sqlx::query(
@@ -128,7 +141,7 @@ pub(super) async fn ensure_seed_submission(
     )
     .bind(submission_id)
     .bind(&retained_field_ids)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
 
     if spec.status == "submitted" {
@@ -141,7 +154,7 @@ pub(super) async fn ensure_seed_submission(
             "#,
         )
         .bind(submission_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     } else {
         sqlx::query(
@@ -153,15 +166,20 @@ pub(super) async fn ensure_seed_submission(
             "#,
         )
         .bind(submission_id)
-        .execute(pool)
+        .execute(&mut *transaction)
         .await?;
     }
 
-    let workflow_assignment_id =
-        ensure_single_form_workflow_assignment(pool, form_version_id, node_id, account_id).await?;
+    let workflow_assignment_id = ensure_single_form_workflow_assignment_tx(
+        &mut transaction,
+        form_version_id,
+        node_id,
+        account_id,
+    )
+    .await?;
 
-    workflows::ensure_submission_runtime_linkage(
-        pool,
+    workflows::ensure_submission_runtime_linkage_tx(
+        &mut transaction,
         submission_id,
         workflow_assignment_id,
         account_id,
@@ -169,11 +187,36 @@ pub(super) async fn ensure_seed_submission(
     )
     .await?;
 
+    if spec.status == "submitted" {
+        crate::response_owner_actions::append_final_upsert_tx(&mut transaction, submission_id)
+            .await?;
+    } else {
+        let was_exported: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM response_export_changes
+                            WHERE response_id=$1 AND change_kind='upsert')",
+        )
+        .bind(submission_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if was_exported {
+            crate::response_owner_actions::append_final_tombstone_tx(
+                &mut transaction,
+                submission_id,
+                form_version_id,
+                node_id,
+                tessara_responses_contract::ResponseTombstoneReason::StatusExcluded,
+            )
+            .await?;
+        }
+    }
+
+    transaction.commit().await?;
+
     Ok(submission_id)
 }
 
 async fn upsert_submission_value(
-    pool: &PgPool,
+    transaction: &mut Transaction<'_, Postgres>,
     submission_id: Uuid,
     form_version_id: Uuid,
     field_id: Uuid,
@@ -183,14 +226,14 @@ async fn upsert_submission_value(
         sqlx::query("DELETE FROM submission_values WHERE submission_id = $1 AND field_id = $2")
             .bind(submission_id)
             .bind(field_id)
-            .execute(pool)
+            .execute(&mut **transaction)
             .await?;
         sqlx::query(
             "DELETE FROM submission_value_multi WHERE submission_id = $1 AND field_id = $2",
         )
         .bind(submission_id)
         .bind(field_id)
-        .execute(pool)
+        .execute(&mut **transaction)
         .await?;
         return Ok(());
     }
@@ -207,13 +250,13 @@ async fn upsert_submission_value(
     .bind(form_version_id)
     .bind(field_id)
     .bind(&value)
-    .execute(pool)
+    .execute(&mut **transaction)
     .await?;
 
     sqlx::query("DELETE FROM submission_value_multi WHERE submission_id = $1 AND field_id = $2")
         .bind(submission_id)
         .bind(field_id)
-        .execute(pool)
+        .execute(&mut **transaction)
         .await?;
 
     if let Some(items) = value.as_array() {
@@ -232,7 +275,7 @@ async fn upsert_submission_value(
             .bind(form_version_id)
             .bind(field_id)
             .bind(item_value)
-            .execute(pool)
+            .execute(&mut **transaction)
             .await?;
         }
     }

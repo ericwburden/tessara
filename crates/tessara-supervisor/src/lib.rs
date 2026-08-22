@@ -340,6 +340,16 @@ impl SupervisorLedger {
             .map(|receipt| receipt.configuration_digests.clone())
             .unwrap_or_default();
         configuration_digests.extend(adapter.configuration_digests());
+        let previous_bootstrap_order = previous
+            .as_ref()
+            .map(|receipt| {
+                receipt
+                    .bootstrap_receipts
+                    .iter()
+                    .map(|receipt| receipt.owner.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
         let mut bootstrap_receipts = previous
             .as_ref()
             .map(|receipt| {
@@ -377,6 +387,25 @@ impl SupervisorLedger {
             reconciled_at: None,
             expired: false,
         });
+        let mut ordered_bootstrap_receipts = Vec::with_capacity(bootstrap_receipts.len());
+        for action in &plan.actions {
+            if let MaterializationActionV1::Bootstrap { owner, .. } = action
+                && let Some(receipt) = bootstrap_receipts.remove(owner)
+            {
+                ordered_bootstrap_receipts.push(receipt);
+            }
+        }
+        // Delta and no-op plans can carry forward receipts for owners they do
+        // not bootstrap. Preserve their previously certified dependency order
+        // after the owners whose order was explicitly executed by this plan.
+        for owner in previous_bootstrap_order {
+            if let Some(receipt) = bootstrap_receipts.remove(&owner) {
+                ordered_bootstrap_receipts.push(receipt);
+            }
+        }
+        // Any receipt that did not exist in the previous certificate and was
+        // not represented by a Bootstrap action is appended deterministically.
+        ordered_bootstrap_receipts.extend(bootstrap_receipts.into_values());
         let receipt = InstallationReceiptV1 {
             api_version: RECEIPT_API_V1.into(),
             installation_id: operation.installation_id,
@@ -391,7 +420,7 @@ impl SupervisorLedger {
             observed_enablement,
             observed_artifacts,
             configuration_digests,
-            bootstrap_receipts: bootstrap_receipts.into_values().collect(),
+            bootstrap_receipts: ordered_bootstrap_receipts,
             applied_at: now,
             previous_receipt_digest: previous.as_ref().map(canonical_digest).transpose()?,
             no_op,
@@ -636,6 +665,9 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::ReleaseCatalog => "release_catalog",
         ProtocolSignaturePurposeV1::ResolvedComposition => "resolved_composition",
         ProtocolSignaturePurposeV1::ApplyAuthorization => "apply_authorization",
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization => "owner_bootstrap_authorization",
+        ProtocolSignaturePurposeV1::OwnerBootstrapReceipt => "owner_bootstrap_receipt",
+        ProtocolSignaturePurposeV1::ResponseOwnerActionReceipt => "response_owner_action_receipt",
         ProtocolSignaturePurposeV1::BootstrapValidationAuthorization => {
             "bootstrap_validation_authorization"
         }
@@ -1113,6 +1145,146 @@ mod tests {
         fn configuration_digests(&self) -> BTreeMap<String, ArtifactDigest> {
             self.recording.configuration_digests()
         }
+    }
+
+    #[derive(Default)]
+    struct PerOwnerBootstrapAdapter {
+        receipts: BTreeMap<String, BootstrapReceiptV1>,
+        recording: RecordingAdapter,
+    }
+
+    impl MaterializationAdapter for PerOwnerBootstrapAdapter {
+        fn execute(
+            &mut self,
+            action: &MaterializationActionV1,
+        ) -> Result<Option<BootstrapReceiptV1>, SupervisorError> {
+            self.recording.execute(action)?;
+            Ok(match action {
+                MaterializationActionV1::Bootstrap { owner, .. } => {
+                    self.receipts.get(owner).cloned()
+                }
+                _ => None,
+            })
+        }
+
+        fn observed_artifacts(&self) -> BTreeMap<String, ArtifactDigest> {
+            self.recording.observed_artifacts()
+        }
+
+        fn configuration_digests(&self) -> BTreeMap<String, ArtifactDigest> {
+            self.recording.configuration_digests()
+        }
+    }
+
+    #[test]
+    fn bootstrap_receipts_preserve_materialization_plan_order() {
+        let ledger = SupervisorLedger::open(":memory:").unwrap();
+        let installation = Uuid::new_v4();
+        let now = Utc::now();
+        ledger.initialize_installation(installation, now).unwrap();
+        let signer = signer();
+        let mut ordered_plan = plan(installation);
+        ordered_plan.actions = vec![
+            MaterializationActionV1::Bootstrap {
+                owner: "tessara.datasets".into(),
+                input_digest: digest('1'),
+            },
+            MaterializationActionV1::Bootstrap {
+                owner: "tessara.components".into(),
+                input_digest: digest('2'),
+            },
+            MaterializationActionV1::VerifyReadBack,
+        ];
+        let signed = signer
+            .sign(authorization(
+                installation,
+                &ordered_plan,
+                now,
+                "ordered-bootstrap",
+            ))
+            .unwrap();
+        let operation = ledger
+            .accept_apply(&ordered_plan, &signed, &signer.verifier(), now)
+            .unwrap();
+        let receipts = [
+            ("tessara.datasets", digest('1'), digest('3')),
+            ("tessara.components", digest('2'), digest('4')),
+        ]
+        .into_iter()
+        .map(|(owner, input_digest, result_digest)| {
+            (
+                owner.into(),
+                BootstrapReceiptV1 {
+                    owner: owner.into(),
+                    schema_version: "example.bootstrap/v1".into(),
+                    input_digest,
+                    result_digest,
+                    changed: true,
+                    resource_ids: BTreeMap::new(),
+                },
+            )
+        })
+        .collect();
+        let receipt = ledger
+            .execute(
+                operation.operation_id,
+                digest('a'),
+                &mut PerOwnerBootstrapAdapter {
+                    receipts,
+                    ..Default::default()
+                },
+                now,
+            )
+            .unwrap();
+
+        assert_eq!(
+            receipt
+                .bootstrap_receipts
+                .iter()
+                .map(|receipt| receipt.owner.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tessara.datasets", "tessara.components"]
+        );
+
+        let mut no_op_plan = plan(installation);
+        no_op_plan.desired_revision = 2;
+        no_op_plan.actions = vec![MaterializationActionV1::VerifyReadBack];
+        let mut no_op_authorization = authorization(
+            installation,
+            &no_op_plan,
+            now + Duration::seconds(1),
+            "ordered-bootstrap-no-op",
+        );
+        no_op_authorization.desired_revision = 2;
+        no_op_authorization.apply_sequence = 2;
+        no_op_authorization.base_receipt_digest = Some(canonical_digest(&receipt).unwrap());
+        let signed_no_op = signer.sign(no_op_authorization).unwrap();
+        let no_op_operation = ledger
+            .accept_apply(
+                &no_op_plan,
+                &signed_no_op,
+                &signer.verifier(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+        let no_op_receipt = ledger
+            .execute(
+                no_op_operation.operation_id,
+                digest('b'),
+                &mut RecordingAdapter::default(),
+                now + Duration::seconds(1),
+            )
+            .unwrap();
+
+        assert!(no_op_receipt.no_op);
+        assert_eq!(
+            no_op_receipt
+                .bootstrap_receipts
+                .iter()
+                .map(|receipt| receipt.owner.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tessara.datasets", "tessara.components"]
+        );
     }
 
     #[test]
