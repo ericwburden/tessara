@@ -1276,7 +1276,7 @@ and one authenticated environment. Closeout authorization is retained under
 
 **User-testable exit condition:** from empty disposable databases, a tester can materialize and seed the reference application so every Dashboard placement is created directly with a new Component Module Instance reference, then author and execute Components against Dataset compatibility contracts across separate processes/databases while Dashboards continue to consume Components and degrade coherently during outages. The same tester can prove old Core Component references and payload shapes are rejected and no Core Component product adapter or storage remains.
 
-### Sprint 8B: Dataset Module Separation Slice (Next)
+### Sprint 8B: Dataset Module Separation Slice (Complete)
 
 **Outcome:** Datasets is independently deployed and consumes source data through explicit provider contracts.
 
@@ -1294,7 +1294,7 @@ and one authenticated environment. Closeout authorization is retained under
 
 **User-testable exit condition:** a tester can materialize and preview a Dataset from a provider contract, execute a Component over it, and view the result on a Dashboard across independently deployed modules.
 
-### Sprint 8C: Response Module Separation Slice
+### Sprint 8C: Response Module Separation Slice (Next)
 
 **Outcome:** Responses is independently deployed and exposes captured data without sharing its persistence.
 

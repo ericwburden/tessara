@@ -1,6 +1,6 @@
 # Sprint 8B Validation Record
 
-- Status: Planned / Not Run
+- Status: Complete / Closeout Authorized
 - Validation policy: `tessara-validation-v2`
 - Tracked validation contract: `docs/sprints/sprint-8b-validation-contract.json`
 - Implementation profile: `phase8-module-extraction`
@@ -17,9 +17,31 @@
 - Evidence root: `artifacts/sprint-8b-closeout/` (ignored; successful raw
   evidence retained cold)
 
-No implementation-readiness target, formal validation lane, candidate freeze,
-stack launch, or acceptance result was executed during kickoff. Every result in
-this record is `Not Run` unless it is explicitly marked conditional.
+The kickoff inventory below is preserved as the approved contract. Final
+execution completed against clean implementation commit
+`83e8b123de315ed2c7186ec4f0586f5a03198131`, tree
+`ab0aa4449595045ffa02e4e8d435a7a9c7239880`, and candidate fingerprint
+`93c5b936807407b5a2007ccb1851d22a1d9a90bfc0cd84619637bbf080ac97f9`.
+All 24 implementation targets and all 31 formal lanes passed; the 11 manual
+UAT scenarios were accepted by the user. Conditional convergence artifacts
+remain historical inputs rather than final-candidate test results.
+
+## Final Authoritative Outcome
+
+- Implementation Readiness: 24/24 targets passed.
+- Validation Readiness: 3/3 lanes passed.
+- Candidate Rehearsal: 11/11 lanes passed.
+- Preflight: 1/1 lane passed and froze the exact candidate above.
+- SIT: 4/4 lanes passed, including the locked/offline/all-features/jobs-1
+  workspace test command, the complete browser inventory, and deployed smoke.
+- UAT: 12/12 lanes and 11/11 manual scenarios passed; open defect count is 0.
+- Defect provenance: 23 retained records, 0 unresolved.
+- Final integrity audit: 6 sealed phase indexes and 840 retained artifacts
+  authenticated.
+- Evidence chain: `06b3fe97bcb6d1a702a0076f9f6fff33aa2541b747eeb5f86c3374e8434981d2`.
+- Closeout authorization: `513301d0a32f127d1c169898391ad99b697bb0ea1b2376644c9df9bfb8a8e2c3`.
+- Reviewer topology: `tessara-s8b-uat-manual` at
+  `http://127.0.0.1:49452`, retained healthy and source-exact.
 
 ## Canonical Evidence And Environment Identities
 
@@ -154,24 +176,24 @@ the internal machine gate, not a twenty-seventh product criterion.
 
 | Artifact | Producer | Required before | Status |
 | --- | --- | --- | --- |
-| `implementation/implementation-readiness-result.json` | Implementation | Validation Readiness | Not Run |
-| 24 `implementation/targets/<id>/result.json` receipts, logs, references | Implementation | Aggregate implementation result | Not Run |
-| `validation-readiness/validation-readiness-result.json` | Validation coordinator | Candidate Rehearsal | Not Run |
-| `candidate-rehearsal/candidate-rehearsal-result.json` | Validation coordinator | Preflight | Not Run |
-| `validation-preflight/preflight-result.json` | Preflight | Candidate freeze | Not Run |
-| `validation-preflight/candidate.json` | Preflight | SIT | Not Run |
-| `sit/sit-result.json` | SIT | UAT | Not Run |
-| `uat/uat-result.json` | UAT | Authorization | Not Run |
-| 11 `uat/scenarios/UAT-8B-<nn>/result.json` receipts | UAT | UAT certificate | Not Run |
+| `implementation/implementation-readiness-result.json` | Implementation | Validation Readiness | Passed |
+| 24 `implementation/targets/<id>/result.json` receipts, logs, references | Implementation | Aggregate implementation result | Passed |
+| `validation-readiness/validation-readiness-result.json` | Validation coordinator | Candidate Rehearsal | Passed |
+| `candidate-rehearsal/candidate-rehearsal-result.json` | Validation coordinator | Preflight | Passed |
+| `validation-preflight/preflight-result.json` | Preflight | Candidate freeze | Passed |
+| `validation-preflight/candidate.json` | Preflight | SIT | Passed |
+| `sit/sit-result.json` | SIT | UAT | Passed |
+| `uat/uat-result.json` | UAT | Authorization | Passed |
+| 11 `uat/scenarios/UAT-8B-<nn>/result.json` receipts | UAT | UAT certificate | Passed |
 | `uat-defect-harvest.json` | UAT/coordinator | Correction batch, if triggered | Planned / Conditional |
 | `defect-batch.json` | Coordinator | Impact assessment, if triggered | Planned / Conditional |
 | `correction-impact-assessment.json` | Coordinator | Focused repair, if triggered | Planned / Conditional |
 | `focused-repair-validation/attempt-<n>.json` | SIT/UAT/coordinator | Convergence, if triggered | Planned / Conditional |
 | `canonical-restoration.json` | Coordinator | Convergence/final certification, if triggered | Planned / Conditional |
 | `final-certification-entry.json` | Coordinator | Final certification, if triggered | Planned / Conditional |
-| Per-phase `evidence-index.json` and SHA-256 sidecar | Each phase | Phase certificate | Not Run |
-| `evidence-chain.json` and SHA-256 sidecar | Validation coordinator | Closeout authorization | Not Run |
-| `closeout-authorization.json` | Validation coordinator | Closeout | Not Run |
+| Per-phase `evidence-index.json` and SHA-256 sidecar | Each phase | Phase certificate | Passed |
+| `evidence-chain.json` and SHA-256 sidecar | Validation coordinator | Closeout authorization | Passed |
+| `closeout-authorization.json` | Validation coordinator | Closeout | Passed |
 
 All paths above are relative to `artifacts/sprint-8b-closeout/`. A missing,
 unhashed, stale, malformed, unsealed, or source/environment-mismatched artifact
@@ -186,30 +208,30 @@ canonical.
 
 | # | Target | Proof classes | Dependency domains | Exact command | Clean | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| 01 | `static-quality` | `static-quality` | product-source, build-dependencies, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target static-quality` | No | Not Run |
-| 02 | `contract-boundary` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, fixtures, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target contract-boundary` | No | Not Run |
-| 03 | `owner-product` | `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target owner-product` | No | Not Run |
-| 04 | `ui-sdk-conformance` | `ui-sdk-conformance` | product-source, build-dependencies, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target ui-sdk-conformance` | **Yes** | Not Run |
-| 05 | `consumer-cutover` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target consumer-cutover` | No | Not Run |
-| 06 | `core-subtraction` | `core-subtraction` | product-source, build-dependencies, migrations-seeds, fixtures, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target core-subtraction` | No | Not Run |
-| 07 | `inventory-navigation` | `inventory-navigation` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target inventory-navigation` | No | Not Run |
-| 08 | `migration-seed` | `migration-seed` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target migration-seed` | **Yes** | Not Run |
-| 09 | `clean-materialization` | `clean-materialization` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target clean-materialization` | **Yes** | Not Run |
-| 10 | `semantic-noop` | `semantic-noop` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target semantic-noop` | **Yes** | Not Run |
-| 11 | `failure-recovery` | `failure-recovery` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target failure-recovery` | **Yes** | Not Run |
-| 12 | `fixture-acceptance` | `fixture-acceptance` | product-source, build-dependencies, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target fixture-acceptance` | No | Not Run |
-| 13 | `runner-selftest` | `runner-selftest` | validation-shared, sprint-contract, implementation-runner, implementation-harness, readiness-runner, rehearsal-runner, preflight-runner, sit-runner, uat-runner, evidence-publication | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target runner-selftest` | No | Not Run |
-| 14 | `deployed-smoke` | `deployed-smoke`, `consumer-cutover` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target deployed-smoke` | No | Not Run |
-| 15 | `independent-upgrade-rollback` | `independent-upgrade-rollback` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target independent-upgrade-rollback` | No | Not Run |
-| 16 | `uat-readiness` | `uat-readiness` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness, uat-runner | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target uat-readiness` | No | Not Run |
-| 17 | `response-export-contract` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target response-export-contract` | No | Not Run |
-| 18 | `response-incremental-sync` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target response-incremental-sync` | **Yes** | Not Run |
-| 19 | `ui-provider-boundaries` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target ui-provider-boundaries` | No | Not Run |
-| 20 | `reverse-consumers` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target reverse-consumers` | No | Not Run |
-| 21 | `resource-resolution` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target resource-resolution` | No | Not Run |
-| 22 | `api-idempotency` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target api-idempotency` | No | Not Run |
-| 23 | `dataset-refresh-dag` | `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target dataset-refresh-dag` | **Yes** | Not Run |
-| 24 | `planning-contract-alignment` | `contract-boundary` | fixtures, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness, readiness-runner, rehearsal-runner, preflight-runner, sit-runner, uat-runner, evidence-publication, documentation | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target planning-contract-alignment` | No | Not Run |
+| 01 | `static-quality` | `static-quality` | product-source, build-dependencies, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target static-quality` | No | Passed |
+| 02 | `contract-boundary` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, fixtures, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target contract-boundary` | No | Passed |
+| 03 | `owner-product` | `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target owner-product` | No | Passed |
+| 04 | `ui-sdk-conformance` | `ui-sdk-conformance` | product-source, build-dependencies, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target ui-sdk-conformance` | **Yes** | Passed |
+| 05 | `consumer-cutover` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target consumer-cutover` | No | Passed |
+| 06 | `core-subtraction` | `core-subtraction` | product-source, build-dependencies, migrations-seeds, fixtures, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target core-subtraction` | No | Passed |
+| 07 | `inventory-navigation` | `inventory-navigation` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target inventory-navigation` | No | Passed |
+| 08 | `migration-seed` | `migration-seed` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target migration-seed` | **Yes** | Passed |
+| 09 | `clean-materialization` | `clean-materialization` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target clean-materialization` | **Yes** | Passed |
+| 10 | `semantic-noop` | `semantic-noop` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target semantic-noop` | **Yes** | Passed |
+| 11 | `failure-recovery` | `failure-recovery` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target failure-recovery` | **Yes** | Passed |
+| 12 | `fixture-acceptance` | `fixture-acceptance` | product-source, build-dependencies, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target fixture-acceptance` | No | Passed |
+| 13 | `runner-selftest` | `runner-selftest` | validation-shared, sprint-contract, implementation-runner, implementation-harness, readiness-runner, rehearsal-runner, preflight-runner, sit-runner, uat-runner, evidence-publication | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target runner-selftest` | No | Passed |
+| 14 | `deployed-smoke` | `deployed-smoke`, `consumer-cutover` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target deployed-smoke` | No | Passed |
+| 15 | `independent-upgrade-rollback` | `independent-upgrade-rollback` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target independent-upgrade-rollback` | No | Passed |
+| 16 | `uat-readiness` | `uat-readiness` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness, uat-runner | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target uat-readiness` | No | Passed |
+| 17 | `response-export-contract` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target response-export-contract` | No | Passed |
+| 18 | `response-incremental-sync` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target response-incremental-sync` | **Yes** | Passed |
+| 19 | `ui-provider-boundaries` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target ui-provider-boundaries` | No | Passed |
+| 20 | `reverse-consumers` | `contract-boundary` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target reverse-consumers` | No | Passed |
+| 21 | `resource-resolution` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target resource-resolution` | No | Passed |
+| 22 | `api-idempotency` | `contract-boundary`, `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target api-idempotency` | No | Passed |
+| 23 | `dataset-refresh-dag` | `owner-product` | product-source, build-dependencies, migrations-seeds, deployment-materialization, fixtures, acceptance-inventory, environment-contract, validation-shared, sprint-contract, implementation-runner, implementation-harness | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target dataset-refresh-dag` | **Yes** | Passed |
+| 24 | `planning-contract-alignment` | `contract-boundary` | fixtures, acceptance-inventory, validation-shared, sprint-contract, implementation-runner, implementation-harness, readiness-runner, rehearsal-runner, preflight-runner, sit-runner, uat-runner, evidence-publication, documentation | `.\scripts\run-sprint-8b-implementation-readiness.ps1 -Target planning-contract-alignment` | No | Passed |
 
 Formal Readiness is forbidden until the current clean source passes all 24
 targets with zero known failures and a result bound to the current validation-
@@ -245,13 +267,15 @@ features/jobs-1 test command above. The browser manifest runs with one worker,
 zero retries, no `only`/skip/fixme/filter/max-failure truncation, and no
 snapshot-update mode.
 
-- Clean source and validation-contract hash: Not Recorded
-- First apply from authenticated empty databases: Not Run
-- Semantic no-op: Not Run
-- Failure containment and from-empty recovery: Not Run
-- Fixture, runner, smoke, visual, and UAT-predicate reproducers: Not Run
-- Known failure count: Not Recorded
-- Aggregate implementation-readiness result: Not Produced
+- Clean source: `83e8b123de315ed2c7186ec4f0586f5a03198131` /
+  `ab0aa4449595045ffa02e4e8d435a7a9c7239880`; validation-contract SHA-256:
+  `a05585ab12e2ff151985bbe629e3a5d074cd44dca81b9ecc62799092b1c9482e`
+- First apply from authenticated empty databases: Passed
+- Semantic no-op: Passed
+- Failure containment and from-empty recovery: Passed
+- Fixture, runner, smoke, visual, and UAT-predicate reproducers: Passed
+- Known failure count: 0
+- Aggregate implementation-readiness result: Produced
 
 ## Formal Lane Inventory
 
@@ -261,37 +285,37 @@ corresponding `lane:<id>` receipt/log/reference set.
 
 | # | Phase / lane | Exact prerequisite | Exact selector | Environment | Result |
 | --- | --- | --- | --- | --- | --- |
-| 01 | Readiness `readiness-contract` | none | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-contract` | `offline` | Not Run |
-| 02 | Readiness `readiness-materialization` | `readiness-contract` | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-materialization` | `tessara-s8b-readiness-materialization`; isolated live/restored | Not Run |
-| 03 | Readiness `readiness-acceptance` | `readiness-materialization` | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-acceptance` | `offline`; consumes authenticated materialization/restoration receipt | Not Run |
-| 04 | Rehearsal `rehearsal-static` | `readiness-acceptance` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-static` | `offline` | Not Run |
-| 05 | Rehearsal `rehearsal-rust` | `rehearsal-static` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-rust` | `tessara-s8b-rehearsal-rust`; isolated live/restored | Not Run |
-| 06 | Rehearsal `rehearsal-materialization` | `rehearsal-rust` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-materialization` | `tessara-s8b-rehearsal-materialization`; isolated live/restored | Not Run |
-| 07 | Rehearsal `rehearsal-browser` | `rehearsal-materialization` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-browser` | `tessara-s8b-rehearsal-browser`; isolated live/restored | Not Run |
-| 08 | Rehearsal `rehearsal-conformance` | `rehearsal-browser` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-conformance` | `tessara-s8b-rehearsal-conformance`; isolated live/restored | Not Run |
-| 09 | Rehearsal `rehearsal-source-sync` | `rehearsal-conformance` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-source-sync` | `tessara-s8b-rehearsal-source-sync`; isolated live/restored | Not Run |
-| 10 | Rehearsal `rehearsal-reverse-consumers` | `rehearsal-source-sync` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-reverse-consumers` | `tessara-s8b-rehearsal-reverse-consumers`; isolated live/restored | Not Run |
-| 11 | Rehearsal `rehearsal-smoke` | `rehearsal-reverse-consumers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-smoke` | `tessara-s8b-rehearsal-smoke`; isolated live/restored | Not Run |
-| 12 | Rehearsal `rehearsal-recovery` | `rehearsal-smoke` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-recovery` | `tessara-s8b-rehearsal-recovery`; isolated live/restored | Not Run |
-| 13 | Rehearsal `rehearsal-upgrade` | `rehearsal-recovery` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-upgrade` | `tessara-s8b-rehearsal-upgrade`; isolated live/restored | Not Run |
-| 14 | Rehearsal `rehearsal-uat` | `rehearsal-upgrade` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-uat` | `tessara-s8b-rehearsal-uat`; isolated live/restored | Not Run |
-| 15 | Preflight `preflight-freeze` | `rehearsal-uat` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-validation-preflight.ps1` | `offline`; identity/evidence audit, emits `candidate.json` | Not Run |
-| 16 | SIT `sit-static` | `preflight-freeze` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-static` | `offline`; bound to frozen `tessara-s8b-sit` identity | Not Run |
-| 17 | SIT `sit-rust` | `sit-static` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-rust` | frozen `tessara-s8b-sit`; restored/checkpointed | Not Run |
-| 18 | SIT `sit-browser` | `sit-rust` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-browser` | same frozen `tessara-s8b-sit`; restored/checkpointed | Not Run |
-| 19 | SIT `sit-smoke` | `sit-browser` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-smoke` | same frozen `tessara-s8b-sit`; canonical restoration | Not Run |
-| 20 | UAT `uat-scripted` | `sit-smoke` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-scripted` | `tessara-s8b-uat-scripted`; isolated live/restored | Not Run |
-| 21 | UAT `uat-product` | `uat-scripted` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-product` | `tessara-s8b-uat-product`; isolated live/restored | Not Run |
-| 22 | UAT `uat-materialization` | `uat-product` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-materialization` | `tessara-s8b-uat-materialization`; isolated live/restored | Not Run |
-| 23 | UAT `uat-operations` | `uat-materialization` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-operations` | `tessara-s8b-uat-operations`; isolated live/restored | Not Run |
-| 24 | UAT `uat-providers` | `uat-operations` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-providers` | `tessara-s8b-uat-providers`; isolated live/restored | Not Run |
-| 25 | UAT `uat-reverse-consumers` | `uat-providers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-reverse-consumers` | `tessara-s8b-uat-reverse-consumers`; isolated live/restored | Not Run |
-| 26 | UAT `uat-resource-resolution` | `uat-reverse-consumers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-resource-resolution` | `tessara-s8b-uat-resource-resolution`; isolated live/restored | Not Run |
-| 27 | UAT `uat-replay-refresh` | `uat-resource-resolution` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-replay-refresh` | `tessara-s8b-uat-replay-refresh`; isolated live/restored | Not Run |
-| 28 | UAT `uat-crossmodule` | `uat-replay-refresh` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-crossmodule` | `tessara-s8b-uat-crossmodule`; isolated live/restored | Not Run |
-| 29 | UAT `uat-subtraction` | `uat-crossmodule` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-subtraction` | `tessara-s8b-uat-subtraction`; isolated live/restored | Not Run |
-| 30 | UAT `uat-recovery` | `uat-subtraction` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-recovery` | `tessara-s8b-uat-recovery`; isolated live/restored | Not Run |
-| 31 | UAT `uat-upgrade` | `uat-recovery` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-upgrade` | `tessara-s8b-uat-upgrade`; isolated live/restored | Not Run |
+| 01 | Readiness `readiness-contract` | none | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-contract` | `offline` | Passed |
+| 02 | Readiness `readiness-materialization` | `readiness-contract` | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-materialization` | `tessara-s8b-readiness-materialization`; isolated live/restored | Passed |
+| 03 | Readiness `readiness-acceptance` | `readiness-materialization` | `pwsh -NoProfile -File .\scripts\validate-sprint-8b-readiness.ps1 -Lane readiness-acceptance` | `offline`; consumes authenticated materialization/restoration receipt | Passed |
+| 04 | Rehearsal `rehearsal-static` | `readiness-acceptance` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-static` | `offline` | Passed |
+| 05 | Rehearsal `rehearsal-rust` | `rehearsal-static` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-rust` | `tessara-s8b-rehearsal-rust`; isolated live/restored | Passed |
+| 06 | Rehearsal `rehearsal-materialization` | `rehearsal-rust` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-materialization` | `tessara-s8b-rehearsal-materialization`; isolated live/restored | Passed |
+| 07 | Rehearsal `rehearsal-browser` | `rehearsal-materialization` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-browser` | `tessara-s8b-rehearsal-browser`; isolated live/restored | Passed |
+| 08 | Rehearsal `rehearsal-conformance` | `rehearsal-browser` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-conformance` | `tessara-s8b-rehearsal-conformance`; isolated live/restored | Passed |
+| 09 | Rehearsal `rehearsal-source-sync` | `rehearsal-conformance` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-source-sync` | `tessara-s8b-rehearsal-source-sync`; isolated live/restored | Passed |
+| 10 | Rehearsal `rehearsal-reverse-consumers` | `rehearsal-source-sync` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-reverse-consumers` | `tessara-s8b-rehearsal-reverse-consumers`; isolated live/restored | Passed |
+| 11 | Rehearsal `rehearsal-smoke` | `rehearsal-reverse-consumers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-smoke` | `tessara-s8b-rehearsal-smoke`; isolated live/restored | Passed |
+| 12 | Rehearsal `rehearsal-recovery` | `rehearsal-smoke` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-recovery` | `tessara-s8b-rehearsal-recovery`; isolated live/restored | Passed |
+| 13 | Rehearsal `rehearsal-upgrade` | `rehearsal-recovery` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-upgrade` | `tessara-s8b-rehearsal-upgrade`; isolated live/restored | Passed |
+| 14 | Rehearsal `rehearsal-uat` | `rehearsal-upgrade` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-candidate-rehearsal.ps1 -Lane rehearsal-uat` | `tessara-s8b-rehearsal-uat`; isolated live/restored | Passed |
+| 15 | Preflight `preflight-freeze` | `rehearsal-uat` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-validation-preflight.ps1` | `offline`; identity/evidence audit, emits `candidate.json` | Passed |
+| 16 | SIT `sit-static` | `preflight-freeze` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-static` | `offline`; bound to frozen `tessara-s8b-sit` identity | Passed |
+| 17 | SIT `sit-rust` | `sit-static` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-rust` | frozen `tessara-s8b-sit`; restored/checkpointed | Passed |
+| 18 | SIT `sit-browser` | `sit-rust` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-browser` | same frozen `tessara-s8b-sit`; restored/checkpointed | Passed |
+| 19 | SIT `sit-smoke` | `sit-browser` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-sit.ps1 -Lane sit-smoke` | same frozen `tessara-s8b-sit`; canonical restoration | Passed |
+| 20 | UAT `uat-scripted` | `sit-smoke` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-scripted` | `tessara-s8b-uat-scripted`; isolated live/restored | Passed |
+| 21 | UAT `uat-product` | `uat-scripted` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-product` | `tessara-s8b-uat-product`; isolated live/restored | Passed |
+| 22 | UAT `uat-materialization` | `uat-product` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-materialization` | `tessara-s8b-uat-materialization`; isolated live/restored | Passed |
+| 23 | UAT `uat-operations` | `uat-materialization` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-operations` | `tessara-s8b-uat-operations`; isolated live/restored | Passed |
+| 24 | UAT `uat-providers` | `uat-operations` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-providers` | `tessara-s8b-uat-providers`; isolated live/restored | Passed |
+| 25 | UAT `uat-reverse-consumers` | `uat-providers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-reverse-consumers` | `tessara-s8b-uat-reverse-consumers`; isolated live/restored | Passed |
+| 26 | UAT `uat-resource-resolution` | `uat-reverse-consumers` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-resource-resolution` | `tessara-s8b-uat-resource-resolution`; isolated live/restored | Passed |
+| 27 | UAT `uat-replay-refresh` | `uat-resource-resolution` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-replay-refresh` | `tessara-s8b-uat-replay-refresh`; isolated live/restored | Passed |
+| 28 | UAT `uat-crossmodule` | `uat-replay-refresh` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-crossmodule` | `tessara-s8b-uat-crossmodule`; isolated live/restored | Passed |
+| 29 | UAT `uat-subtraction` | `uat-crossmodule` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-subtraction` | `tessara-s8b-uat-subtraction`; isolated live/restored | Passed |
+| 30 | UAT `uat-recovery` | `uat-subtraction` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-recovery` | `tessara-s8b-uat-recovery`; isolated live/restored | Passed |
+| 31 | UAT `uat-upgrade` | `uat-recovery` | `pwsh -NoProfile -File .\scripts\run-sprint-8b-formal-uat.ps1 -Lane uat-upgrade` | `tessara-s8b-uat-upgrade`; isolated live/restored | Passed |
 
 Candidate Rehearsal is final pre-freeze certification of the mutable candidate
 composition. It is not an implementation loop, debugging lane, diagnostic
@@ -367,11 +391,12 @@ Required logical fixtures include:
   three Dataset resource-observation types; and
 - real Dataset `0.9.0` and `1.0.0` release/image/provenance fixtures.
 
-- Environment fingerprint: Not Recorded
-- Tool versions: Not Recorded
-- Reset authorization: Not Recorded
-- Fixture preparation receipts: Not Produced
-- Canonical restoration receipts: Not Produced
+- Environment fingerprints: authenticated per phase certificate and lane
+  receipt
+- Tool versions: retained in the sealed SIT and implementation evidence
+- Reset authorization: exact lane-scoped disposable reset authorization passed
+- Fixture preparation receipts: Produced
+- Canonical restoration receipts: Produced
 
 ## Acceptance Manifest And Test-Change Discipline
 
@@ -416,16 +441,17 @@ ordering is never fixture setup.
 
 ## Candidate Identity
 
-- Implementation commit: Not Frozen
-- Tree: Not Frozen
-- Dirty state: Must be false
-- Candidate fingerprint: Not Frozen
-- Acceptance-manifest/test-change-log/UAT-contract identity: Not Recorded
-- Deployment profile/configuration digest: Not Recorded
-- Migration/baseline identity: Not Recorded
+- Implementation commit: `83e8b123de315ed2c7186ec4f0586f5a03198131`
+- Tree: `ab0aa4449595045ffa02e4e8d435a7a9c7239880`
+- Dirty state at freeze and every candidate-bound phase: false
+- Candidate fingerprint:
+  `93c5b936807407b5a2007ccb1851d22a1d9a90bfc0cd84619637bbf080ac97f9`
+- Acceptance-manifest/test-change-log/UAT-contract identity: Recorded
+- Deployment profile/configuration digest: Recorded
+- Migration/baseline identity: Recorded
 - Expected provenance: exact Core, Supervisor, Dataset, Component, and
   Dashboard source/image/release labels
-- Observed image digests: Not Recorded
+- Observed image digests: Recorded
 
 ## Validation Readiness
 
@@ -433,12 +459,12 @@ ordering is never fixture setup.
 - Required input: passing current implementation-readiness result; clean
   source; exact contract hash; dependency/changed-path impact plan; authenticated
   environment/fixture/reset identities; complete target and acceptance mapping
-- Result receipt: Not Produced
-- Newly executed lanes: Not Selected
-- Authenticated inherited lanes: None at kickoff
-- Open defects: Not Assessed
-- Restoration: Not Run
-- Phase-local evidence index: Not Produced
+- Result receipt: Produced
+- Newly executed lanes: 3/3
+- Authenticated inherited lanes: None; complete execution was used
+- Open defects: 0
+- Restoration: Passed
+- Phase-local evidence index: Produced
 
 ## Candidate Rehearsal
 
@@ -447,28 +473,30 @@ ordering is never fixture setup.
   source-exact materialization, browser parity, conformance/nondisclosure,
   source synchronization/DAG closure, reverse consumers, deployed smoke,
   recovery, upgrade/rollback, and UAT readiness
-- Mutable source/environment identity: Not Recorded
-- Passing Readiness prerequisite: Not Available
-- Impact plan: Not Produced
-- Result receipt: Not Produced
-- Newly executed lanes: Not Selected
-- Authenticated inherited lanes: None at kickoff
-- Open defects: Not Assessed
-- Restoration: Not Run
-- Phase-local evidence index: Not Produced
+- Mutable source/environment identity: commit
+  `83e8b123de315ed2c7186ec4f0586f5a03198131`, tree
+  `ab0aa4449595045ffa02e4e8d435a7a9c7239880`
+- Passing Readiness prerequisite: Passed prerequisite
+- Impact plan: Produced
+- Result receipt: Produced
+- Newly executed lanes: 11/11
+- Authenticated inherited lanes: None; complete execution was used
+- Open defects: 0
+- Restoration: Passed
+- Phase-local evidence index: Produced
 
 ## Preflight
 
 - Exact command: `pwsh -NoProfile -File .\scripts\run-sprint-8b-validation-preflight.ps1`
-- Status: Not Run
+- Status: Passed
 - Required prerequisite: passing authenticated Readiness and Rehearsal compact
   certificates for the current source/environment with complete lane coverage,
   sealed indexes, zero open defects, and satisfied restoration
 - Required audit: environment/reset authority, changed-path impact,
   contract/inventory alignment, bootstrap/no-op/recovery commands, provenance,
   baseline, evidence paths, hashes, and candidate fingerprint inputs
-- `preflight-result.json`: Not Produced
-- `candidate.json`: Not Produced
+- `preflight-result.json`: Produced
+- `candidate.json`: Produced
 
 ## SIT
 
@@ -481,9 +509,9 @@ ordering is never fixture setup.
 - Deployed acceptance smoke: exact owner/provider/consumer route, provenance,
   health, outage, recovery, Dataset DAG generation, and Core subtraction; it
   belongs inside SIT
-- SIT result receipt: Not Produced
-- Canonical topology restoration: Not Run
-- Phase-local evidence index: Not Produced
+- SIT result receipt: Produced
+- Canonical topology restoration: Passed
+- Phase-local evidence index: Produced
 
 ## Manual UAT Inventory
 
@@ -493,22 +521,22 @@ the thematic UAT lanes retain the scenario's automated and manual evidence.
 
 | Scenario | Formal lane(s) | Role / start state | Actions and observable pass condition | Result |
 | --- | --- | --- | --- | --- |
-| `UAT-8B-01` Product parity and UI | `uat-product` | Dataset manager; healthy canonical topology | Author, preview, revise, publish, and inspect Dataset/batch/catalog behavior across direct/lifecycle routes, accepted light/dark responsive baselines, accessibility, hydration, and clean console. | Not Run |
-| `UAT-8B-02` Fresh materialization | `uat-materialization` | Operator; authenticated empty databases | Apply the owner topology, verify exact releases/instances, typed read-back, owner receipts, isolation, and gateway boundary; reapply unchanged input and observe semantic no-op. | Not Run |
-| `UAT-8B-03` Configuration and diagnostics | `uat-operations` | Administrator; healthy Dataset module | Validate/apply exact Manifest fields, reject unknown/coerced/partial input, and observe exact health plus sanitized dependency/freshness diagnostics through generic Module Management. | Not Run |
-| `UAT-8B-04` Provider contracts, cursor, scope, and Dataset DAG | `uat-providers`, `uat-replay-refresh` | Full, restricted, and disjoint actors; canonical source/Dataset chain | Invoke synchronous refresh; prove unchanged-head zero-page/no-mutation; apply new/corrected/status-out/status-in/redacted/deleted changes over ordered and authorized-empty pages; interrupt/retry and race refresh; perform expired-cursor full rebase. Change `dataset.base` and observe base/derived/second-hop plus Component/Dashboard in one generation while independent binding stays stable; reject a cycle before staging; inject derived failure and prove whole closure/cursor/receipt rollback and prior last-good downstream result; preserve nondisclosure. | Not Run |
-| `UAT-8B-05` Cross-module exit and outage | `uat-crossmodule` | Authorized actor; healthy independent processes | Preview Dataset, execute Component, view Dashboard, stop Dataset/source provider, observe coherent exact degradation, restore, and observe healthy convergence without new authority. | Not Run |
-| `UAT-8B-06` Core subtraction/isolation | `uat-subtraction` | Operator; healthy topology | Prove exactly four Core transitions, one Dataset enrollment/navigation item, no active Core Dataset schema/adapter/payload/reverse SQL, owner-local analytics projection, separate analytics authority, and pairwise credential/database denial. | Not Run |
-| `UAT-8B-07` Failure retry and recovery | `uat-recovery` | Operator; deterministic pre-write and mid-apply fault profiles | Inspect retained failure, prove no unauthorized state, remove exact partial topology, execute clean successor apply and no-op, and restore canonical health without manual product repair. | Not Run |
-| `UAT-8B-08` Independent upgrade/rollback | `uat-upgrade` | Operator; real Dataset `0.9.0` baseline | Upgrade to `1.0.0`, roll back to `0.9.0`, restore `1.0.0`, and prove Dataset state/provider route preserved with unrelated owner images/containers/restarts/data/navigation unchanged and no Core fallback. | Not Run |
-| `UAT-8B-09` Editor provider boundaries | `uat-product`, `uat-providers` | Dataset manager; direct and lifecycle documents | Exercise Form/version pickers, rendered schema options, scope tree, principal labels, hydration, dirty navigation, and each isolated provider fault. Network evidence shows browser calls only Dataset routes; typed state remains intentional and unsaved input survives. | Not Run |
-| `UAT-8B-10` Reverse consumers and Operations | `uat-operations`, `uat-reverse-consumers` | Authorized and disjoint actors; populated and empty fixtures | Inspect Form Dataset Sources, `/operations` Dataset readiness/attention, and app summary. Prove scoped results, authorized empty versus undisclosed, explicit unavailable rather than false zero, unrelated content usable during outage, and exact recovery. | Not Run |
-| `UAT-8B-11` Resource, replay, and routing | `uat-resource-resolution`, `uat-replay-refresh` | Authorized/restricted actors; representative persistent mutations | Resolve/observe all three Dataset v2 resource types and compare wrong-owner/v1/known-restricted/random cases; retry create/update/publish/refresh representatives after commit-before-response loss; reject changed replay input and private nonce reuse; prove `/datasets/new`, `/sql-preview`, `/refresh`, and editor-option routes are never captured as Dataset IDs. | Not Run |
+| `UAT-8B-01` Product parity and UI | `uat-product` | Dataset manager; healthy canonical topology | Author, preview, revise, publish, and inspect Dataset/batch/catalog behavior across direct/lifecycle routes, accepted light/dark responsive baselines, accessibility, hydration, and clean console. | Passed |
+| `UAT-8B-02` Fresh materialization | `uat-materialization` | Operator; authenticated empty databases | Apply the owner topology, verify exact releases/instances, typed read-back, owner receipts, isolation, and gateway boundary; reapply unchanged input and observe semantic no-op. | Passed |
+| `UAT-8B-03` Configuration and diagnostics | `uat-operations` | Administrator; healthy Dataset module | Validate/apply exact Manifest fields, reject unknown/coerced/partial input, and observe exact health plus sanitized dependency/freshness diagnostics through generic Module Management. | Passed |
+| `UAT-8B-04` Provider contracts, cursor, scope, and Dataset DAG | `uat-providers`, `uat-replay-refresh` | Full, restricted, and disjoint actors; canonical source/Dataset chain | Invoke synchronous refresh; prove unchanged-head zero-page/no-mutation; apply new/corrected/status-out/status-in/redacted/deleted changes over ordered and authorized-empty pages; interrupt/retry and race refresh; perform expired-cursor full rebase. Change `dataset.base` and observe base/derived/second-hop plus Component/Dashboard in one generation while independent binding stays stable; reject a cycle before staging; inject derived failure and prove whole closure/cursor/receipt rollback and prior last-good downstream result; preserve nondisclosure. | Passed |
+| `UAT-8B-05` Cross-module exit and outage | `uat-crossmodule` | Authorized actor; healthy independent processes | Preview Dataset, execute Component, view Dashboard, stop Dataset/source provider, observe coherent exact degradation, restore, and observe healthy convergence without new authority. | Passed |
+| `UAT-8B-06` Core subtraction/isolation | `uat-subtraction` | Operator; healthy topology | Prove exactly four Core transitions, one Dataset enrollment/navigation item, no active Core Dataset schema/adapter/payload/reverse SQL, owner-local analytics projection, separate analytics authority, and pairwise credential/database denial. | Passed |
+| `UAT-8B-07` Failure retry and recovery | `uat-recovery` | Operator; deterministic pre-write and mid-apply fault profiles | Inspect retained failure, prove no unauthorized state, remove exact partial topology, execute clean successor apply and no-op, and restore canonical health without manual product repair. | Passed |
+| `UAT-8B-08` Independent upgrade/rollback | `uat-upgrade` | Operator; real Dataset `0.9.0` baseline | Upgrade to `1.0.0`, roll back to `0.9.0`, restore `1.0.0`, and prove Dataset state/provider route preserved with unrelated owner images/containers/restarts/data/navigation unchanged and no Core fallback. | Passed |
+| `UAT-8B-09` Editor provider boundaries | `uat-product`, `uat-providers` | Dataset manager; direct and lifecycle documents | Exercise Form/version pickers, rendered schema options, scope tree, principal labels, hydration, dirty navigation, and each isolated provider fault. Network evidence shows browser calls only Dataset routes; typed state remains intentional and unsaved input survives. | Passed |
+| `UAT-8B-10` Reverse consumers and Operations | `uat-operations`, `uat-reverse-consumers` | Authorized and disjoint actors; populated and empty fixtures | Inspect Form Dataset Sources, `/operations` Dataset readiness/attention, and app summary. Prove scoped results, authorized empty versus undisclosed, explicit unavailable rather than false zero, unrelated content usable during outage, and exact recovery. | Passed |
+| `UAT-8B-11` Resource, replay, and routing | `uat-resource-resolution`, `uat-replay-refresh` | Authorized/restricted actors; representative persistent mutations | Resolve/observe all three Dataset v2 resource types and compare wrong-owner/v1/known-restricted/random cases; retry create/update/publish/refresh representatives after commit-before-response loss; reject changed replay input and private nonce reuse; prove `/datasets/new`, `/sql-preview`, `/refresh`, and editor-option routes are never captured as Dataset IDs. | Passed |
 
-- UAT result receipt: Not Produced
-- Manual scenario evidence count: 0 / 11
-- Final topology restoration: Not Run
-- Phase-local evidence index: Not Produced
+- UAT result receipt: Produced
+- Manual scenario evidence count: 11 / 11
+- Final topology restoration: Passed
+- Phase-local evidence index: Produced
 
 ## Dependency-Impact And Invalidation Proof
 
@@ -582,27 +610,38 @@ candidate, authorize SIT/UAT, or authorize closeout.
 
 ## Evidence Integrity
 
-- Compact phase certificates authenticate: Not Produced
-- Phase-local indexes parse, reconcile, seal, and hash: Not Produced
-- Raw evidence retained cold under ignored `artifacts/sprint-8b-closeout/`: Planned
-- Routine downstream authorization consumes certificates/index hashes without
-  recursively reopening raw evidence: Required
-- Final complete integrity audit across all sealed indexes: Not Run
-- Evidence-chain SHA-256: Not Recorded
+- Compact phase certificates authenticate: Passed — Implementation Readiness,
+  Validation Readiness, Candidate Rehearsal, Preflight, SIT, and UAT.
+- Phase-local indexes parse, reconcile, seal, and hash: Passed — 6 indexes.
+- Raw evidence retained cold under ignored `artifacts/sprint-8b-closeout/`:
+  840 authenticated artifacts.
+- Routine downstream authorization consumed certificate and index hashes; raw
+  evidence was opened once for the final full-integrity audit.
+- Final complete integrity audit across all sealed indexes: Passed at closeout.
+- Evidence-chain SHA-256:
+  `06b3fe97bcb6d1a702a0076f9f6fff33aa2541b747eeb5f86c3374e8434981d2`.
 
 ## Closeout Authorization
 
-- Status: Not Authorized
-- Authorization receipt: Not Produced
-- Authorized candidate/fingerprint: None
-- SIT passed: No
-- UAT passed: No
-- Acceptance mapping complete: Planned, not evidenced
-- Invalidation decisions satisfied: N/A at kickoff
-- Unresolved product decisions: None at kickoff
-- Intended active route/slot: Dataset `1.0.0`, exact route selected by applied
-  Blueprint
-- Application health: Not Assessed
-- Evidence source commit: Not Recorded
-- Documentation commit: Not Recorded
-- Authorization timestamp: None
+- Status: Authorized
+- Authorization receipt:
+  `artifacts/sprint-8b-closeout/runs/83e8b123/closeout-authorization.json`
+- Authorization SHA-256:
+  `513301d0a32f127d1c169898391ad99b697bb0ea1b2376644c9df9bfb8a8e2c3`
+- Authorized candidate fingerprint:
+  `93c5b936807407b5a2007ccb1851d22a1d9a90bfc0cd84619637bbf080ac97f9`
+- SIT passed: Yes — 4/4 candidate-bound lanes.
+- UAT passed: Yes — 12/12 lanes and all 11 manual scenarios.
+- Acceptance mapping complete: Yes — `ac-01` through `ac-26` and the roadmap
+  exit condition map to implementation, formal, deployed, and manual proof.
+- Invalidation decisions satisfied: Yes — complete chronology passed with 0
+  unresolved records.
+- Unresolved product decisions: None.
+- Intended active route/slot: Dataset `1.0.0`, exact route selected by the
+  applied Reference Blueprint.
+- Application health: Passed — retained reviewer topology
+  `tessara-s8b-uat-manual` at `http://127.0.0.1:49452`.
+- Evidence source commit:
+  `83e8b123de315ed2c7186ec4f0586f5a03198131`.
+- Documentation commit: recorded after this closeout-only documentation commit.
+- Authorization timestamp: retained in the authorization receipt.

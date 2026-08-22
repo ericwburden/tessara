@@ -1,11 +1,14 @@
 # Sprint 8B: Dataset Module Separation Slice
 
-Status: Kickoff complete; implementation has not started.
+Status: Complete. Implementation commit `83e8b123de315ed2c7186ec4f0586f5a03198131`
+passed all 24 implementation targets, Validation Readiness, Candidate
+Rehearsal, Preflight, complete SIT, and complete UAT. Closeout authorization is
+retained under `artifacts/sprint-8b-closeout/runs/83e8b123/`.
 
 - Branch: `codex/sprint-8b`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8b`
 - Base commit: `5856576f6d25e510d8ced466a8942cc8a313eeac`
-- Roadmap authority: `Sprint 8B: Dataset Module Separation Slice (Next)`
+- Roadmap authority: `Sprint 8B: Dataset Module Separation Slice (Complete)`
 - Validation policy: `tessara-validation-v2`
 - Validation record: `docs/sprints/sprint-8b-verification.md`
 - Validation contract: `docs/sprints/sprint-8b-validation-contract.json`

@@ -6876,3 +6876,174 @@ Next UI steps:
 - Removed recorded publisher-verification input from the current `tessara-deploy apply` workflow and changed UI readback from `verified` to explicit `curated release` provenance so the product does not overstate its trust evidence.
 - Rebuilt the Sprint 6B1 images, deleted the development PostgreSQL volume, recreated the cluster from the then-current pre-closeout migrations, and reran live install/upgrade/rollback/outage/recovery acceptance against the fresh schema. The closeout candidate subsequently squashes that schema into one baseline and replaces this intermediate evidence.
 - Closeout remains gated only on persisting the complete curated `ModuleManifestV1` for real releases and projecting it through descriptor download plus the preserved Declarations, Contracts, Capabilities, Dependencies, Resources, and Navigation tabs. The current sanitized read model proves lifecycle/deployment behavior but its explanatory tab placeholders are not final accepted Screen B behavior.
+## 2026-08-22 - Sprint 8B Dataset Module Separation Closeout
+
+- Status: Complete and authorized for closeout.
+- Completed:
+  - extracted Dataset UI, API, authoring, revision, execution,
+    materialization, persistence, configuration, diagnostics, routes, assets,
+    bootstrap, and operational status into independently deployed
+    `tessara.datasets` `1.0.0`;
+  - advanced the Module Instance-owned Dataset major-line contract to `2.0.0`
+    and cut Component, Dashboard, Core reverse consumers, and generic resource
+    observation over to typed Dataset-owned contracts;
+  - replaced cross-owner Response/Form/scope/principal reads with exact signed
+    providers and a transactional monotonic Response change cursor;
+  - rebuilt the Reference application from empty owner databases and removed
+    active Core Dataset routes, storage, adapters, reverse SQL, and credentials;
+  - preserved the canonical shared shell and Dataset directory, authoring,
+    preview, revision, status, configuration, diagnostics, responsive,
+    accessibility, SSR, hydration, and lifecycle behavior;
+  - proved clean materialization, semantic no-op, atomic Dataset dependency-DAG
+    promotion, deterministic recovery, nondisclosure, idempotent replay,
+    source isolation, and independent `0.9.0 -> 1.0.0 -> 0.9.0 -> 1.0.0`
+    upgrade/rollback.
+- Validation:
+  - Evidence-source implementation commit:
+    `83e8b123de315ed2c7186ec4f0586f5a03198131`;
+  - Evidence-source tree: `ab0aa4449595045ffa02e4e8d435a7a9c7239880`;
+  - Candidate fingerprint:
+    `93c5b936807407b5a2007ccb1851d22a1d9a90bfc0cd84619637bbf080ac97f9`;
+  - Implementation Readiness: 24/24 targets passed;
+  - Validation Readiness: 3/3 lanes passed;
+  - Candidate Rehearsal: 11/11 lanes passed;
+  - Preflight: passed and froze the exact candidate;
+  - SIT: 4/4 lanes passed, including complete locked/offline Rust and browser
+    inventories plus deployed smoke;
+  - UAT: 12/12 lanes and all 11 manual scenarios passed after SIT;
+  - defect chronology: 23 records, 0 unresolved;
+  - final integrity audit: 6 phase indexes and 840 cold artifacts passed;
+  - evidence-chain SHA-256:
+    `06b3fe97bcb6d1a702a0076f9f6fff33aa2541b747eeb5f86c3374e8434981d2`;
+  - closeout-authorization SHA-256:
+    `513301d0a32f127d1c169898391ad99b697bb0ea1b2376644c9df9bfb8a8e2c3`.
+- Active release: `tessara.datasets` `1.0.0`, Dataset contract `2.0.0`,
+  Component `1.1.0`, Dashboard `3.0.2`.
+- Reviewer topology: `tessara-s8b-uat-manual` remains healthy and reachable at
+  `http://127.0.0.1:49452`.
+- Closeout documentation: `PENDING_CLOSEOUT_DOCUMENTATION_COMMIT` (this
+  documentation-only change; no image rebuild required).
+- Next Sprint: Sprint 8C Response Module Separation Slice.
+
+### Sprint Handoff / Demo Instructions
+
+#### Dataset Authoring, Preview, Revision, And Refresh
+
+- Role: Dataset manager.
+- Account: `dataset-manager@tessara.local` / `sprint-8b-dataset-manager`.
+- Paths:
+  - `http://127.0.0.1:49452/datasets`
+  - `http://127.0.0.1:49452/datasets/new`
+- Steps:
+  1. Sign in and open Datasets.
+  2. Inspect Base Responses, Derived Responses, Derived Second Hop, and
+     Independent Responses.
+  3. Open a Dataset and review Preview, Sources, Fields, Tags, Provenance, SQL,
+     freshness, and revision history.
+  4. Create or edit a Dataset using Primary Responses, open Generated SQL,
+     preview the definition, save, publish, and use Refresh now.
+- Expected: Dataset-owned pages retain the shared shell; provider-backed
+  options and SQL are available; materialized rows and readable timestamps fit
+  their panels; refresh preserves one coherent last-good generation.
+- Acceptance check: pass only if authoring, preview, save/publish, revision,
+  refresh, direct navigation, and lifecycle navigation succeed without Core
+  Dataset API traffic or console errors.
+- Evidence: `UAT-8B-01`, `UAT-8B-04`, and `UAT-8B-09` under
+  `artifacts/sprint-8b-closeout/runs/83e8b123/uat/`.
+
+#### Cross-Module Dataset To Component To Dashboard
+
+- Role: scoped full reader.
+- Account: `full-reader@tessara.local` / `sprint-8b-full-reader`.
+- Paths:
+  - `http://127.0.0.1:49452/components`
+  - `http://127.0.0.1:49452/dashboards`
+- Steps:
+  1. Open Dataset Table, Dataset Chart, and Dataset Row Count Components.
+  2. Open the Dataset Components Dashboard.
+  3. Compare the Component and Dashboard results with the Base Responses
+     Dataset preview.
+- Expected: all three owners show the same authorized Dataset result across
+  separate module processes/databases; the disjoint placement is redacted.
+- Acceptance check: pass only if the Dashboard renders its authorized
+  Component placements, discloses no disjoint Dataset metadata, and uses
+  Module Instance-owned Dataset v2 references.
+- Evidence: `UAT-8B-05`, `UAT-8B-06`, and `UAT-8B-11`.
+
+#### Dataset Configuration, Readiness, And Diagnostics
+
+- Role: administrator.
+- Path:
+  `http://127.0.0.1:49452/administration/modules/tessara.datasets#diagnostics`
+- Steps:
+  1. Open the Dataset Module Instance in Module Management.
+  2. Review configuration, liveness/readiness, dependency observations,
+     materialization freshness, and sanitized diagnostics.
+  3. Confirm the selected Release is `1.0.0` and the Dataset contract is
+     `2.0.0`.
+- Expected: ready/degraded/not-ready states are coherent and diagnostics expose
+  stable sanitized codes without credentials, raw provider bodies, or product
+  rows.
+- Acceptance check: pass only if valid configuration is observable, invalid
+  configuration fails atomically, and the healthy retained topology reports
+  the exact selected Dataset release.
+- Evidence: `UAT-8B-03` and `UAT-8B-10`.
+
+#### Constrained Non-Admin Nondisclosure
+
+- Role: disjoint reader.
+- Account: `disjoint-reader@tessara.local` / `sprint-8b-disjoint-reader`.
+- Path: `http://127.0.0.1:49452/datasets`.
+- Steps:
+  1. Sign in as the disjoint reader and inspect the Dataset directory.
+  2. Attempt the same known restricted and random Dataset resource paths used
+     by the retained scenario evidence.
+- Expected: the reader sees only authorized scope; known restricted and random
+  inputs are indistinguishable and disclose no titles, schema, counts, or
+  values.
+- Acceptance check: fail on any metadata distinction or cross-scope value.
+- Evidence: `UAT-8B-04`, `UAT-8B-05`, and `UAT-8B-11`.
+
+### Acceptance Mapping
+
+- Roadmap build — move all Dataset product and operational ownership:
+  demonstrated by Dataset Authoring/Preview/Revision and Module Diagnostics;
+  automated by `owner-product`, `ui-sdk-conformance`, `sit-rust`,
+  `sit-browser`, `uat-product`, and `uat-operations`.
+- Roadmap build — fresh Dataset database, new Module Instance references, and
+  no Core adapter/old references: demonstrated by the Reference topology and
+  cross-module paths; automated by `migration-seed`, `core-subtraction`,
+  `clean-materialization`, `sit-static`, `sit-smoke`, `uat-materialization`,
+  and `uat-subtraction`.
+- Roadmap build — replace Response/other source-table reads with versioned
+  source contracts: demonstrated by provider-backed authoring and refresh;
+  automated by `response-export-contract`, `response-incremental-sync`,
+  `ui-provider-boundaries`, `sit-rust`, `uat-providers`, and
+  `uat-replay-refresh`.
+- Roadmap build — preserve Dataset-to-Component contracts and scoped execution:
+  demonstrated by Dataset Table/Chart/Row Count and Dataset Components;
+  automated by `consumer-cutover`, `resource-resolution`, `sit-smoke`, and
+  `uat-crossmodule`.
+- Roadmap build — retain Dataset batch/catalog/template ownership: demonstrated
+  in Dataset authoring and directory behavior; automated by `owner-product`,
+  `fixture-acceptance`, `rehearsal-rust`, `sit-browser`, and `uat-product`.
+- Roadmap build — rebuild canonical seed through owners with no foreign storage:
+  demonstrated by the retained from-empty Reference topology; automated by
+  `migration-seed`, `clean-materialization`, `core-subtraction`,
+  `uat-materialization`, and `uat-subtraction`.
+- Roadmap build — retry, outage, scope, and compatibility coverage:
+  demonstrated by refresh, constrained-reader, diagnostics, and cross-module
+  recovery; automated by `failure-recovery`, `dataset-refresh-dag`,
+  `deployed-smoke`, `uat-providers`, `uat-recovery`, and `uat-upgrade`.
+- Roadmap UI — unchanged Dataset surfaces through the shared shell:
+  demonstrated by Dataset Authoring and Module Diagnostics; automated by
+  `ui-sdk-conformance`, `rehearsal-browser`, `sit-browser`, `uat-product`, and
+  `uat-operations`.
+- Roadmap exit condition — “a tester can materialize and preview a Dataset from
+  a provider contract, execute a Component over it, and view the result on a
+  Dashboard across independently deployed modules”: demonstrated by the first
+  two handoff flows; automated by `clean-materialization`, `consumer-cutover`,
+  `deployed-smoke`, `sit-smoke`, and `uat-crossmodule`.
+- Authoritative evidence identity for every mapping:
+  `83e8b123de315ed2c7186ec4f0586f5a03198131` /
+  `93c5b936807407b5a2007ccb1851d22a1d9a90bfc0cd84619637bbf080ac97f9`.
