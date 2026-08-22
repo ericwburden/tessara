@@ -268,3 +268,22 @@ The old failed attempt is never retried or rewritten. If current impact policy
 requires an earlier certificate because the validation-platform source identity
 changed, that authenticated boundary takes precedence automatically; no
 separate user authorization pause is required.
+
+### 2026-08-22 browser-batch finalization and order correction
+
+The first formal exercise of the per-file runner retained two distinct failures.
+The visual batch ran before the functional Dataset refresh because the wrapper
+used raw manifest order instead of the already-approved functional-then-visual
+sequence; its preview therefore correctly still showed the initial Response
+snapshot while the unchanged visual assertion required the post-refresh
+`Corrected complete values` row. After all eleven files had run fail-late, the
+wrapper then failed evidence assembly because JSON-style `true`/`false` tokens
+were evaluated as PowerShell commands. Exact topology teardown still passed.
+
+Both findings are validation-platform lifecycle defects governed by `ac-03`,
+`ac-04`, `ac-19`, `ac-20`, and `gate-implementation-exit`. The bounded
+correction retains every application assertion and all 95 identities, restores
+the established ten-functional-files-then-visual order, continues to start a
+fresh Playwright/Chromium process for every file, and emits real PowerShell
+booleans in the authenticated result. It changes no product behavior, Reference
+fixture meaning, snapshot, retry policy, timeout, or acceptance baseline.

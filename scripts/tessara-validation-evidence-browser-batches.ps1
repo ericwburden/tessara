@@ -89,9 +89,17 @@ function Read-AcceptanceManifest {
     if ($total -ne [int]$manifest.expected_total) {
         throw "Browser-batch manifest lists $total identities, expected $($manifest.expected_total)."
     }
+    $visualPath = "module-ui-visual.spec.ts"
+    if (-not $paths.Contains($visualPath)) {
+        throw "Browser-batch manifest must contain the canonical visual inventory '$visualPath'."
+    }
+    $orderedPaths = @(
+        @($manifest.files | ForEach-Object { ([string]$_.path).Replace("\", "/") }) |
+            Where-Object { $_ -cne $visualPath }
+    ) + @($visualPath)
     return [pscustomobject]@{
         Document = $manifest
-        Paths = @($manifest.files | ForEach-Object { ([string]$_.path).Replace("\", "/") })
+        Paths = $orderedPaths
         Identities = $identities
         Total = $total
     }
@@ -266,7 +274,8 @@ try {
     $probePath = Join-Path $temporaryRoot "platform-probe.json"
     $probe = Invoke-SyntheticBrowserLifecycle -BatchPaths $inventory.Paths -OutputPath $probePath
     if ($SelfTest) {
-        if ($inventory.Total -ne 95 -or $inventory.Paths.Count -ne 11) {
+        if ($inventory.Total -ne 95 -or $inventory.Paths.Count -ne 11 -or
+            $inventory.Paths[-1] -cne "module-ui-visual.spec.ts") {
             throw "Browser lifecycle self-test requires the exact current 95-test, 11-file inventory."
         }
         $syntheticReport = [ordered]@{
@@ -432,11 +441,12 @@ try {
         sprint = "sprint-8b"
         state = $state
         execution_policy = [ordered]@{
-            one_fresh_browser_process_per_manifest_file = true
+            one_fresh_browser_process_per_manifest_file = $true
+            established_functional_sequence_then_visual = $true
             workers = 1
             retries = 0
-            fail_late_across_batches = true
-            snapshot_update = false
+            fail_late_across_batches = $true
+            snapshot_update = $false
         }
         expected_data_state = $ExpectedDataState
         manifest = [ordered]@{ path = $ManifestPath.Replace("\", "/"); sha256 = Get-Sha256File -Path $manifestFullPath }
