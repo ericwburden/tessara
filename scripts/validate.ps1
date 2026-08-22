@@ -1,13 +1,15 @@
 [CmdletBinding()]
 param(
     [switch]$Fast,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$RetainCargoTarget
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $PSScriptRoot "tessara-cargo-build-policy.psm1") -Force
 $fullValidationDatabaseEnvironmentNames = @(
     "TEST_API_DATABASE_URL",
     "TEST_API_FRESH_DATABASE_URL",
@@ -252,19 +254,32 @@ function Clear-TessaraWebTestArtifacts {
         throw "Cleaning tessara-web package failed with exit code $LASTEXITCODE"
     }
 
-    Remove-Item -Force .\target\debug\deps\*.pdb -ErrorAction SilentlyContinue
-    Remove-Item -Force .\target\debug\deps\*.exe -ErrorAction SilentlyContinue
+    $cargoTarget = if ([string]::IsNullOrWhiteSpace($env:CARGO_TARGET_DIR)) {
+        Join-Path $repoRoot "target"
+    } else {
+        $env:CARGO_TARGET_DIR
+    }
+    Remove-Item -Force (Join-Path $cargoTarget "debug\deps\*.pdb") -ErrorAction SilentlyContinue
+    Remove-Item -Force (Join-Path $cargoTarget "debug\deps\*.exe") -ErrorAction SilentlyContinue
 
     $elapsed = (Get-Date) - $startedAt
     Write-Host ("Cleaned in {0:mm\:ss}" -f $elapsed) -ForegroundColor Green
 }
 
 if ($SelfTest) {
+    if ($RetainCargoTarget) {
+        throw "-RetainCargoTarget is not valid with -SelfTest."
+    }
     Invoke-TessaraValidationPreflightSelfTest
     return
 }
 
+if ($Fast -and $RetainCargoTarget) {
+    throw "-RetainCargoTarget applies only to full validation; fast validation uses the developer target."
+}
+
 Push-Location $repoRoot
+$cargoPolicyState = $null
 try {
     if ($Fast) {
         Write-Host "Running fast Tessara validation. Use .\scripts\validate.ps1 for the full pre-commit matrix." -ForegroundColor Yellow
@@ -280,6 +295,12 @@ try {
         }
         [void](Assert-TessaraFullValidationDatabaseEnvironment `
             -Environment $validationEnvironment)
+        $cargoPolicyMode = if ($RetainCargoTarget) { "Diagnostic" } else { "Validation" }
+        $cargoPolicyState = Enter-TessaraCargoBuildPolicy `
+            -Lane "full-validation" `
+            -RepositoryRoot $repoRoot `
+            -Mode $cargoPolicyMode `
+            -RetainTarget:$RetainCargoTarget
     }
 
     Invoke-CheckedStep -Label "Acceptance PowerShell contracts" -Command {
@@ -298,6 +319,13 @@ try {
         }
         & .\scripts\validate.ps1 -SelfTest
         if (-not $?) { throw "validation preflight self-test failed" }
+        & pwsh `
+            -NoProfile `
+            -File .\scripts\test-tessara-cargo-build-policy.ps1 `
+            -SelfTest
+        if ($LASTEXITCODE -ne 0) {
+            throw "Cargo build policy self-test failed with exit code $LASTEXITCODE"
+        }
         & .\scripts\local-launch.ps1 -SelfTest
         if ($LASTEXITCODE -ne 0) { throw "local-launch self-test failed with exit code $LASTEXITCODE" }
         & .\scripts\capture-sprint-6a-deployment-evidence.ps1 -SelfTest
@@ -431,5 +459,11 @@ try {
 
     Write-Host "`nValidation passed." -ForegroundColor Green
 } finally {
-    Pop-Location
+    try {
+        if ($null -ne $cargoPolicyState) {
+            Exit-TessaraCargoBuildPolicy -State $cargoPolicyState
+        }
+    } finally {
+        Pop-Location
+    }
 }

@@ -7,6 +7,57 @@ required by the current multi-process baseline. Components, Dashboard, and
 Scoped Records are independently built and deployed modules; their work is not
 validated as a root-web-only change.
 
+## Cargo Build Storage Policy
+
+Cargo build products are reproducible working data, not retained validation
+evidence. Use one of these three modes:
+
+- **Development:** the worktree-local `target` directory is reusable and
+  incremental compilation remains enabled for the active inner loop. Do not
+  share this directory with another worktree or concurrent Cargo process.
+- **Validation:** a complete validation lane uses one unique explicit
+  `CARGO_TARGET_DIR`, `CARGO_INCREMENTAL=0`, and
+  `CARGO_PROFILE_TEST_DEBUG=0`. All sequential Cargo commands in that lane
+  reuse that one directory. The runner cleans it in `finally`, whether the lane
+  passes or fails; logs, receipts, and evidence remain under `artifacts/`.
+- **Diagnostic:** an isolated target may retain level-1 test debug information
+  only when investigating a compiler, linker, symbol, or test-binary failure.
+  Retention must be explicit, and the reported target path must be removed when
+  the investigation ends.
+
+`scripts/tessara-cargo-build-policy.psm1` is the canonical validation-platform
+implementation for Cargo build-storage lifecycle. Its contract is
+`tessara.validation.cargo-build-policy`; release `1.0.0` publishes the exact
+module SHA-256 through `Get-TessaraCargoBuildPolicyIdentity` and prints it for
+every entered lane. The ownership and adapter map are recorded in the
+[validation-platform architecture](./architecture/validation-platform.md).
+
+`scripts/validate.ps1` is the first current consumer and applies the policy to
+its full gate. `-Fast` remains an active-development loop and therefore reuses
+the worktree target. `-RetainCargoTarget` changes a full run to explicit
+diagnostic mode and prints the retained path and policy fingerprint. Closed
+sprint runners retain their historical implementation/evidence identity; every
+new active sprint adapter must consume the platform release instead of copying
+this lifecycle.
+
+Before creating an isolated validation target, the policy requires at least
+20 GB free on its volume. New validation runners must enter the policy once
+around their complete sequential Cargo lane and exit it from `finally`; they
+must not create a fresh target for every individual Cargo command. Independent
+parallel Cargo lanes still require distinct target directories.
+
+Cleanup is authorized by a private active lease, the exact generated target
+name, an authenticated marker, and an ordinary path chain without reparse
+points. A path prefix or caller-supplied state is not sufficient authority.
+`scripts/test-tessara-cargo-build-policy.ps1 -SelfTest` certifies this lifecycle
+against a synthetic temporary Cargo crate without running Tessara application
+tests.
+
+At sprint closeout, remove the closed worktree's Cargo output with
+`cargo clean --manifest-path <worktree>/Cargo.toml`. Never manually delete a
+target path that has not first been resolved to the intended worktree, and do
+not clean while Cargo or `rustc` is active for that target.
+
 ## Recommended Loops
 
 ### Fast loop: host-run Tessara with Docker Postgres

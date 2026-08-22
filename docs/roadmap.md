@@ -1294,6 +1294,32 @@ and one authenticated environment. Closeout authorization is retained under
 
 **User-testable exit condition:** a tester can materialize and preview a Dataset from a provider contract, execute a Component over it, and view the result on a Dashboard across independently deployed modules.
 
+### Post-Sprint 8B: Validation Platform Separation (In Progress)
+
+**Outcome:** validation lifecycle and evidence mechanics have independent
+ownership, release identity, and synthetic certification, while application
+acceptance and sprint adapters remain declarative consumers.
+
+**Build:**
+
+- establish the three-owner application-acceptance, validation-platform, and
+  sprint-adapter boundary in
+  [the validation-platform architecture](./architecture/validation-platform.md)
+- version and fingerprint the canonical Cargo build-storage lifecycle, bind
+  cleanup to an exact active lease and authenticated target marker, and prove
+  it with an application-independent adversarial suite
+- begin the forward-only extraction of process, topology, cleanup, restoration,
+  and evidence publication from `scripts/uat-sprint-8b.ps1`
+- maintain independent application-candidate, acceptance-contract, and
+  validation-platform fingerprints with precise impact mapping
+- preserve application reruns whenever assertions, fixtures, product
+  interfaces, acceptance meaning, or application behavior change
+
+**Exit condition:** synthetic platform certification proves lifecycle, failure,
+interruption, cleanup/restoration, and evidence finalization without running
+Tessara application suites; one active sprint adapter consumes the canonical
+platform boundary without retaining duplicate lifecycle code.
+
 ### Sprint 8C: Response Module Separation Slice (Next)
 
 **Outcome:** Responses is independently deployed and exposes captured data without sharing its persistence.
