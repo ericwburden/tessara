@@ -1,9 +1,10 @@
 # Validation Platform Foundation Verification
 
-Status: implementation verification complete for platform release `2.0.0`;
-independent diversion closeout is pending the clean source-exact full gate. This
-record is non-authoritative
-implementation evidence; it does not
+Status: independent diversion closeout complete for platform release `2.0.0`
+on source-exact candidate commit
+`cd5355f01bd01e3f32a91595bb7019bc153516e8`, tree
+`b6fccdd3a14e8ae55c6e345bb50706a5fab267a1`. This record is implementation
+closeout evidence; it does not
 replace Validation Readiness, Candidate Rehearsal, SIT, UAT, or sprint
 closeout, and it does not close the residual gates below.
 
@@ -28,7 +29,7 @@ The current diagnostic implementation proofs are:
 | `markdown-link-check` | Passed after closeout-contract publication |
 | `platform-synthetic-certification` | Passed the complete release-2 fault matrix |
 | `platform-live-docker-certification` | Passed on Docker 29.6.1 with zero residue |
-| `full-repository-validation` | The first diagnostic stopped before product actions on a live-PostgreSQL boolean-shape harness defect. The clean successor attempt passed every target through the general API partition, then exposed blank Cargo output framing that the exact-test helper rejected before launching the enrollment proof. Both harness defects now have passing focused reproducers; another broad run remains blocked until the second correction is committed cleanly. |
+| `full-repository-validation` | Passed on clean candidate `cd5355f0`, including the complete database-backed repository gate, warnings-denied Clippy, exact enrollment/SQLx/release-timing proofs, all Dataset targets, and the final destructive fresh-baseline proof |
 
 These are implementation diagnostics, not phase certificates. The failed
 database-backed diagnostics and their corrected provenance chronology are
@@ -48,9 +49,33 @@ blank separator line reached an exact-test helper whose parameter allowed an
 empty collection but not an empty string, so PowerShell rejected the output
 before the enrollment assertion launched. The helper now accepts blank framing
 while retaining exact-one list and pass-summary checks, and its focused
-warning-free self-test passes. Candidate freeze remains blocked until this
-second correction is committed cleanly and the complete database-backed target
-passes on that exact source. No formal lifecycle attempt has started.
+warning-free self-test passes. The correction was committed cleanly, and the
+complete database-backed target then passed on that exact source. No formal
+lifecycle attempt was needed for this independent implementation closeout, and
+no Sprint 8C adapter, source, or evidence participated.
+
+## Independent closeout evidence
+
+- Full repository validation:
+  `artifacts/validation-platform-closeout/implementation-full-cd5355f0-20260823T193918735Z/full-validation.log`,
+  SHA-256
+  `26ae2ccc9d65d68ae6901bea95a97966b0e898135767c774391adfda64c74dd3`.
+- Exact-candidate live-Docker certification:
+  `artifacts/validation-platform-closeout/live-docker-cd5355f0-20260823T210410514Z/live-docker-certification.log`,
+  SHA-256
+  `a32975c4846807d5eb35ee419bbd73d97d5268a74f1cd5ab740d06aee61f746e`;
+  Docker 29.6.1 reported zero residue.
+- Final source/evidence/chronology audit:
+  `artifacts/validation-platform-closeout/final-audit-cd5355f0-20260823T210840170Z/closeout-integrity-audit.log`,
+  SHA-256
+  `da34ee89c1554d7aaa9d612301ae2b1bfaffb50648b225db9cfc1f727690cc6d`.
+  It authenticated the governing contract, platform fingerprint, full and live
+  evidence, clean candidate identity, zero closeout-container residue, and two
+  verified defect records with zero unresolved chronology entries.
+
+The closeout documentation commit is intentionally separate from the proven
+candidate. It changes only documentation and does not contribute application,
+adapter, or Sprint 8C evidence back into the sealed diversion candidate.
 
 ## Requirement-to-proof mapping
 
@@ -165,11 +190,11 @@ only a filtered environment, and rejects missing or blank required values
 during setup before topology ownership or assertions. Neither correction
 changes an application assertion, timeout, retry, or expected result.
 
-The then-current source-exact full gate passed all checks, including all 125
-API library tests, the database-backed integration targets, and the release
-resource-reference timing proof. That pass is diagnostic history, not proof of
-later uncommitted platform changes; the exact checks above must pass again for
-the current tree.
+The final source-exact full gate passed all checks, including the 123-test
+general API partition, the two separately scoped exact API library proofs, the
+database-backed integration targets, and the release resource-reference timing
+proof. The retained audit binds that pass to candidate `cd5355f0`; later Sprint
+8C changes must establish their own evidence rather than extending this record.
 
 ## Explicit residual gates
 

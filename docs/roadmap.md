@@ -1294,7 +1294,7 @@ and one authenticated environment. Closeout authorization is retained under
 
 **User-testable exit condition:** a tester can materialize and preview a Dataset from a provider contract, execute a Component over it, and view the result on a Dashboard across independently deployed modules.
 
-### Post-Sprint 8B: Validation Platform Foundation (Closeout Pending)
+### Post-Sprint 8B: Validation Platform Foundation (Complete)
 
 **Outcome:** validation lifecycle and evidence mechanics have independent
 ownership, release identity, and synthetic certification, while application
@@ -1392,14 +1392,17 @@ acceptance and sprint adapters remain declarative consumers.
   adversarial proof that forged or copied on-disk state can never authorize
   destruction of a local process tree or Compose project
 
-**Independent closeout gate:** freeze a clean diversion candidate; rerun the
-Cargo-policy, validation-policy, release-2 synthetic fault matrix, live-Docker
-provider proof, strict phase-certificate publication, and complete database-
-backed `scripts/validate.ps1` gate on that exact candidate; audit retained
-evidence and source integrity; then mark this diversion Complete before any new
-sprint kickoff. No Sprint 8C adapter, implementation, or evidence participates
-in this decision. The residual containment bullets above remain explicit fail-
-closed limits rather than hidden completion claims.
+**Independent closeout gate:** completed on clean candidate commit
+`cd5355f01bd01e3f32a91595bb7019bc153516e8`, tree
+`b6fccdd3a14e8ae55c6e345bb50706a5fab267a1`. The Cargo-policy,
+validation-policy, release-2 synthetic fault matrix, strict phase-certificate
+publication path, complete database-backed `scripts/validate.ps1` gate, and
+exact-candidate live-Docker provider proof passed. The final retained-evidence,
+defect-chronology, Docker-residue, and source-integrity audit passed with SHA-256
+`da34ee89c1554d7aaa9d612301ae2b1bfaffb50648b225db9cfc1f727690cc6d`.
+No Sprint 8C adapter, implementation, or evidence participated. The residual
+containment bullets above remain explicit fail-closed limits rather than hidden
+completion claims.
 
 The exact closeout scope is governed by
 [`sprint-0a-validation-platform-foundation-validation-contract.json`](./sprints/sprint-0a-validation-platform-foundation-validation-contract.json).

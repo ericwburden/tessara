@@ -8,6 +8,31 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-23 - Validation Platform Foundation Diversion Closeout
+
+The post-Sprint 8B validation-platform diversion is complete independently of
+Sprint 8C. Platform release `2.0.0` is sealed on candidate commit
+`cd5355f01bd01e3f32a91595bb7019bc153516e8`, tree
+`b6fccdd3a14e8ae55c6e345bb50706a5fab267a1`. All seven governed implementation
+targets passed, including the complete database-backed repository gate, the
+release-2 synthetic fault matrix, strict v2 certificate publication/validation,
+and the digest-pinned live-Docker producer/consumer proof with zero residue.
+
+Two full-gate diagnostics exposed validation-harness defects rather than product
+failures: PostgreSQL boolean text normalization and blank-line framing in exact
+Cargo test output. Both were recorded before correction, repaired without
+changing product assertions, proven by focused checks, committed cleanly, and
+verified by the final full gate. The final chronology contains two verified
+records and zero unresolved entries. The retained source/evidence audit passed
+with SHA-256
+`da34ee89c1554d7aaa9d612301ae2b1bfaffb50648b225db9cfc1f727690cc6d`.
+
+Sprint 8C remains Next and has not started. Its adapter, source, and evidence
+must form a new lifecycle chain; none contributed back to this diversion. The
+documented release-2 containment limits remain fail-closed scope boundaries,
+not claims that operating-system sandboxing, hard-crash orphan recovery, or
+global resource admission control have already been delivered.
+
 ## 2026-08-11 - Sprint 8B Dataset Module Separation Kickoff
 
 - Status: kickoff planning complete; implementation has not started.
