@@ -1650,7 +1650,7 @@ function Assert-TessaraExactApiProofSourceInventory {
 
 function Assert-TessaraExactCargoTestList {
     param(
-        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Output,
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Output,
         [Parameter(Mandatory)][string]$ExpectedTestName
     )
     $listedTests = @($Output | Where-Object { $_ -cmatch '^(.+): test$' } |
@@ -1663,7 +1663,7 @@ function Assert-TessaraExactCargoTestList {
 
 function Assert-TessaraExactCargoTestSummary {
     param(
-        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$Output,
+        [Parameter(Mandatory)][AllowEmptyCollection()][AllowEmptyString()][string[]]$Output,
         [Parameter(Mandatory)][string]$ExpectedTestName
     )
     $summaries = @($Output | Where-Object {
@@ -2139,10 +2139,10 @@ function Invoke-TessaraValidationPreflightSelfTest {
     } -ExpectedMessage "lost its required attribute"
 
     Assert-TessaraExactCargoTestList `
-        -Output @("$fullValidationApiEnrollmentTest`: test") `
+        -Output @('', "$fullValidationApiEnrollmentTest`: test", '') `
         -ExpectedTestName $fullValidationApiEnrollmentTest
     Assert-TessaraExactCargoTestSummary `
-        -Output @('test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 124 filtered out; finished in 0.01s') `
+        -Output @('', 'test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 124 filtered out; finished in 0.01s', '') `
         -ExpectedTestName $fullValidationApiEnrollmentTest
     Assert-TessaraCargoSkipFilterList `
         -ListedTests @($fullValidationApiGeneralSkipTests + 'unrelated::proof') `

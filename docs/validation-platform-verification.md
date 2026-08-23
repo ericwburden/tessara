@@ -28,19 +28,29 @@ The current diagnostic implementation proofs are:
 | `markdown-link-check` | Passed after closeout-contract publication |
 | `platform-synthetic-certification` | Passed the complete release-2 fault matrix |
 | `platform-live-docker-certification` | Passed on Docker 29.6.1 with zero residue |
-| `full-repository-validation` | First diagnostic stopped before product actions on a live-PostgreSQL boolean-shape harness defect; the focused live reproducer and warning-free runner self-test now pass, and the broad rerun remains blocked until the correction is committed in the clean diversion candidate |
+| `full-repository-validation` | The first diagnostic stopped before product actions on a live-PostgreSQL boolean-shape harness defect. The clean successor attempt passed every target through the general API partition, then exposed blank Cargo output framing that the exact-test helper rejected before launching the enrollment proof. Both harness defects now have passing focused reproducers; another broad run remains blocked until the second correction is committed cleanly. |
 
 These are implementation diagnostics, not phase certificates. The failed
-database-backed diagnostic and its corrected provenance chronology are retained
-under
-`artifacts/validation-platform-closeout/diagnostic-full-20260823T182633212Z/`.
+database-backed diagnostics and their corrected provenance chronology are
+retained under
+`artifacts/validation-platform-closeout/diagnostic-full-20260823T182633212Z/`
+and
+`artifacts/validation-platform-closeout/implementation-full-a1237bb2-20260823T183455540Z/`.
 The live PostgreSQL probe exposed that the harness cast booleans to
 `true`/`false` while comparing them to `t`/`f`; no product action started. The
 query now normalizes all nine boolean fields explicitly, and both the focused
-live probe and the warning-free runner self-test pass. Candidate freeze remains
-blocked until this correction and the rest of the diversion are committed
-cleanly and the complete database-backed target passes on that exact source.
-No formal lifecycle attempt has started.
+live probe and the warning-free runner self-test pass. The clean successor full
+run then passed database authentication, static checks, policy and platform
+self-tests, synthetic certification, acceptance harnesses, workspace check,
+warnings-denied Clippy, database-free workspace tests, three database-backed
+module partitions, SDK checks, and the general API partition. Cargo's ordinary
+blank separator line reached an exact-test helper whose parameter allowed an
+empty collection but not an empty string, so PowerShell rejected the output
+before the enrollment assertion launched. The helper now accepts blank framing
+while retaining exact-one list and pass-summary checks, and its focused
+warning-free self-test passes. Candidate freeze remains blocked until this
+second correction is committed cleanly and the complete database-backed target
+passes on that exact source. No formal lifecycle attempt has started.
 
 ## Requirement-to-proof mapping
 
