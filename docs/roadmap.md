@@ -1294,7 +1294,7 @@ and one authenticated environment. Closeout authorization is retained under
 
 **User-testable exit condition:** a tester can materialize and preview a Dataset from a provider contract, execute a Component over it, and view the result on a Dashboard across independently deployed modules.
 
-### Post-Sprint 8B: Validation Platform Separation (In Progress)
+### Post-Sprint 8B: Validation Platform Foundation (Closeout Pending)
 
 **Outcome:** validation lifecycle and evidence mechanics have independent
 ownership, release identity, and synthetic certification, while application
@@ -1308,19 +1308,108 @@ acceptance and sprint adapters remain declarative consumers.
 - version and fingerprint the canonical Cargo build-storage lifecycle, bind
   cleanup to an exact active lease and authenticated target marker, and prove
   it with an application-independent adversarial suite
-- begin the forward-only extraction of process, topology, cleanup, restoration,
-  and evidence publication from `scripts/uat-sprint-8b.ps1`
-- maintain independent application-candidate, acceptance-contract, and
-  validation-platform fingerprints with precise impact mapping
+- extract process, topology, cleanup, restoration, and evidence publication
+  behind one narrow platform lane API without changing the sealed Sprint 8B
+  runners
+- derive candidate identity from Git source, the governing contract, and current
+  dependency fingerprints; retain separate acceptance, adapter, provider, and
+  finalization identities for lane-scoped compatibility planning
 - preserve application reruns whenever assertions, fixtures, product
   interfaces, acceptance meaning, or application behavior change
 
-**Exit condition:** synthetic platform certification proves lifecycle, failure,
-interruption, cleanup/restoration, and evidence finalization without running
-Tessara application suites; one active sprint adapter consumes the canonical
-platform boundary without retaining duplicate lifecycle code.
+**Implemented foundation behavior:**
+
+- platform release `2.0.0` binds its aggregate identity across the manifest,
+  public boundary inputs, Cargo build policy, validation policy, lifecycle
+  component, and evidence finalizer, with separately scoped execution and
+  finalization identities
+- each lane binds its acceptance, fixture, harness, adapter, environment,
+  dependency, platform-derived candidate-when-required, provider execution, and
+  prerequisite-closure compatibility identity
+- schema-v2 adapters bind lane inputs, prerequisites, topology, actions, limits,
+  exact governing implementation targets/commands/proof classes, and declared
+  transitive tools, with complete required-target coverage
+- child processes receive a filtered runtime allowlist plus declared bindings,
+  while required missing bindings fail during setup before assertions start;
+  direct argument arrays, immediate truthful cleanup ownership for every OS-
+  started child, closed redirected stdin before successful acquisition, certified
+  acquisition-fault cleanup, attempt-owned temp paths, and unique attempts,
+  leases, ports, and Compose project names provide cooperative cleanup and
+  concurrent namespace isolation only
+- contract-bound handoff with complete-claim replay rejection and claim-before-
+  consumer-mutation in the certified sequential cases; returned complete claims
+  immediately carry cleanup ownership, and finalization plus transfer-flag
+  clearing share revocation-before-teardown protection; cooperative process and
+  Compose cleanup,
+  terminal failure-stage evidence, and write-once artifacts establish the
+  intended failure cone under the synthetic runner; daemonized-descendant,
+  outer-host hard-crash, and orphan-recovery proofs remain open
+- `execution-complete.json`, the required positive post-checkpoint integrity
+  commit, stable result/index pairs, and fingerprint-keyed finalizer attestations
+  establish a bounded finalization-only recovery boundary with local byte/
+  provenance checks when older-fingerprint attestations are complete; cross-host
+  trust remains a certifier concern; caught result/index/attestation data or
+  sidecar writer failures roll back invocation-owned partials and reuse the same
+  checkpoint in all six focused publication-boundary proofs
+- schema-v2 JSON adapters are the only forward adapter shape and the full
+  validation gate invokes the independent platform certification; closed
+  Sprint 8B runners and their sealed evidence remain unchanged
+- a write-once compatibility-plan/evidence-index/v2-certificate publisher plus
+  strict validator authenticates source, environment, committed results, current
+  finalizer attestations, target coverage, prerequisites, and permitted pre-
+  freeze inheritance; dirty candidate-bound certification fails closed
+- a digest-pinned application-independent live-Docker producer/consumer proof
+  authenticates daemon/context/runtime image identity, challenge readiness,
+  single-use handoff, teardown, and zero residue
+
+**Residual completion gates:**
+
+- run child tools under a least-authority OS token/sandbox with tool-specific
+  noninteractive invocation and bounded job/process-group ownership, and bind
+  exact direct and transitive tool identity rather than trusting caller `PATH`
+  or `PSModulePath`
+- make planner and lifecycle no-reparse traversal use OS-native path
+  segmentation, and prove a Unix literal-backslash symlink ancestor cannot make
+  repository-owned input hashing follow bytes outside the source cone
+- authenticate the intended readiness listener, execute against an immutable
+  candidate snapshot, and prove cleanup after every retained-handoff publication
+  failure or pre-consumer compatibility change
+- serialize final artifact and prerequisite state through the attestation commit,
+  or combine OS writer containment with an equivalent immutable snapshot, and
+  prove same-path mutation and late prerequisite revocation fail closed
+- let a corrected finalizer safely resolve an authenticated data-only attestation
+  left by an older fingerprint or abrupt termination outside caught-writer
+  rollback, with an old-partial/new-finalizer recovery proof that never requires
+  manual evidence deletion
+- make partial topology-claim rollback leave a durable tombstone or serialize
+  claim publication through teardown, and prove overlapping consumers cannot
+  reacquire a claim before the first owner's cleanup completes
+- add admission control, total lane deadlines, concurrency limits, CPU/memory/
+  disk/process/port/Docker/temp quotas, and evidence retention/quota/garbage-
+  collection/sensitive-artifact disposal policy, with pressure and recovery
+  proofs
+- add capability-authenticated hard-crash topology discovery and cleanup, with
+  adversarial proof that forged or copied on-disk state can never authorize
+  destruction of a local process tree or Compose project
+
+**Independent closeout gate:** freeze a clean diversion candidate; rerun the
+Cargo-policy, validation-policy, release-2 synthetic fault matrix, live-Docker
+provider proof, strict phase-certificate publication, and complete database-
+backed `scripts/validate.ps1` gate on that exact candidate; audit retained
+evidence and source integrity; then mark this diversion Complete before any new
+sprint kickoff. No Sprint 8C adapter, implementation, or evidence participates
+in this decision. The residual containment bullets above remain explicit fail-
+closed limits rather than hidden completion claims.
+
+The exact closeout scope is governed by
+[`sprint-0a-validation-platform-foundation-validation-contract.json`](./sprints/sprint-0a-validation-platform-foundation-validation-contract.json).
 
 ### Sprint 8C: Response Module Separation Slice (Next)
+
+**Entry condition:** the validation-platform diversion is independently marked
+Complete, its closeout candidate and evidence are sealed, and Sprint 8C begins
+from the resulting clean main baseline. Sprint 8C does not contribute evidence
+back to the diversion.
 
 **Outcome:** Responses is independently deployed and exposes captured data without sharing its persistence.
 

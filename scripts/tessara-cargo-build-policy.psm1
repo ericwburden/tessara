@@ -5,6 +5,9 @@ $script:CargoBuildPolicyContract = "tessara.validation.cargo-build-policy"
 $script:CargoBuildPolicyRelease = "1.0.0"
 $script:CargoBuildPolicyMarkerName = ".tessara-cargo-target.json"
 $script:CargoBuildPolicyModulePath = [IO.Path]::GetFullPath($PSCommandPath)
+$script:CargoBuildPolicyModuleSha256AtImport = (
+    Get-FileHash -Algorithm SHA256 -LiteralPath $script:CargoBuildPolicyModulePath
+).Hash.ToLowerInvariant()
 $script:ActiveCargoBuildTargets = @{}
 $script:DefaultCargoFreeSpaceProbe = {
     param([Parameter(Mandatory)][string]$Path)
@@ -22,11 +25,7 @@ function Get-TessaraCargoBuildPolicyIdentity {
         schema_version = 1
         contract = $script:CargoBuildPolicyContract
         release_version = $script:CargoBuildPolicyRelease
-        module_sha256 = (
-            Get-FileHash `
-                -Algorithm SHA256 `
-                -LiteralPath $script:CargoBuildPolicyModulePath
-        ).Hash.ToLowerInvariant()
+        module_sha256 = $script:CargoBuildPolicyModuleSha256AtImport
     }
 }
 
@@ -210,6 +209,8 @@ function Assert-TessaraStateMatchesLease {
             "target_directory",
             "target_root",
             "repository_root",
+            "cargo_executable_path",
+            "cargo_executable_sha256",
             "marker_sha256",
             "policy_release",
             "policy_fingerprint"
@@ -303,6 +304,8 @@ function Enter-TessaraCargoBuildPolicy {
         [ValidateRange(0, 1024)]
         [int]$MinimumFreeSpaceGB = 20,
 
+        [string]$CargoExecutablePath,
+
         [switch]$RetainTarget
     )
 
@@ -326,6 +329,21 @@ function Enter-TessaraCargoBuildPolicy {
         throw "Cargo policy repository root does not contain Cargo.toml: $resolvedRepositoryRoot"
     }
     Assert-TessaraOrdinaryFile -Path $manifestPath -Label "Cargo policy manifest"
+    $resolvedCargoExecutable = if ([string]::IsNullOrWhiteSpace($CargoExecutablePath)) {
+        $cargoCommand = @(Get-Command cargo -CommandType Application -All -ErrorAction Stop) |
+            Select-Object -First 1
+        if ($null -eq $cargoCommand) {
+            throw "Cargo build policy requires one directly executable Cargo program."
+        }
+        [IO.Path]::GetFullPath([string]$cargoCommand.Source)
+    } else {
+        [IO.Path]::GetFullPath($CargoExecutablePath)
+    }
+    Assert-TessaraOrdinaryFile `
+        -Path $resolvedCargoExecutable -Label "Cargo policy executable"
+    $cargoExecutableSha256 = (
+        Get-FileHash -Algorithm SHA256 -LiteralPath $resolvedCargoExecutable
+    ).Hash.ToLowerInvariant()
 
     $resolvedTargetRoot = [IO.Path]::GetFullPath($TargetRoot)
     New-Item -ItemType Directory -Path $resolvedTargetRoot -Force | Out-Null
@@ -384,6 +402,8 @@ function Enter-TessaraCargoBuildPolicy {
         target_directory = $targetDirectory
         target_root = $resolvedTargetRoot
         repository_root = $resolvedRepositoryRoot
+        cargo_executable_path = $resolvedCargoExecutable
+        cargo_executable_sha256 = $cargoExecutableSha256
         marker_sha256 = $markerHash
         retain_target = [bool]$RetainTarget
         policy_release = $identity.release_version
@@ -420,7 +440,10 @@ function Enter-TessaraCargoBuildPolicy {
 
 function Exit-TessaraCargoBuildPolicy {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][psobject]$State)
+    param(
+        [Parameter(Mandatory)][psobject]$State,
+        [scriptblock]$CargoInvoker
+    )
 
     $leaseId = [string](
         Get-TessaraRequiredStateProperty -State $State -Name "lease_id"
@@ -475,9 +498,24 @@ function Exit-TessaraCargoBuildPolicy {
             return
         }
 
-        & cargo clean `
-            --manifest-path (Join-Path $lease.repository_root "Cargo.toml") `
-            --target-dir $lease.target_directory
+        Assert-TessaraOrdinaryFile `
+            -Path ([string]$lease.cargo_executable_path) `
+            -Label "Cargo policy executable"
+        if ((Get-FileHash -Algorithm SHA256 `
+                -LiteralPath ([string]$lease.cargo_executable_path)).Hash.ToLowerInvariant() -cne
+            [string]$lease.cargo_executable_sha256) {
+            throw "Cargo policy executable changed while the target lease was active."
+        }
+        $cargoArguments = @(
+            "clean",
+            "--manifest-path", (Join-Path $lease.repository_root "Cargo.toml"),
+            "--target-dir", [string]$lease.target_directory
+        )
+        if ($null -eq $CargoInvoker) {
+            & ([string]$lease.cargo_executable_path) @cargoArguments
+        } else {
+            & $CargoInvoker -Arguments $cargoArguments
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "Cargo target cleanup failed with exit code ${LASTEXITCODE}: $($lease.target_directory)"
         }

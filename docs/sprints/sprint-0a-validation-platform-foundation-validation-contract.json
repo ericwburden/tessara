@@ -1,0 +1,401 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation-contract",
+  "policy_version": "tessara-validation-v2",
+  "sprint": "sprint-0a-validation-platform-foundation",
+  "implementation_profile": {
+    "kind": "standard"
+  },
+  "requirements": [
+    {
+      "id": "foundation-release-integrity",
+      "implementation_targets": [
+        "cargo-policy-selftest",
+        "validation-policy-selftest",
+        "validation-runner-selftest",
+        "markdown-link-check"
+      ],
+      "validation_lanes": [
+        "foundation-readiness"
+      ]
+    },
+    {
+      "id": "minimum-blast-radius-containment",
+      "implementation_targets": [
+        "platform-synthetic-certification",
+        "platform-live-docker-certification"
+      ],
+      "validation_lanes": [
+        "foundation-rehearsal"
+      ]
+    },
+    {
+      "id": "repository-regression-safety",
+      "implementation_targets": [
+        "full-repository-validation",
+        "platform-live-docker-certification"
+      ],
+      "validation_lanes": [
+        "foundation-sit"
+      ]
+    },
+    {
+      "id": "candidate-source-integrity",
+      "implementation_targets": [
+        "validation-policy-selftest"
+      ],
+      "validation_lanes": [
+        "foundation-preflight"
+      ]
+    },
+    {
+      "id": "closeout-record-truth",
+      "implementation_targets": [
+        "markdown-link-check"
+      ],
+      "validation_lanes": [
+        "foundation-uat"
+      ]
+    }
+  ],
+  "dependency_domains": [
+    {
+      "name": "validation-platform-runtime",
+      "tracked_inputs": [
+        "scripts/tessara-cargo-build-policy.psm1",
+        "scripts/tessara-validation-policy.psm1",
+        "scripts/tessara-validation-platform.psm1",
+        "scripts/validation-platform/**",
+        ".codex/skills/tessara-sprint-validation/references/phase-certificate-v2.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/validation-contract.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md"
+      ],
+      "environment_sections": []
+    },
+    {
+      "name": "validation-harness",
+      "tracked_inputs": [
+        "scripts/test-tessara-cargo-build-policy.ps1",
+        "scripts/test-tessara-validation-policy.ps1",
+        "scripts/test-tessara-validation-platform.ps1",
+        "scripts/test-tessara-validation-platform-live-docker.ps1",
+        "scripts/validate.ps1"
+      ],
+      "environment_sections": [
+        "validation-databases",
+        "docker-provider",
+        "cargo-toolchain"
+      ]
+    },
+    {
+      "name": "documentation",
+      "tracked_inputs": [
+        "docs/architecture/validation-platform.md",
+        "docs/development-workflow.md",
+        "docs/roadmap.md",
+        "docs/validation-platform-verification.md",
+        "docs/sprints/sprint-0a-validation-platform-foundation-validation-contract.json"
+      ],
+      "environment_sections": []
+    }
+  ],
+  "implementation_targets": [
+    {
+      "id": "cargo-policy-selftest",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/test-tessara-cargo-build-policy.ps1",
+          "-SelfTest"
+        ],
+        "input_paths": [
+          "scripts/test-tessara-cargo-build-policy.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "runner-selftest",
+        "cleanup-recovery"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "validation-policy-selftest",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/test-tessara-validation-policy.ps1",
+          "-SelfTest"
+        ],
+        "input_paths": [
+          "scripts/test-tessara-validation-policy.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "contract-validation",
+        "certificate-authentication"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "validation-runner-selftest",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/validate.ps1",
+          "-SelfTest"
+        ],
+        "input_paths": [
+          "scripts/validate.ps1"
+        ],
+        "tools": [
+          {
+            "id": "cargo",
+            "program": "cargo",
+            "input_paths": []
+          },
+          {
+            "id": "rustc",
+            "program": "rustc",
+            "input_paths": []
+          }
+        ]
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "environment-isolation",
+        "database-preflight",
+        "command-inventory"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "markdown-link-check",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/verify-markdown-links.ps1"
+        ],
+        "input_paths": [
+          "scripts/verify-markdown-links.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "documentation"
+      ],
+      "proof_classes": [
+        "documentation-integrity"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "platform-synthetic-certification",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/test-tessara-validation-platform.ps1",
+          "-SelfTest"
+        ],
+        "input_paths": [
+          "scripts/test-tessara-validation-platform.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "fault-matrix",
+        "minimum-blast-radius",
+        "evidence-recovery"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "platform-live-docker-certification",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/test-tessara-validation-platform-live-docker.ps1"
+        ],
+        "input_paths": [
+          "scripts/test-tessara-validation-platform-live-docker.ps1",
+          "scripts/validation-platform/fixtures/live-docker-compose.yaml"
+        ],
+        "tools": [
+          {
+            "id": "docker",
+            "program": "docker",
+            "input_paths": []
+          }
+        ]
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "live-provider",
+        "single-use-handoff",
+        "cleanup-recovery"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "full-repository-validation",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/validate.ps1"
+        ],
+        "input_paths": [
+          "scripts/validate.ps1"
+        ],
+        "tools": [
+          {
+            "id": "cargo",
+            "program": "cargo",
+            "input_paths": []
+          },
+          {
+            "id": "rustc",
+            "program": "rustc",
+            "input_paths": []
+          },
+          {
+            "id": "psql",
+            "program": "psql",
+            "input_paths": []
+          },
+          {
+            "id": "docker",
+            "program": "docker",
+            "input_paths": []
+          }
+        ]
+      },
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "proof_classes": [
+        "repository-regression",
+        "database-isolation",
+        "warnings-denied"
+      ],
+      "required": true,
+      "clean_environment": true
+    }
+  ],
+  "lanes": [
+    {
+      "id": "foundation-readiness",
+      "phase": "validation-readiness",
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness",
+        "documentation"
+      ],
+      "prerequisites": [],
+      "touches_live_state": false
+    },
+    {
+      "id": "foundation-rehearsal",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "prerequisites": [
+        "foundation-readiness"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "foundation-preflight",
+      "phase": "validation-preflight",
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness",
+        "documentation"
+      ],
+      "prerequisites": [
+        "foundation-readiness",
+        "foundation-rehearsal"
+      ],
+      "touches_live_state": false
+    },
+    {
+      "id": "foundation-sit",
+      "phase": "sit",
+      "dependency_domains": [
+        "validation-platform-runtime",
+        "validation-harness"
+      ],
+      "prerequisites": [
+        "foundation-preflight"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "foundation-uat",
+      "phase": "uat",
+      "dependency_domains": [
+        "documentation",
+        "validation-platform-runtime"
+      ],
+      "prerequisites": [
+        "foundation-sit"
+      ],
+      "touches_live_state": false
+    }
+  ],
+  "evidence_policy": {
+    "root": "artifacts/validation-platform-closeout",
+    "tracked": false,
+    "successful_raw": "retained_cold",
+    "phase_local_indexes": true,
+    "final_full_integrity_audit": true
+  }
+}

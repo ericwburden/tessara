@@ -1600,6 +1600,29 @@ try {
     }
     $null = Assert-TessaraPhaseCertificate -Certificate $phaseCertificate
 
+    $phaseCertificateV2 = $phaseCertificate | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $phaseCertificateV2.schema_version = 2
+    $phaseCertificateV2 | Add-Member -NotePropertyName compatibility_plan `
+        -NotePropertyValue (New-Reference `
+            -Path "artifacts/sprint-9a-closeout/rehearsal/attempt-2/compatibility-plan.json")
+    foreach ($lane in @($phaseCertificateV2.lanes)) {
+        $lane | Add-Member -NotePropertyName compatibility_fingerprint -NotePropertyValue ("c" * 64)
+    }
+    $phaseCertificateV2.lanes[1].inheritance | Add-Member -NotePropertyName prior_compatibility_fingerprint -NotePropertyValue ("c" * 64)
+    $phaseCertificateV2.lanes[1].inheritance | Add-Member `
+        -NotePropertyName prior_certificate -NotePropertyValue (New-Reference `
+            -Path "artifacts/sprint-9a-closeout/rehearsal/attempt-1/candidate-rehearsal-result.json")
+    $null = Assert-TessaraJsonSchema -Document $phaseCertificateV2 `
+        -Kind phase_certificate_v2 -Label "Phase certificate v2 structure"
+    Assert-ThrowsMatching -Label "unauthenticated phase certificate v2" -Action {
+        Assert-TessaraPhaseCertificate -Certificate $phaseCertificateV2
+    } -MessagePattern "structural validation alone cannot authorize reuse"
+
+    $changedCompatibility = $phaseCertificateV2 | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $changedCompatibility.lanes[1].inheritance.prior_compatibility_fingerprint = ("d" * 64)
+    $null = Assert-TessaraJsonSchema -Document $changedCompatibility `
+        -Kind phase_certificate_v2 -Label "Changed compatibility v2 structure"
+
     $changedInheritance = $phaseCertificate | ConvertTo-Json -Depth 30 | ConvertFrom-Json
     $changedInheritance.lanes[1].inheritance.prior_dependency_fingerprints[0].sha256 = ("9" * 64)
     Assert-Throws -Label "changed inherited dependency" -Action { Assert-TessaraPhaseCertificate -Certificate $changedInheritance }

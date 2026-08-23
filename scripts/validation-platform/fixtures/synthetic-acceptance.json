@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.validation.synthetic-acceptance",
+  "expected": "platform lifecycle only; no Tessara application behavior"
+}

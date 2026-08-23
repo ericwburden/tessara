@@ -1,0 +1,37 @@
+services:
+  synthetic:
+    image: alpine/socat@sha256:4e625a62c9ea40ccbce93b9a4fcc6b41740a9f308389c216f34c88ce3abb275b
+    entrypoint: ["sh", "-ec"]
+    command:
+      - >-
+        exec socat TCP-LISTEN:8080,reuseaddr,fork
+        SYSTEM:'read nonce; { echo $$TESSARA_VALIDATION_READINESS_CAPABILITY; echo -n $$nonce; } | sha256sum | cut -c1-64'
+    environment:
+      TESSARA_VALIDATION_READINESS_CAPABILITY: ${TESSARA_VALIDATION_READINESS_CAPABILITY}
+    ports:
+      - 127.0.0.1:${TESSARA_VP_HTTP_PORT}:8080
+    read_only: true
+    init: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD-SHELL", "socat -u /dev/null TCP:127.0.0.1:8080"]
+      interval: 1s
+      timeout: 1s
+      retries: 20
+      start_period: 1s
+    labels:
+      tessara.validation.lease: ${TESSARA_VALIDATION_TOPOLOGY_LEASE}
+      tessara.validation.attempt: ${TESSARA_VALIDATION_TOPOLOGY_ATTEMPT}
+    networks:
+      - default
+
+networks:
+  default:
+    labels:
+      tessara.validation.lease: ${TESSARA_VALIDATION_TOPOLOGY_LEASE}
+      tessara.validation.attempt: ${TESSARA_VALIDATION_TOPOLOGY_ATTEMPT}

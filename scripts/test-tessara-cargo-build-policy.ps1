@@ -279,7 +279,16 @@ try {
     Set-Content `
         -LiteralPath (Join-Path $ephemeralTarget "policy-marker.txt") `
         -Value "ephemeral"
-    Exit-TessaraCargoBuildPolicy -State $validationState
+    $cleanupInvokerCapture = [pscustomobject]@{ count = 0; arguments = @() }
+    Exit-TessaraCargoBuildPolicy -State $validationState -CargoInvoker {
+        param([string[]]$Arguments)
+        $cleanupInvokerCapture.count++
+        $cleanupInvokerCapture.arguments = @($Arguments)
+        & ([string]$validationState.cargo_executable_path) @Arguments
+    }
+    Assert-Equal $cleanupInvokerCapture.count 1 "Authenticated Cargo cleanup invocation count"
+    Assert-Equal ([string]$cleanupInvokerCapture.arguments[0]) "clean" `
+        "Authenticated Cargo cleanup command"
     $completedValidationState = $validationState
     $validationState = $null
 

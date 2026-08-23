@@ -1,0 +1,387 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation.adapter",
+  "adapter_id": "platform-certification",
+  "validation_contract_path": "scripts/validation-platform/fixtures/synthetic-validation-contract.json",
+  "acceptance_inputs": [
+    {
+      "path": "scripts/validation-platform/fixtures/synthetic-acceptance.json",
+      "lanes": [
+        "no-topology",
+        "local-success",
+        "compose-create",
+        "compose-consume",
+        "dependent-no-topology"
+      ]
+    }
+  ],
+  "fixture_inputs": [],
+  "execution_inputs": [
+    {
+      "path": "scripts/validation-platform/fixtures/synthetic-action.ps1",
+      "lanes": [
+        "no-topology",
+        "compose-create",
+        "compose-consume",
+        "dependent-no-topology"
+      ]
+    },
+    {
+      "path": "scripts/validation-platform/fixtures/assert-synthetic-environment.ps1",
+      "lanes": [
+        "local-success"
+      ]
+    },
+    {
+      "path": "scripts/validation-platform/fixtures/synthetic-service.ps1",
+      "lanes": [
+        "local-success",
+        "compose-create",
+        "compose-consume"
+      ]
+    },
+    {
+      "path": "scripts/validation-platform/fixtures/synthetic-compose.yaml",
+      "lanes": [
+        "compose-create",
+        "compose-consume"
+      ]
+    }
+  ],
+  "execution_policy": {
+    "max_parallel_lanes": 4,
+    "max_attempts_per_lane": 128,
+    "max_evidence_bytes": 1073741824
+  },
+  "lanes": [
+    {
+      "id": "no-topology",
+      "prerequisites": [],
+      "environment": [
+        {
+          "name": "TESSARA_VP_LANE_A",
+          "source": "TESSARA_VP_LANE_A_SOURCE",
+          "optional": true
+        }
+      ],
+      "blocked_environment": [
+        "DATABASE_URL"
+      ],
+      "deadline_seconds": 60,
+      "topology": {
+        "mode": "none",
+        "provider": "none",
+        "on_success": "destroy"
+      },
+      "actions": [
+        {
+          "id": "no-topology-check",
+          "stage": "assertion",
+          "implementation_target": "synthetic-process-certification",
+          "proof_classes": [
+            "runner-selftest"
+          ],
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+            "-Mode",
+            "success"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/synthetic-action.ps1"
+          ],
+          "timeout_seconds": 10,
+          "tools": []
+        }
+      ]
+    },
+    {
+      "id": "local-success",
+      "prerequisites": [],
+      "environment": [
+        {
+          "name": "TESSARA_VP_SENTINEL",
+          "value": "lane-${adapter_fingerprint}"
+        }
+      ],
+      "blocked_environment": [
+        "DATABASE_URL"
+      ],
+      "deadline_seconds": 60,
+      "topology": {
+        "mode": "create",
+        "provider": "local-process",
+        "ports": [
+          {
+            "name": "http",
+            "environment": "TESSARA_VP_HTTP_PORT"
+          }
+        ],
+        "command": {
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/synthetic-service.ps1",
+            "-Port",
+            "${port:http}"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/synthetic-service.ps1"
+          ],
+          "tools": []
+        },
+        "readiness": {
+          "port": "http",
+          "timeout_seconds": 10,
+          "protocol": "challenge-response-v1"
+        },
+        "on_success": "destroy"
+      },
+      "actions": [
+        {
+          "id": "assert-environment",
+          "stage": "assertion",
+          "implementation_target": "synthetic-environment-certification",
+          "proof_classes": [
+            "runner-selftest"
+          ],
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/assert-synthetic-environment.ps1",
+            "-ExpectedPort",
+            "${port:http}"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/assert-synthetic-environment.ps1"
+          ],
+          "timeout_seconds": 10,
+          "tools": []
+        }
+      ]
+    },
+    {
+      "id": "compose-create",
+      "prerequisites": [],
+      "environment": [
+        {
+          "name": "TESSARA_VP_SYNTHETIC_SERVICE",
+          "value": "${repository_root}/scripts/validation-platform/fixtures/synthetic-service.ps1"
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_ROOT",
+          "source": "TESSARA_VP_DOCKER_SHIM_ROOT"
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_FOREIGN_CONFIG",
+          "source": "TESSARA_VP_DOCKER_SHIM_FOREIGN_CONFIG",
+          "optional": true
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_FOREIGN_LEASE",
+          "source": "TESSARA_VP_DOCKER_SHIM_FOREIGN_LEASE",
+          "optional": true
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_RETAIN",
+          "source": "TESSARA_VP_DOCKER_SHIM_RETAIN",
+          "optional": true
+        }
+      ],
+      "blocked_environment": [
+        "DATABASE_URL"
+      ],
+      "deadline_seconds": 60,
+      "topology": {
+        "mode": "create",
+        "provider": "docker-compose",
+        "compose_file": "scripts/validation-platform/fixtures/synthetic-compose.yaml",
+        "profiles": [
+          "reference"
+        ],
+        "required_services": [
+          "synthetic"
+        ],
+        "ports": [
+          {
+            "name": "http",
+            "environment": "TESSARA_VP_HTTP_PORT"
+          }
+        ],
+        "readiness": {
+          "port": "http",
+          "timeout_seconds": 10,
+          "protocol": "challenge-response-v1"
+        },
+        "provider_identity": {
+          "context": "default",
+          "daemon_id": "synthetic-daemon-v1",
+          "server_version": "1.0.0",
+          "allowed_images": [
+            "tessara-validation-platform-synthetic@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          ]
+        },
+        "on_success": "handoff",
+        "handoff_to": "compose-consume"
+      },
+      "actions": [
+        {
+          "id": "create-check",
+          "stage": "setup",
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+            "-Mode",
+            "require-port"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/synthetic-action.ps1"
+          ],
+          "timeout_seconds": 10,
+          "tools": []
+        }
+      ]
+    },
+    {
+      "id": "compose-consume",
+      "prerequisites": [
+        "compose-create"
+      ],
+      "environment": [
+        {
+          "name": "TESSARA_VP_SYNTHETIC_SERVICE",
+          "value": "${repository_root}/scripts/validation-platform/fixtures/synthetic-service.ps1"
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_ROOT",
+          "source": "TESSARA_VP_DOCKER_SHIM_ROOT"
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_FOREIGN_CONFIG",
+          "source": "TESSARA_VP_DOCKER_SHIM_FOREIGN_CONFIG",
+          "optional": true
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_FOREIGN_LEASE",
+          "source": "TESSARA_VP_DOCKER_SHIM_FOREIGN_LEASE",
+          "optional": true
+        },
+        {
+          "name": "TESSARA_VP_DOCKER_SHIM_RETAIN",
+          "source": "TESSARA_VP_DOCKER_SHIM_RETAIN",
+          "optional": true
+        }
+      ],
+      "blocked_environment": [
+        "DATABASE_URL"
+      ],
+      "deadline_seconds": 60,
+      "topology": {
+        "mode": "consume",
+        "provider": "docker-compose",
+        "compose_file": "scripts/validation-platform/fixtures/synthetic-compose.yaml",
+        "profiles": [
+          "reference"
+        ],
+        "required_services": [
+          "synthetic"
+        ],
+        "ports": [
+          {
+            "name": "http",
+            "environment": "TESSARA_VP_HTTP_PORT"
+          }
+        ],
+        "readiness": {
+          "port": "http",
+          "timeout_seconds": 10,
+          "protocol": "challenge-response-v1"
+        },
+        "provider_identity": {
+          "context": "default",
+          "daemon_id": "synthetic-daemon-v1",
+          "server_version": "1.0.0",
+          "allowed_images": [
+            "tessara-validation-platform-synthetic@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          ]
+        },
+        "on_success": "destroy",
+        "from_lane": "compose-create"
+      },
+      "actions": [
+        {
+          "id": "consume-check",
+          "stage": "assertion",
+          "implementation_target": "synthetic-compose-certification",
+          "proof_classes": [
+            "runner-selftest"
+          ],
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+            "-Mode",
+            "require-port"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/synthetic-action.ps1"
+          ],
+          "timeout_seconds": 10,
+          "tools": []
+        }
+      ]
+    },
+    {
+      "id": "dependent-no-topology",
+      "prerequisites": [
+        "no-topology"
+      ],
+      "environment": [],
+      "blocked_environment": [
+        "DATABASE_URL"
+      ],
+      "deadline_seconds": 60,
+      "topology": {
+        "mode": "none",
+        "provider": "none",
+        "on_success": "destroy"
+      },
+      "actions": [
+        {
+          "id": "dependent-check",
+          "stage": "assertion",
+          "implementation_target": "synthetic-process-certification",
+          "proof_classes": [
+            "runner-selftest"
+          ],
+          "program": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+            "-Mode",
+            "success"
+          ],
+          "input_paths": [
+            "scripts/validation-platform/fixtures/synthetic-action.ps1"
+          ],
+          "timeout_seconds": 10,
+          "tools": []
+        }
+      ]
+    }
+  ]
+}

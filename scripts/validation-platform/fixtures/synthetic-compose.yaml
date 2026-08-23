@@ -1,0 +1,19 @@
+services:
+  synthetic:
+    image: tessara-validation-platform-synthetic@sha256:0000000000000000000000000000000000000000000000000000000000000000
+    read_only: true
+    init: true
+    user: "65532:65532"
+    environment:
+      TESSARA_VALIDATION_READINESS_CAPABILITY: ${TESSARA_VALIDATION_READINESS_CAPABILITY}
+    profiles: [reference]
+    labels:
+      tessara.validation.lease: ${TESSARA_VALIDATION_TOPOLOGY_LEASE}
+      tessara.validation.attempt: ${TESSARA_VALIDATION_TOPOLOGY_ATTEMPT}
+    networks: [default]
+
+networks:
+  default:
+    labels:
+      tessara.validation.lease: ${TESSARA_VALIDATION_TOPOLOGY_LEASE}
+      tessara.validation.attempt: ${TESSARA_VALIDATION_TOPOLOGY_ATTEMPT}

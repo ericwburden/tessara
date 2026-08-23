@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.validation.platform-manifest",
+  "release_version": "2.0.0",
+  "boundary_inputs": [
+    {
+      "id": "public-entrypoint",
+      "path": "scripts/tessara-validation-platform.psm1"
+    },
+    {
+      "id": "adapter-schema",
+      "path": "scripts/validation-platform/validation-adapter.schema.json"
+    },
+    {
+      "id": "validation-contract-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/validation-contract.schema.json"
+    },
+    {
+      "id": "phase-certificate-v2-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/phase-certificate-v2.schema.json"
+    }
+  ],
+  "components": [
+    {
+      "id": "cargo-build-policy",
+      "contract": "tessara.validation.cargo-build-policy",
+      "release_version": "1.0.0",
+      "path": "scripts/tessara-cargo-build-policy.psm1"
+    },
+    {
+      "id": "validation-policy",
+      "contract": "tessara.validation-policy",
+      "release_version": "tessara-validation-v2",
+      "path": "scripts/tessara-validation-policy.psm1"
+    },
+    {
+      "id": "lifecycle",
+      "contract": "tessara.validation.lifecycle",
+      "release_version": "2.0.0",
+      "path": "scripts/validation-platform/tessara-validation-lifecycle.psm1"
+    },
+    {
+      "id": "finalizer",
+      "contract": "tessara.validation.finalizer",
+      "release_version": "2.0.0",
+      "path": "scripts/validation-platform/tessara-validation-finalizer.psm1"
+    }
+  ]
+}

@@ -1,0 +1,187 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation-contract",
+  "policy_version": "tessara-validation-v2",
+  "sprint": "sprint-0a-platform-certification",
+  "implementation_profile": {
+    "kind": "standard"
+  },
+  "requirements": [
+    {
+      "id": "platform-process-lifecycle",
+      "implementation_targets": [
+        "synthetic-process-certification"
+      ],
+      "validation_lanes": [
+        "no-topology",
+        "dependent-no-topology"
+      ]
+    },
+    {
+      "id": "platform-environment-lifecycle",
+      "implementation_targets": [
+        "synthetic-environment-certification"
+      ],
+      "validation_lanes": [
+        "local-success"
+      ]
+    },
+    {
+      "id": "platform-compose-lifecycle",
+      "implementation_targets": [
+        "synthetic-compose-certification"
+      ],
+      "validation_lanes": [
+        "compose-create",
+        "compose-consume"
+      ]
+    }
+  ],
+  "dependency_domains": [
+    {
+      "name": "synthetic-platform",
+      "tracked_inputs": [
+        "scripts/validation-platform/**"
+      ],
+      "environment_sections": []
+    }
+  ],
+  "implementation_targets": [
+    {
+      "id": "synthetic-process-certification",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+          "-Mode",
+          "success"
+        ],
+        "input_paths": [
+          "scripts/validation-platform/fixtures/synthetic-action.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "proof_classes": [
+        "runner-selftest"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "synthetic-environment-certification",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/validation-platform/fixtures/assert-synthetic-environment.ps1",
+          "-ExpectedPort",
+          "${port:http}"
+        ],
+        "input_paths": [
+          "scripts/validation-platform/fixtures/assert-synthetic-environment.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "proof_classes": [
+        "runner-selftest"
+      ],
+      "required": true,
+      "clean_environment": true
+    },
+    {
+      "id": "synthetic-compose-certification",
+      "command": {
+        "program": "pwsh",
+        "arguments": [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "${repository_root}/scripts/validation-platform/fixtures/synthetic-action.ps1",
+          "-Mode",
+          "require-port"
+        ],
+        "input_paths": [
+          "scripts/validation-platform/fixtures/synthetic-action.ps1"
+        ],
+        "tools": []
+      },
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "proof_classes": [
+        "runner-selftest"
+      ],
+      "required": true,
+      "clean_environment": true
+    }
+  ],
+  "lanes": [
+    {
+      "id": "no-topology",
+      "phase": "validation-readiness",
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "prerequisites": [],
+      "touches_live_state": false
+    },
+    {
+      "id": "local-success",
+      "phase": "candidate-rehearsal",
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "prerequisites": [],
+      "touches_live_state": false
+    },
+    {
+      "id": "compose-create",
+      "phase": "validation-preflight",
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "prerequisites": [],
+      "touches_live_state": true
+    },
+    {
+      "id": "compose-consume",
+      "phase": "sit",
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "prerequisites": [
+        "compose-create"
+      ],
+      "touches_live_state": true
+    },
+    {
+      "id": "dependent-no-topology",
+      "phase": "uat",
+      "dependency_domains": [
+        "synthetic-platform"
+      ],
+      "prerequisites": [
+        "no-topology"
+      ],
+      "touches_live_state": false
+    }
+  ],
+  "evidence_policy": {
+    "root": "artifacts/validation-platform-certification",
+    "tracked": false,
+    "successful_raw": "retained_cold",
+    "phase_local_indexes": true,
+    "final_full_integrity_audit": true
+  }
+}

@@ -128,9 +128,11 @@ implementation even if the attempt also contains a product defect.
 
 Keep the established canonical result names, including
 `validation-readiness-result.json`, `candidate-rehearsal-result.json`,
-`preflight-result.json`, `sit-result.json`, and `uat-result.json`. Under v2 they
-validate against `phase-certificate.schema.json` and contain summaries rather
-than raw logs or embedded historical receipt chains.
+`preflight-result.json`, `sit-result.json`, and `uat-result.json`. New platform
+certifiers must validate them against `phase-certificate-v2.schema.json` and
+authenticate their compatibility plan and referenced evidence; the v1 schema
+remains available only to authenticate historical certificates. They
+contain summaries rather than raw logs or embedded historical receipt chains.
 
 Each certificate includes:
 
@@ -138,17 +140,28 @@ Each certificate includes:
 - exact prerequisite certificate paths and SHA-256 values;
 - current dependency-domain fingerprints;
 - the declared-lane inventory digest;
-- one summary for every lane;
+- one summary and compatibility fingerprint for every lane;
 - executed versus inherited lane counts;
 - open-defect count and restoration result; and
 - one sealed phase-local evidence-index path and SHA-256.
 
 An inherited pre-freeze lane uses
 `certification_basis: inherited_nonimpact`. It retains the prior lane receipt
-and hash, prior source/environment identity, its prior dependency fingerprints,
-and an explicit non-impact rationale. It has null current execution timestamps
-and does not claim that assertions ran again. It is valid only when every
-declared dependency fingerprint and prerequisite certificate remains unchanged.
+and hash, prior source/environment identity, its prior compatibility fingerprint,
+its prior dependency fingerprints, and an explicit non-impact rationale. It has
+null current execution timestamps and does not claim that assertions ran again.
+It is valid only when the current and authenticated prior lane compatibility
+fingerprints are identical, every declared dependency fingerprint is unchanged,
+and the relevant recursive prerequisite-lane compatibility closure still
+matches. Re-publication of an unrelated lane must not invalidate the entire
+prerequisite phase by whole-certificate equality.
+
+The generic policy validator deliberately rejects schema-v2 certificates. It
+continues to read sealed schema-v1 history, but structural v2 validation cannot
+authorize reuse. The platform-backed certifier must first authenticate the
+current compatibility plan, lane and prior receipts, prior certificate,
+prerequisite certificates, and current/prior evidence indexes; until that
+consumer exists, fall back to complete affected-phase execution.
 
 ## Pre-freeze recertification
 

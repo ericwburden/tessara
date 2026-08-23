@@ -53,6 +53,96 @@ points. A path prefix or caller-supplied state is not sufficient authority.
 against a synthetic temporary Cargo crate without running Tessara application
 tests.
 
+## Validation Platform Foundation
+
+`scripts/tessara-validation-platform.psm1` is the public lifecycle boundary for
+new validation adapters. Platform release `2.0.0` publishes an aggregate
+fingerprint over its manifest, boundary inputs, Cargo build policy, validation
+policy, lifecycle component, and evidence finalizer. Its independent execution
+and finalization fingerprints let a finalization-only correction consume an
+unchanged, identity-bound, digest-verified execution checkpoint only when its
+positive post-checkpoint integrity pair already committed and every older-
+fingerprint attestation is complete, without rerunning application actions. An
+older finalizer's data-only partial currently requires rerunning the affected
+lane. Caught result/index/attestation data or sidecar write, flush, and dispose
+failures remove only the current invocation's partial and can retry the same
+checkpoint; this does not cover abrupt host termination. Inspect the current
+identity and run its application-independent certification with:
+
+```powershell
+Import-Module .\scripts\tessara-validation-platform.psm1 -Force
+Get-TessaraValidationPlatformIdentity
+.\scripts\test-tessara-validation-platform.ps1 -SelfTest
+```
+
+New sprint adapters are strict schema-v2 `tessara.validation.adapter` JSON documents.
+They declare the governing validation contract, acceptance inputs, exact lane
+inventory, prerequisites, environment bindings, named ports, topology, direct
+program/argument arrays, readiness, and timeouts. Adapter files cannot contain
+PowerShell callbacks or shell command strings. Every assertion maps to one
+governing implementation target, exact structured command, proof classes, and
+declared transitive tools; exact required-target coverage is validated before
+any lane executes:
+
+```powershell
+Assert-TessaraValidationAdapter -AdapterPath <adapter.json>
+```
+
+Run one lane at a time through `Invoke-TessaraValidationLane`. Actions within a
+lane are sequential and have no implicit retries. Independent lane processes
+may run concurrently and receive unique platform leases automatically. Truly
+independent processes may use separate evidence roots; a prerequisite or
+retained-topology chain must share its authenticated root. The synthetic
+concurrency proof establishes namespace isolation, not scheduler admission,
+resource quotas, or bounded aggregate load. Retained Docker topology moves only
+through an authenticated handoff receipt to its one declared successor.
+
+The synthetic certification uses a local TCP service and deterministic Docker
+CLI shim, so it requires neither a Tessara database, external network, nor live
+Docker. The foundation also retains a digest-pinned live-Docker producer/
+consumer proof with authenticated daemon/context/runtime identity and zero
+residue. Every real sprint adapter must repeat the provider
+proof for its exact Compose inputs, images/build provenance, capabilities,
+resources, required services, readiness endpoints, teardown, and residue
+checks. A later product sprint is responsible for its own exact adapter proof;
+that consumer proof is not part of validation-platform diversion closeout.
+
+The full `scripts/validate.ps1` gate runs both the Cargo policy self-test and
+the aggregate platform certification. `-Fast` remains the reusable developer
+loop and does not create isolated lifecycle evidence.
+
+The platform foundation implementation is **ready for independent diversion
+closeout**. It has lane-specific
+acceptance, fixture, harness, adapter, environment, dependency, and prerequisite
+identities; filtered child environments; unique leases, ports, projects, and
+attempts; attempt-owned `TEMP`/`TMP`/`TMPDIR`; immediate truthful cleanup
+ownership for every OS-started child, closed redirected stdin before successful
+acquisition, and certified acquisition-fault cleanup;
+contract-bound handoff with complete-claim replay rejection in the certified
+sequential cases; immediate cleanup ownership for a returned complete consumer
+claim; guarded finalization and transfer-flag clearing; and a separate execution
+checkpoint, positive post-checkpoint integrity commit, and finalizer boundary.
+Candidate identity is derived from Git source, governing contract, and current
+dependency state; diversion closeout requires a clean matching plan.
+The strict v2 publisher/authenticator binds that plan to committed lane results,
+current finalizer attestations, exact targets, environment, prerequisites, and
+evidence indexes. A later sprint's exact adapter consumes the closed release on
+that sprint's own evidence chain; it is not evidence for this diversion.
+
+Remaining adoption constraints are OS-native no-reparse source-path traversal
+with adversarial Unix symlink-escape
+proof; least-authority caller-token containment and bounded OS job/process-group
+ownership; CPU/memory/disk/process/global-port/Docker quotas (including attempt-
+temp storage); evidence retention/garbage collection;
+and sensitive-artifact disposal; final artifact and prerequisite serialization
+through the attestation commit; cross-finalizer partial-attestation recovery;
+partial topology-claim/cleanup serialization or durable tombstoning; and
+capability-authenticated hard-crash orphan cleanup. Release 2 rejects implicit
+dotenv/`env_file`, mutable image/build inputs, custom/external resources, and
+dangerous host capabilities and binds Docker endpoint/daemon/context plus actual
+container/image identity. Each later product adapter must pass that exact live
+boundary before its own lanes may use selective reuse.
+
 At sprint closeout, remove the closed worktree's Cargo output with
 `cargo clean --manifest-path <worktree>/Cargo.toml`. Never manually delete a
 target path that has not first been resolved to the intended worktree, and do
@@ -275,12 +365,13 @@ known correction works.
 
 ### Phase trust and invalidation
 
-Readiness and Candidate Rehearsal publish compact certificates. After a
-correction they rerun only never-certified, failed, newly reachable, or
-dependency-affected lanes and their prerequisite closure. Authenticated
-unaffected lanes may be inherited with their prior receipt/hash, unchanged
-dependency fingerprints, and explicit non-impact rationale. Any uncertainty
-falls back to complete affected-phase execution.
+Platform-backed Readiness and Candidate Rehearsal publish compact certificates
+and, after a correction, rerun
+only never-certified, failed, newly reachable, or dependency-affected lanes and
+their prerequisite closure. The certifier may inherit authenticated unaffected
+lanes with their prior receipt/hash, unchanged compatibility closure, and
+explicit non-impact rationale. Before an active sprint adopts its exact adapter,
+or whenever impact is uncertain, run the complete affected phase.
 
 A downstream-only change does not reopen an upstream certificate. For example,
 a Preflight-runner change leaves Readiness and Rehearsal closed when none of
@@ -336,45 +427,172 @@ itself authorization to change the test.
 ## Canonical Closeout Validation
 
 Run the check-only and reproducible gate from the repository root. The
-complete gate uses six freshly provisioned, pairwise-distinct disposable
+runner requires PowerShell Core 7.3 or newer and fails before importing policy
+modules or invoking native tools on any other PowerShell runtime. The
+complete gate uses seven freshly provisioned, pairwise-distinct disposable
 databases: the general API integration target, the destructive API
-fresh-start/seed-lock target, the independent reference-module target, the
-extracted Component-module target, the API enrollment target isolated from
-concurrently executing API library tests, and the installation-control target.
-Do not reuse these fixture databases for a second complete suite; recreate them
-first. `scripts/validate.ps1` intentionally refuses to run without all six
-URLs and the exact destructive-reset acknowledgement. This includes the
-installation-control target exercised by the workspace-wide suite, so
-database-backed assertions cannot silently skip or interfere with one another.
+fresh-start/seed-lock target, the conventional SQLx target, the independent
+reference-module target, the extracted Component-module target, the API
+enrollment target isolated from concurrently executing API library tests, and
+the installation-control target. Do not reuse these fixture databases for a
+second complete suite; recreate them first. `scripts/validate.ps1`
+intentionally refuses to run without all seven URLs and the exact
+destructive-reset acknowledgement. Every URL must use an explicit nonblank
+password and a database in the `tessara_test`, `tessara_tests`, or
+`tessara_testing` namespace, and all seven passwords must be pairwise unique.
+Preflight compares normalized URL identities, then authenticates one ordinary
+`psql` executable by literal path, content hash, and version before every
+noninteractive, time-bounded probe. The targets may be spread across one or
+more dedicated disposable PostgreSQL clusters. Both the seven authenticated
+server/database identities and the seven authenticated server/role identities
+must be pairwise distinct. Each validation role must own exactly its declared
+database and no other non-template database on its cluster, have no `CONNECT`,
+`CREATE`, or `TEMP` capability on any other non-template database there, have
+no role memberships, and be `NOSUPERUSER`,
+`NOCREATEROLE`, `NOREPLICATION`, and `NOBYPASSRLS`. Only the SQLx role is
+`CREATEDB`; all six other roles are `NOCREATEDB`. The probe also requires exact
+`CONNECT`, `CREATE`, `TEMP`, public-schema `CREATE`, and database comment
+`tessara-validation-disposable-v1`. Thus credentials or hostname aliases cannot
+disguise reuse of one physical database or role. URLs may contain at most one
+recognized `sslmode`; identity overrides such as `dbname`, `host`, `hostaddr`, `port`,
+`user`, `password`, or `service` are rejected.
+
+Provision these roles in one or more dedicated disposable PostgreSQL clusters,
+never an operator's shared development cluster. On every selected cluster, the
+validation roles must not inherit PostgreSQL's default `PUBLIC` database
+capabilities. Revoke those capabilities on its maintenance database and
+immediately on every validation database; if a selected cluster contains
+another non-template database, revoke them there too or recreate that cluster.
+Use a separately generated secret for every role and `CREATEDB` only for the
+validation role behind `TEST_SQLX_DATABASE_URL`. The following is a partial
+single-cluster example; apply the same restrictions to each selected cluster:
+
+```sql
+REVOKE CONNECT, CREATE, TEMPORARY ON DATABASE postgres FROM PUBLIC;
+
+CREATE ROLE tessara_validation_api LOGIN PASSWORD '<generated-api-secret>'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE DATABASE tessara_test_api OWNER tessara_validation_api;
+REVOKE CONNECT, CREATE, TEMPORARY ON DATABASE tessara_test_api FROM PUBLIC;
+COMMENT ON DATABASE tessara_test_api IS 'tessara-validation-disposable-v1';
+GRANT CONNECT, CREATE, TEMP ON DATABASE tessara_test_api TO tessara_validation_api;
+-- Connect to tessara_test_api as an administrator before this grant:
+GRANT CREATE ON SCHEMA public TO tessara_validation_api;
+
+CREATE ROLE tessara_validation_sqlx LOGIN PASSWORD '<generated-sqlx-secret>'
+  NOSUPERUSER CREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE DATABASE tessara_test_sqlx OWNER tessara_validation_sqlx;
+REVOKE CONNECT, CREATE, TEMPORARY ON DATABASE tessara_test_sqlx FROM PUBLIC;
+COMMENT ON DATABASE tessara_test_sqlx IS 'tessara-validation-disposable-v1';
+GRANT CONNECT, CREATE, TEMP ON DATABASE tessara_test_sqlx TO tessara_validation_sqlx;
+-- Connect to tessara_test_sqlx as an administrator before this grant:
+GRANT CREATE ON SCHEMA public TO tessara_validation_sqlx;
+```
+
+Provision five more unique `NOCREATEDB` roles with distinct secrets and the
+same restricted attributes for the fresh API, Reference, Component,
+enrollment, and installation-control databases, placing them on any selected
+dedicated cluster while preserving pairwise-distinct authenticated server/role
+and server/database identities. Revoke the three `PUBLIC` database capabilities
+immediately after creating each database, then grant them only to that
+database's owning role. Do not grant one validation role to another.
+
+The authenticated comment is destructive-use authorization, not a freshness
+attestation. Recreate all seven databases before each complete suite; until
+runner-issued provisioning receipts land, the operator remains responsible for
+that freshness precondition. Do not run two complete validation suites
+concurrently against the same seven database targets.
+
+The runner snapshots and clears every process `PG*` setting and all eight
+validation inputs (seven URLs plus the reset acknowledgement), and replaces
+ambient `DATABASE_URL` with a deny sentinel for the whole gate. It rejects
+`PG*` or reserved validation-input declarations in workspace `.env` search
+paths. Preflight establishes exact canonical libpq settings. The generic
+workspace partition excludes API, Dataset, Reference Scoped Records, Component,
+and installation-control and receives no validation URL. Reference, Component,
+and installation-control then run separately with only their own named URL.
+The API general suite receives only `TEST_API_DATABASE_URL` and skips the exact
+enrollment, SQLx, and destructive-fresh tests; enrollment receives only its
+named URL; and API/Dataset SQLx targets alone receive
+`TEST_SQLX_DATABASE_URL` as `DATABASE_URL`. The destructive fresh API target
+runs last, after Dataset, with only `TEST_API_FRESH_DATABASE_URL` and the reset
+acknowledgement. Every scope restores its prior state,
+the runner reasserts isolation between scopes, and outer cleanup restores the
+caller's exact present-or-absent state even when a product action fails. This
+blocks process-environment and dotenv fallback from redirecting a test client
+after preflight.
+
+Before Cargo metadata or product work, and again before every central Cargo
+invocation, the runner rejects undeclared Cargo/Rust execution-control
+variables, including target runners/linkers, build targets, compiler or
+documentation-tool overrides/wrappers, Rust flag channels, toolchain selection,
+and test-thread overrides. It does not emit their values. It authenticates the
+resolved Cargo and Rust compiler paths, content hashes, and verbose versions,
+then supplies Cargo the exact authenticated compiler through a scoped `RUSTC`
+binding and restores the caller's prior present-or-absent state after success
+or failure. Each invocation also re-inspects effective `.cargo` configuration
+from the repository and its ancestors plus the user Cargo home. Only
+`build.jobs`, `build.target-dir`, `build.incremental`, and `net.retry` are
+accepted; build target/tool/wrapper/flag controls, target runner/linker/flag
+controls, Cargo `[env]`, config inclusion, unreadable syntax, unknown keys, and
+ambiguous configuration shapes fail closed before that Cargo process starts.
+When both supported config filenames exist in one search directory, the
+extensionless `config` file is inspected because that is Cargo's effective
+precedence.
 Each sprint starts from one squashed baseline migration and a freshly seeded
 database; historical populated-database/schema-migration upgrade evidence is
 not a current closeout input. Sprint-specific independent module
 upgrade/rollback checks remain required when the governing plan calls for them.
-`scripts/validate.ps1 -Fast` is an inner-loop check. Its API step runs
-the API library suite while explicitly excluding its two database-backed
-catalog-sync and enrollment proofs. The full gate runs those proofs. Fast mode
-never claims database integration or the destructive fresh-start proof.
+`scripts/validate.ps1 -Fast` is an inner-loop check. Its API step runs the
+library suite while explicitly excluding the three known database-backed
+catalog-sync, enrollment, and SQLx composition tests; `--lib` structurally
+excludes the destructive-fresh integration target. Its Dataset step uses the
+library target so SQLx integration targets do not run. An exact
+source inventory guard fails when a `#[sqlx::test]` is added or moved outside
+the declared API composition and Dataset inventories, rather than allowing the
+Fast exclusions to become stale. The full gate runs all four API database
+proofs and the Dataset, Reference, Component, and installation-control
+integration targets; Fast runs only the installation-control library target.
+Fast mode never claims database
+integration or the destructive fresh-start proof.
+
+The full runner partitions debug-profile Cargo tests exactly once across the
+workspace. The later optimized timing proof intentionally repeats one selected
+API assertion under the release profile. The runner executes the authoritative
+workspace check and warnings-denied Clippy command through the authenticated
+central Cargo boundary before product tests. It then
+runs `cargo test --workspace --all-features --locked` with all five database-
+scoped packages excluded while the deny sentinel is active, then runs each
+package through the exact URL scopes above. Dataset library, binary, doctest,
+example, benchmark,
+and Cargo-named integration targets retain `--all-features`, including
+feature-gated rollback proofs. SQLx ownership maps to an exact Cargo target
+root; an included helper containing `#[sqlx::test]` fails closed until ownership
+is made explicit. A locked-metadata self-test fails if a workspace package or
+Dataset target falls outside those partitions. Do not substitute the raw
+workspace command: it lacks the seven-database preflight and target-scoped
+binding, and can therefore consult an ambient `.env` target.
+
+Before applying a named skip, the runner lists the selected Cargo target and
+requires one exact test-name match with no longer substring collision. Each
+isolated API proof is also listed with `--exact`, executed with `--exact`, and
+accepted only when exactly one assertion passes with none failed, ignored, or
+measured. A renamed, duplicated, filtered-away, or silently ignored proof fails
+the gate rather than shrinking product evidence.
 
 ```powershell
-cargo fmt --all -- --check
-cargo check --workspace --all-features --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p tessara-module-contract --locked
 npm --prefix .\end2end ci
 npm --prefix .\end2end run install-browsers
 
 $env:TEST_API_DATABASE_URL = '<disposable-api-test-database-url>'
 $env:TEST_API_FRESH_DATABASE_URL = '<disposable-api-fresh-database-url>'
+$env:TEST_SQLX_DATABASE_URL = '<disposable-sqlx-test-database-url>'
 $env:TEST_REFERENCE_MODULE_DATABASE_URL = '<disposable-reference-module-database-url>'
 $env:TEST_COMPONENT_MODULE_DATABASE_URL = '<disposable-component-module-database-url>'
 $env:TEST_API_ENROLLMENT_DATABASE_URL = '<disposable-api-enrollment-database-url>'
 $env:TEST_INSTALLATION_CONTROL_DATABASE_URL = '<disposable-installation-control-database-url>'
 $env:SPRINT_6A_CONFIRM_DESTRUCTIVE_FRESH_RESET = 'I_UNDERSTAND_THIS_DATABASE_WILL_BE_RESET'
-.\scripts\validate.ps1
-
-# The workspace-wide suite exercises all six database-backed targets,
-# including installation control.
-cargo test --workspace --all-features --locked
+pwsh -NoProfile -File .\scripts\validate.ps1
 
 .\scripts\check-web-crate-boundaries.ps1
 cargo audit --quiet

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/phase-certificate-v2.json",
+  "title": "Tessara compact phase certificate v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract",
+    "policy_version",
+    "sprint",
+    "phase",
+    "attempt",
+    "state",
+    "authoritative",
+    "certified_at",
+    "source_identity",
+    "environment_fingerprint",
+    "candidate_fingerprint",
+    "compatibility_plan",
+    "prerequisite_certificates",
+    "dependency_fingerprints",
+    "coverage",
+    "lanes",
+    "open_defect_count",
+    "cleanup_restoration",
+    "evidence_index"
+  ],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "contract": { "const": "tessara.validation.phase-certificate" },
+    "policy_version": { "const": "tessara-validation-v2" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "phase": { "enum": ["validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "state": { "enum": ["passed", "failed"] },
+    "authoritative": { "type": "boolean" },
+    "certified_at": { "type": "string", "format": "date-time" },
+    "source_identity": { "$ref": "#/$defs/sourceIdentity" },
+    "environment_fingerprint": { "$ref": "#/$defs/sha256" },
+    "candidate_fingerprint": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "compatibility_plan": { "$ref": "#/$defs/reference" },
+    "prerequisite_certificates": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/reference" } },
+    "dependency_fingerprints": { "$ref": "#/$defs/fingerprints" },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared_lanes_sha256", "lane_count", "executed_count", "inherited_count"],
+      "properties": {
+        "declared_lanes_sha256": { "$ref": "#/$defs/sha256" },
+        "lane_count": { "type": "integer", "minimum": 1 },
+        "executed_count": { "type": "integer", "minimum": 0 },
+        "inherited_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "state",
+          "certification_basis",
+          "compatibility_fingerprint",
+          "dependency_domains",
+          "receipt",
+          "started_at",
+          "ended_at",
+          "duration_ms",
+          "inheritance"
+        ],
+        "properties": {
+          "name": { "$ref": "#/$defs/id" },
+          "state": { "enum": ["passed", "failed", "blocked"] },
+          "certification_basis": { "enum": ["executed", "inherited_nonimpact"] },
+          "compatibility_fingerprint": { "$ref": "#/$defs/sha256" },
+          "dependency_domains": { "$ref": "#/$defs/ids" },
+          "receipt": { "$ref": "#/$defs/reference" },
+          "started_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+          "ended_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+          "duration_ms": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+          "inheritance": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "prior_receipt",
+                  "prior_certificate",
+                  "prior_source_identity",
+                  "prior_environment_fingerprint",
+                  "prior_compatibility_fingerprint",
+                  "prior_dependency_fingerprints",
+                  "nonimpact_rationale"
+                ],
+                "properties": {
+                  "prior_receipt": { "$ref": "#/$defs/reference" },
+                  "prior_certificate": { "$ref": "#/$defs/reference" },
+                  "prior_source_identity": { "$ref": "#/$defs/sourceIdentity" },
+                  "prior_environment_fingerprint": { "$ref": "#/$defs/sha256" },
+                  "prior_compatibility_fingerprint": { "$ref": "#/$defs/sha256" },
+                  "prior_dependency_fingerprints": { "$ref": "#/$defs/fingerprints" },
+                  "nonimpact_rationale": { "type": "string", "minLength": 1 }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "open_defect_count": { "type": "integer", "minimum": 0 },
+    "cleanup_restoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "state", "evidence"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "state": { "enum": ["passed", "failed", "not_applicable"] },
+        "evidence": { "oneOf": [{ "$ref": "#/$defs/reference" }, { "type": "null" }] }
+      }
+    },
+    "evidence_index": { "$ref": "#/$defs/reference" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tree", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "tree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "dirty": { "type": "boolean" },
+        "branch": { "type": "string", "minLength": 1 },
+        "acceptance_inventory_sha256": { "$ref": "#/$defs/sha256" },
+        "deployment_inputs_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": {
+        "domain": { "$ref": "#/$defs/id" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "fingerprints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fingerprint" } }
+  }
+}

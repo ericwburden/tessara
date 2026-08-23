@@ -88,7 +88,12 @@
         "required": ["id", "command", "dependency_domains", "proof_classes", "required", "clean_environment"],
         "properties": {
           "id": { "$ref": "#/$defs/id" },
-          "command": { "type": "string", "minLength": 1 },
+          "command": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              { "$ref": "#/$defs/executableCommand" }
+            ]
+          },
           "dependency_domains": { "$ref": "#/$defs/nonEmptyIds" },
           "proof_classes": { "$ref": "#/$defs/nonEmptyIds" },
           "required": { "type": "boolean" },
@@ -143,6 +148,40 @@
       "minLength": 1,
       "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
     },
-    "repositoryPattern": { "$ref": "#/$defs/repositoryPath" }
+    "repositoryPattern": { "$ref": "#/$defs/repositoryPath" },
+    "executableCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["program", "arguments", "input_paths", "tools"],
+      "properties": {
+        "program": { "type": "string", "pattern": "^[A-Za-z0-9._+/-]+$" },
+        "arguments": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "type": "string", "maxLength": 4096 }
+        },
+        "input_paths": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/repositoryPath" }
+        },
+        "tools": {
+          "type": "array",
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/tool" }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "program", "input_paths"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "program": { "type": "string", "pattern": "^[A-Za-z0-9._+/-]+$" },
+        "input_paths": { "type": "array", "maxItems": 32, "uniqueItems": true, "items": { "$ref": "#/$defs/repositoryPath" } }
+      }
+    }
   }
 }
