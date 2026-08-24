@@ -2,15 +2,15 @@
 
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
-use crate::types::SubmissionDetail;
+use crate::types::ResponseDetail;
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use super::super::api::{ResponseApiError, fetch_submission_detail};
+use super::super::api::{ResponseApiError, fetch_response_detail};
 
-pub(crate) fn load_submission_detail(
-    submission_id: String,
-    detail: RwSignal<Option<SubmissionDetail>>,
+pub(crate) fn load_response_detail(
+    response_id: String,
+    detail: RwSignal<Option<ResponseDetail>>,
     is_loading: RwSignal<bool>,
     load_error: RwSignal<Option<String>>,
 ) {
@@ -20,7 +20,7 @@ pub(crate) fn load_submission_detail(
             is_loading.set(true);
             load_error.set(None);
 
-            match fetch_submission_detail(&submission_id).await {
+            match fetch_response_detail(&response_id).await {
                 Ok(loaded_detail) => {
                     detail.set(Some(loaded_detail));
                     is_loading.set(false);
@@ -41,6 +41,6 @@ pub(crate) fn load_submission_detail(
 
     #[cfg(not(feature = "hydrate"))]
     {
-        let _ = (submission_id, detail, is_loading, load_error);
+        let _ = (response_id, detail, is_loading, load_error);
     }
 }

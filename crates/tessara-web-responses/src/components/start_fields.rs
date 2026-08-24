@@ -1,14 +1,14 @@
 //! Response start assignment picker fields.
 
 use crate::text::nonempty_text;
-use crate::types::AssignmentResponseStartOption;
+use crate::types::ResponseStartOption;
 use crate::workflow_revision_label_from_option;
 use leptos::prelude::*;
 use tessara_module_ui::empty_view;
 
 #[component]
 pub(crate) fn ResponseAssignmentStartFields(
-    assignments: Vec<AssignmentResponseStartOption>,
+    assignments: Vec<ResponseStartOption>,
     selected_assignment_index: RwSignal<String>,
 ) -> impl IntoView {
     let has_assignments = !assignments.is_empty();

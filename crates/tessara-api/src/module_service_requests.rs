@@ -40,6 +40,7 @@ pub(crate) struct CoreProviderAuthorizationPayloadV1 {
     pub(crate) original_actor_id: uuid::Uuid,
     pub(crate) presenting_service: ModuleServicePrincipalV1,
     pub(crate) capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
+    pub(crate) delegation_basis: Vec<tessara_module_contract::DelegationBasisV1>,
 }
 
 impl AuthorizationGrantConsumption {
@@ -159,6 +160,7 @@ pub(crate) async fn authorize_core_provider(
             original_actor_id: inbound.payload.original_actor_id,
             presenting_service: inbound.payload.presenting_service,
             capability_scope_bindings: inbound.payload.capability_scope_bindings,
+            delegation_basis: inbound.payload.delegation_basis,
         },
     })
 }
@@ -352,6 +354,7 @@ async fn authorize_bootstrap_core_provider(
                 module_definition_id: module_definition_id.clone(),
             },
             capability_scope_bindings: authorization.payload.capability_scope_bindings,
+            delegation_basis: Vec::new(),
         },
     })
 }

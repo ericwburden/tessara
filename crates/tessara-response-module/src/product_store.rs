@@ -40,6 +40,7 @@ pub struct ResponseListFilter {
     pub form_id: Option<Uuid>,
     pub node_id: Option<Uuid>,
     pub search: Option<String>,
+    pub assignee_account_id: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -613,12 +614,16 @@ fn summary_from_row(
     let status: String = row.get("status");
     let form_id: Uuid = row.get("form_id");
     let node_id: Uuid = row.get("node_id");
+    let assignee_account_id: Uuid = row.get("assignee_account_id");
     if filter
         .status
         .as_deref()
         .is_some_and(|value| value != status)
         || filter.form_id.is_some_and(|value| value != form_id)
         || filter.node_id.is_some_and(|value| value != node_id)
+        || filter
+            .assignee_account_id
+            .is_some_and(|value| value != assignee_account_id)
     {
         return Ok(None);
     }
@@ -860,14 +865,16 @@ async fn append_export(
         SubmittedResponseChange::Upsert(upsert) => upsert.content_digest.clone(),
         SubmittedResponseChange::Tombstone { .. } => unreachable!(),
     };
-    sqlx::query("INSERT INTO response_export_changes(response_id,change_kind,payload,content_digest,occurred_at) VALUES($1,'upsert',$2,$3,$4)")
+    sqlx::query("INSERT INTO response_export_changes(response_id,form_version_id,node_id,change_kind,payload,content_digest,occurred_at) VALUES($1,$2,$3,'upsert',$4,$5,$6)")
         .bind(response.id)
+        .bind(response.form_version_id)
+        .bind(response.node_id)
         .bind(serde_json::to_value(change).map_err(|_| ResponseOwnerError::CorruptSnapshot)?)
         .bind(digest)
         .bind(occurred_at)
         .execute(&mut **transaction)
         .await?;
-    let _ = schema;
+    debug_assert_eq!(schema.form_version_id, response.form_version_id);
     Ok(())
 }
 

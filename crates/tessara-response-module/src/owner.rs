@@ -83,6 +83,36 @@ impl ResponseOwnerRepository {
         }
     }
 
+    pub async fn replay_create(
+        &self,
+        actor_account_id: Uuid,
+        idempotency_key_digest: &str,
+        request_digest: &str,
+    ) -> Result<Option<ResponseLifecycleSnapshot>, ResponseOwnerError> {
+        if actor_account_id.is_nil()
+            || !is_digest(idempotency_key_digest)
+            || !is_digest(request_digest)
+        {
+            return Err(ResponseOwnerError::InvalidCommand);
+        }
+        let row = sqlx::query_as::<_, (String, Value)>(
+            "SELECT request_digest,response_body FROM response_idempotency_receipts WHERE actor_account_id=$1 AND action='responses.start' AND idempotency_key_digest=$2",
+        )
+        .bind(actor_account_id)
+        .bind(idempotency_key_digest)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some((stored_digest, body)) = row else {
+            return Ok(None);
+        };
+        if stored_digest != request_digest {
+            return Err(ResponseOwnerError::IdempotencyConflict);
+        }
+        serde_json::from_value(body)
+            .map(Some)
+            .map_err(|_| ResponseOwnerError::CorruptReceipt)
+    }
+
     async fn create_once(
         &self,
         command: &CreateResponseCommand,

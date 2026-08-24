@@ -5,7 +5,7 @@
 use super::actions::start_assignment_response_and_navigate;
 use super::components::ResponseAssignmentStartForm;
 use super::loaders::load_response_start_options;
-use crate::types::AssignmentResponseStartOptions;
+use crate::types::ResponseStartOptions;
 #[cfg(feature = "hydrate")]
 use crate::url::current_search_param;
 use tessara_module_ui::{
@@ -16,7 +16,7 @@ use leptos::prelude::*;
 
 #[component]
 pub fn ResponseStartContent() -> impl IntoView {
-    let options = RwSignal::new(None::<AssignmentResponseStartOptions>);
+    let options = RwSignal::new(None::<ResponseStartOptions>);
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let message = RwSignal::new(None::<String>);
@@ -39,7 +39,14 @@ pub fn ResponseStartContent() -> impl IntoView {
     Effect::new(move |_| {
         if let Some(workflow_assignment_id) = requested_workflow_assignment_id_for_effect.clone() {
             is_loading.set(false);
-            start_assignment_response_and_navigate(workflow_assignment_id, is_saving, message);
+            match uuid::Uuid::parse_str(&workflow_assignment_id) {
+                Ok(workflow_assignment_id) => start_assignment_response_and_navigate(
+                    workflow_assignment_id,
+                    is_saving,
+                    message,
+                ),
+                Err(_) => message.set(Some("Assigned response link is invalid.".into())),
+            }
         } else {
             load_response_start_options(
                 options,

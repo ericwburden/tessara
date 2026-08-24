@@ -1,13 +1,7 @@
 //! Responses-specific adaptation of shared browser transport and route policy.
 
 #[cfg(feature = "hydrate")]
-use serde::{Deserialize, de::DeserializeOwned};
-
-#[cfg(feature = "hydrate")]
-#[derive(Debug, Deserialize)]
-pub(crate) struct IdResponse {
-    pub(crate) id: String,
-}
+use serde::de::DeserializeOwned;
 
 #[cfg(feature = "hydrate")]
 pub(crate) async fn send_json_request<T>(

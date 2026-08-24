@@ -2,14 +2,14 @@
 
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
-use crate::types::AssignmentResponseStartOptions;
+use crate::types::ResponseStartOptions;
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
 use super::super::api::{ResponseApiError, fetch_response_start_options};
 
 pub(crate) fn load_response_start_options(
-    options: RwSignal<Option<AssignmentResponseStartOptions>>,
+    options: RwSignal<Option<ResponseStartOptions>>,
     is_loading: RwSignal<bool>,
     message: RwSignal<Option<String>>,
     delegate_account_id: Option<String>,

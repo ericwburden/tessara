@@ -19,6 +19,7 @@ use tessara_forms_contract::{
     FORM_VERSION_SCHEMA_VERSION, FormVersionCatalogItem, FormVersionCatalogRequest,
     FormVersionCatalogResponse, FormVersionField, FormVersionSchemaAction,
     FormVersionSchemaRequest, FormVersionSchemaResponse, FormVersionSection,
+    RESPONSE_FORM_VERSION_SCHEMA_ACTION, RESPONSE_FORM_VERSION_SCHEMA_PATH,
 };
 use uuid::Uuid;
 
@@ -33,6 +34,7 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(FORM_VERSION_CATALOG_PATH, post(catalog))
         .route(FORM_VERSION_SCHEMA_PATH, post(schema))
+        .route(RESPONSE_FORM_VERSION_SCHEMA_PATH, post(response_schema))
 }
 
 async fn catalog(
@@ -167,6 +169,39 @@ async fn schema(
     contract_response(&load_schema(&state, request.form_version_id, &scopes).await?)
 }
 
+async fn response_schema(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<Response> {
+    require_media_type(&headers)?;
+    let grant = authorize(
+        &state,
+        &headers,
+        RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+        RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        &body,
+    )
+    .await?;
+    let request: FormVersionSchemaRequest =
+        serde_json::from_slice(&body).map_err(|_| restricted())?;
+    if request.action != FormVersionSchemaAction::ResolveSchema {
+        return Err(restricted());
+    }
+    let mut scopes = authorized_response_scope(&grant);
+    if has_global_response_scope(&grant) {
+        scopes.extend(
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM nodes ORDER BY id")
+                .fetch_all(&state.pool)
+                .await?,
+        );
+    }
+    if scopes.is_empty() {
+        return Err(restricted());
+    }
+    contract_response(&load_schema(&state, request.form_version_id, &scopes).await?)
+}
+
 async fn authorize(
     state: &AppState,
     headers: &HeaderMap,
@@ -199,6 +234,41 @@ fn authorized_scope(
                 .chain(binding.authorized_organization_ids.iter().copied())
         })
         .collect()
+}
+
+fn authorized_response_scope(
+    grant: &crate::module_service_requests::CoreProviderAuthorizationV1,
+) -> BTreeSet<Uuid> {
+    grant
+        .payload
+        .capability_scope_bindings
+        .iter()
+        .filter(|binding| {
+            matches!(
+                binding.capability.as_str(),
+                "submissions:respond" | "submissions:manage"
+            )
+        })
+        .flat_map(|binding| {
+            std::iter::once(binding.organization_root_id)
+                .chain(binding.authorized_organization_ids.iter().copied())
+        })
+        .collect()
+}
+
+fn has_global_response_scope(
+    grant: &crate::module_service_requests::CoreProviderAuthorizationV1,
+) -> bool {
+    grant
+        .payload
+        .capability_scope_bindings
+        .iter()
+        .any(|binding| {
+            matches!(
+                binding.capability.as_str(),
+                "submissions:respond" | "submissions:manage"
+            ) && binding.organization_root_id == grant.payload.installation_id
+        })
 }
 
 async fn load_schema(

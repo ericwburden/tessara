@@ -299,6 +299,52 @@ CREATE TABLE workflow_step_instances (
     CHECK (status IN ('in_progress', 'completed'))
 );
 
+CREATE TABLE workflow_response_reservations (
+    workflow_assignment_id uuid PRIMARY KEY REFERENCES workflow_assignments(id) ON DELETE CASCADE,
+    workflow_instance_id uuid NOT NULL UNIQUE REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    workflow_step_instance_id uuid NOT NULL UNIQUE REFERENCES workflow_step_instances(id) ON DELETE CASCADE,
+    started_by_account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    one_use_nonce uuid NOT NULL UNIQUE,
+    context_payload jsonb NOT NULL,
+    context_digest text NOT NULL CHECK (context_digest ~ '^sha256:[0-9a-f]{64}$'),
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    consumed_response_id uuid,
+    consumed_at timestamptz,
+    CHECK ((consumed_response_id IS NULL) = (consumed_at IS NULL))
+);
+
+CREATE TABLE workflow_response_projection (
+    workflow_assignment_id uuid NOT NULL REFERENCES workflow_assignments(id) ON DELETE CASCADE,
+    response_installation_id uuid NOT NULL,
+    response_module_instance_id uuid NOT NULL,
+    response_id uuid PRIMARY KEY,
+    response_revision bigint NOT NULL CHECK (response_revision > 0),
+    response_state text NOT NULL CHECK (response_state IN ('draft', 'submitted', 'deleted')),
+    last_event_sequence bigint NOT NULL UNIQUE CHECK (last_event_sequence > 0),
+    updated_at timestamptz NOT NULL,
+    UNIQUE (response_installation_id, response_module_instance_id, response_id)
+);
+CREATE UNIQUE INDEX workflow_response_projection_active_assignment_idx
+    ON workflow_response_projection (workflow_assignment_id)
+    WHERE response_state IN ('draft', 'submitted');
+
+CREATE TABLE workflow_response_event_consumer_state (
+    singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+    provider_epoch uuid,
+    committed_sequence bigint NOT NULL DEFAULT 0 CHECK (committed_sequence >= 0),
+    synchronized_at timestamptz,
+    last_error_at timestamptz
+);
+INSERT INTO workflow_response_event_consumer_state (singleton) VALUES (true);
+
+CREATE TABLE workflow_response_consumed_events (
+    event_id uuid PRIMARY KEY,
+    sequence bigint NOT NULL UNIQUE CHECK (sequence > 0),
+    content_digest text NOT NULL CHECK (content_digest ~ '^sha256:[0-9a-f]{64}$'),
+    consumed_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE submissions
     ADD COLUMN workflow_step_instance_id uuid REFERENCES workflow_step_instances(id) ON DELETE SET NULL;
 

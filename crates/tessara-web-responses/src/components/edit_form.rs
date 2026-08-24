@@ -1,28 +1,29 @@
 //! Response edit form component.
 
 use super::ResponseFieldInput;
-use crate::actions::{save_submission_values, submit_response_values};
+use crate::actions::{save_response_values, submit_response_values};
 use crate::metadata::metadata_label;
 use crate::status::status_badge_class;
-use crate::types::{RenderedForm, SubmissionDetail};
+use crate::types::{ResponseDetail, ResponseFormSnapshot};
 use leptos::prelude::*;
 use std::collections::HashMap;
 use tessara_module_ui::{InfoListTable, empty_view};
 
 #[component]
 pub(crate) fn ResponseEditForm(
-    detail: SubmissionDetail,
-    rendered_form: RenderedForm,
+    detail: ResponseDetail,
+    rendered_form: ResponseFormSnapshot,
     text_values: RwSignal<HashMap<String, String>>,
     boolean_values: RwSignal<HashMap<String, bool>>,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let detail_href = format!("/responses/{}", detail.id);
-    let save_submission_id = detail.id.clone();
-    let submit_submission_id = detail.id.clone();
+    let save_response_id = detail.id.clone();
+    let submit_response_id = detail.id.clone();
     let rendered_for_save = rendered_form.clone();
     let rendered_for_submit = rendered_form.clone();
+    let revision = RwSignal::new(detail.revision);
 
     view! {
         <form class="native-form response-edit-form" on:submit=move |event| event.prevent_default()>
@@ -96,9 +97,10 @@ pub(crate) fn ResponseEditForm(
                     type="button"
                     disabled=move || is_saving.get()
                     on:click=move |_| {
-                        save_submission_values(
-                            save_submission_id.clone(),
+                        save_response_values(
+                            save_response_id.clone(),
                             rendered_for_save.clone(),
+                            revision,
                             text_values.get(),
                             boolean_values.get(),
                             is_saving,
@@ -114,8 +116,9 @@ pub(crate) fn ResponseEditForm(
                     disabled=move || is_saving.get()
                     on:click=move |_| {
                         submit_response_values(
-                            submit_submission_id.clone(),
+                            submit_response_id.clone(),
                             rendered_for_submit.clone(),
+                            revision,
                             text_values.get(),
                             boolean_values.get(),
                             is_saving,

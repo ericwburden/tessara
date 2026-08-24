@@ -66,6 +66,7 @@ pub(crate) struct CorePrivateProviderRequest<'a, T> {
     pub(crate) contract_version: &'a str,
     pub(crate) authorization_action: &'a str,
     pub(crate) path: &'a str,
+    pub(crate) media_type: &'a str,
     pub(crate) correlation_id: Uuid,
     /// Core-owned capability whose effective scope is delegated to this exact
     /// provider action (for example `operations:view` or `admin:all`).
@@ -103,6 +104,7 @@ impl ResourceObservationProviderRoute {
             contract_version: &self.contract_version,
             authorization_action: &self.authorization_action,
             path: &self.path,
+            media_type: CORE_PRIVATE_PROVIDER_MEDIA_TYPE,
             correlation_id,
             actor_capability: &self.actor_capability,
             body,
@@ -383,11 +385,8 @@ where
         .map_err(|error| ApiError::Internal(error.into()))?;
     let response = match client
         .post(format!("{endpoint}{}", request.path))
-        .header(
-            reqwest::header::CONTENT_TYPE,
-            CORE_PRIVATE_PROVIDER_MEDIA_TYPE,
-        )
-        .header(reqwest::header::ACCEPT, CORE_PRIVATE_PROVIDER_MEDIA_TYPE)
+        .header(reqwest::header::CONTENT_TYPE, request.media_type)
+        .header(reqwest::header::ACCEPT, request.media_type)
         .header("x-tessara-authorization", encoded_grant)
         .header("x-tessara-core-service-request", encoded_core_request)
         .header("x-tessara-correlation-id", correlation_id.to_string())
@@ -415,6 +414,7 @@ where
         Ok(None) | Err(_) => return Ok(CorePrivateProviderResult::Unavailable),
     };
     Ok(decode_private_provider_response(
+        request.media_type,
         content_type.as_deref(),
         content_length,
         &bytes,
@@ -435,11 +435,12 @@ async fn bounded_private_provider_body(
 }
 
 fn decode_private_provider_response<T: DeserializeOwned>(
+    expected_media_type: &str,
     content_type: Option<&str>,
     declared_length: Option<u64>,
     bytes: &[u8],
 ) -> CorePrivateProviderResult<T> {
-    if content_type != Some(CORE_PRIVATE_PROVIDER_MEDIA_TYPE)
+    if content_type != Some(expected_media_type)
         || declared_length
             .is_some_and(|length| length > CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES as u64)
         || bytes.len() > CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES
@@ -1221,6 +1222,7 @@ mod tests {
             contract_version: tessara_datasets_contract::DATASET_REVERSE_CONTRACT_VERSION,
             authorization_action: tessara_datasets_contract::DATASET_SUMMARY_ACTION,
             path: tessara_datasets_contract::DATASET_SUMMARY_PATH,
+            media_type: CORE_PRIVATE_PROVIDER_MEDIA_TYPE,
             correlation_id: Uuid::from_u128(1),
             actor_capability: "admin:all",
             body: &body,
@@ -1397,6 +1399,7 @@ mod tests {
         let body = br#"{"state":"available"}"#;
         assert_eq!(
             decode_private_provider_response::<PrivateResponseFixture>(
+                "application/json",
                 Some("application/json"),
                 Some(body.len() as u64),
                 body,
@@ -1413,6 +1416,7 @@ mod tests {
         ] {
             assert_eq!(
                 decode_private_provider_response::<PrivateResponseFixture>(
+                    "application/json",
                     content_type,
                     Some(body.len() as u64),
                     body,
@@ -1426,6 +1430,7 @@ mod tests {
     fn private_provider_malformed_and_oversized_responses_are_unavailable() {
         assert_eq!(
             decode_private_provider_response::<PrivateResponseFixture>(
+                "application/json",
                 Some("application/json"),
                 None,
                 br#"{"state":}"
@@ -1435,6 +1440,7 @@ mod tests {
         let oversized = vec![b' '; CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES + 1];
         assert_eq!(
             decode_private_provider_response::<PrivateResponseFixture>(
+                "application/json",
                 Some("application/json"),
                 None,
                 &oversized,
@@ -1443,6 +1449,7 @@ mod tests {
         );
         assert_eq!(
             decode_private_provider_response::<PrivateResponseFixture>(
+                "application/json",
                 Some("application/json"),
                 Some((CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES + 1) as u64),
                 br#"{"state":"available"}"#,

@@ -3,12 +3,16 @@
 //! Keep endpoint requests and response parsing here; Leptos signal orchestration belongs in loaders and actions.
 
 #[cfg(feature = "hydrate")]
-use crate::http::{IdResponse, send_json_request};
+use crate::http::send_json_request;
 #[cfg(feature = "hydrate")]
 use crate::types::{
-    AssignmentResponseStartOptions, RenderedForm, SaveSubmissionValuesPayload, SubmissionDetail,
-    SubmissionSummary,
+    ResponseDetail, ResponseRevisionRequest, ResponseStartOptions, ResponseSummary,
+    SaveResponseValuesRequest,
 };
+#[cfg(feature = "hydrate")]
+use tessara_responses_contract::{ResponseMutationResult, StartResponseRequest};
+#[cfg(feature = "hydrate")]
+use uuid::Uuid;
 
 #[cfg(feature = "hydrate")]
 pub(super) enum ResponseApiError {
@@ -32,44 +36,29 @@ impl ResponseApiError {
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn fetch_submissions() -> Result<Vec<SubmissionSummary>, ResponseApiError> {
-    tessara_web_http::fetch_json("/api/submissions", "Responses")
+pub(super) async fn fetch_responses() -> Result<Vec<ResponseSummary>, ResponseApiError> {
+    tessara_web_http::fetch_json("/api/responses", "Responses")
         .await
         .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn fetch_submission_detail(
-    submission_id: &str,
-) -> Result<SubmissionDetail, ResponseApiError> {
-    tessara_web_http::fetch_json(
-        &format!("/api/submissions/{submission_id}"),
-        "Response detail",
-    )
-    .await
-    .map_err(ResponseApiError::from_transport_error)
-}
-
-#[cfg(feature = "hydrate")]
-pub(super) async fn fetch_rendered_form(
-    form_version_id: &str,
-) -> Result<RenderedForm, ResponseApiError> {
-    tessara_web_http::fetch_json(
-        &format!("/api/form-versions/{form_version_id}/render"),
-        "Response form",
-    )
-    .await
-    .map_err(ResponseApiError::from_transport_error)
+pub(super) async fn fetch_response_detail(
+    response_id: &str,
+) -> Result<ResponseDetail, ResponseApiError> {
+    tessara_web_http::fetch_json(&format!("/api/responses/{response_id}"), "Response detail")
+        .await
+        .map_err(ResponseApiError::from_transport_error)
 }
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn fetch_response_start_options(
     delegate_account_id: Option<&str>,
-) -> Result<AssignmentResponseStartOptions, ResponseApiError> {
+) -> Result<ResponseStartOptions, ResponseApiError> {
     let path = delegate_account_id
         .filter(|value| !value.trim().is_empty())
-        .map(|value| format!("/api/responses/options?delegate_account_id={value}"))
-        .unwrap_or_else(|| "/api/responses/options".to_string());
+        .map(|value| format!("/api/responses/start-options?delegate_account_id={value}"))
+        .unwrap_or_else(|| "/api/responses/start-options".to_string());
 
     tessara_web_http::fetch_json(&path, "Assigned response start options")
         .await
@@ -78,44 +67,34 @@ pub(super) async fn fetch_response_start_options(
 
 #[cfg(feature = "hydrate")]
 pub(super) async fn start_assignment_response(
-    workflow_assignment_id: &str,
-) -> Result<String, ResponseApiError> {
-    let response = send_json_request::<serde_json::Value>(
-        gloo_net::http::Request::post(&format!(
-            "/api/workflow-assignments/{workflow_assignment_id}/start"
-        )),
-        Some("{}".into()),
+    workflow_assignment_id: Uuid,
+) -> Result<Uuid, ResponseApiError> {
+    let body = serde_json::to_string(&StartResponseRequest {
+        workflow_assignment_id,
+    })
+    .map_err(|error| ResponseApiError::message(error.to_string()))?;
+    let response = send_json_request::<ResponseMutationResult>(
+        gloo_net::http::Request::post("/api/responses"),
+        Some(body),
         "Start assigned response",
     )
     .await
     .map_err(ResponseApiError::from_transport_error)?;
 
-    response
-        .get("id")
-        .and_then(|value| value.as_str().map(str::to_owned))
-        .or_else(|| {
-            response
-                .get("id")
-                .and_then(|value| value.as_i64().map(|value| value.to_string()))
-        })
-        .ok_or_else(|| {
-            ResponseApiError::message(
-                "Assigned response was started, but the response id was missing.",
-            )
-        })
+    Ok(response.id)
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn save_submission_values_api(
-    submission_id: &str,
-    payload: SaveSubmissionValuesPayload,
-) -> Result<IdResponse, ResponseApiError> {
+pub(super) async fn save_response_values_api(
+    response_id: Uuid,
+    payload: SaveResponseValuesRequest,
+) -> Result<ResponseMutationResult, ResponseApiError> {
     let body = serde_json::to_string(&payload).map_err(|error| {
         ResponseApiError::message(format!("Response values could not be prepared: {error}"))
     })?;
 
-    send_json_request::<IdResponse>(
-        gloo_net::http::Request::put(&format!("/api/submissions/{submission_id}/values")),
+    send_json_request::<ResponseMutationResult>(
+        gloo_net::http::Request::put(&format!("/api/responses/{response_id}/values")),
         Some(body),
         "Save response draft",
     )
@@ -124,12 +103,15 @@ pub(super) async fn save_submission_values_api(
 }
 
 #[cfg(feature = "hydrate")]
-pub(super) async fn submit_submission_api(
-    submission_id: &str,
-) -> Result<IdResponse, ResponseApiError> {
-    send_json_request::<IdResponse>(
-        gloo_net::http::Request::post(&format!("/api/submissions/{submission_id}/submit")),
-        Some("{}".into()),
+pub(super) async fn submit_response_api(
+    response_id: Uuid,
+    expected_revision: u64,
+) -> Result<ResponseMutationResult, ResponseApiError> {
+    let body = serde_json::to_string(&ResponseRevisionRequest { expected_revision })
+        .map_err(|error| ResponseApiError::message(error.to_string()))?;
+    send_json_request::<ResponseMutationResult>(
+        gloo_net::http::Request::post(&format!("/api/responses/{response_id}/submit")),
+        Some(body),
         "Submit response",
     )
     .await

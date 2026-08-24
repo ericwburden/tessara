@@ -150,6 +150,7 @@ async fn load_dataset_summary(
             contract_version: DATASET_REVERSE_CONTRACT_VERSION,
             authorization_action: DATASET_SUMMARY_ACTION,
             path: DATASET_SUMMARY_PATH,
+            media_type: "application/json",
             correlation_id,
             actor_capability: "admin:all",
             body: &request,

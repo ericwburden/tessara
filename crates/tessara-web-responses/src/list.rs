@@ -4,16 +4,16 @@
 
 use super::components::ResponsesList;
 use super::loaders::load_submissions;
-use crate::display::{submission_assignee_label, submission_status_key};
+use crate::display::{response_assignee_label, response_status_key};
 use crate::filtering::unique_filter_options;
 use crate::text::text_matches;
-use crate::types::SubmissionSummary;
+use crate::types::ResponseSummary;
 use leptos::prelude::*;
 use tessara_module_ui::PageHeader;
 
 #[allow(non_snake_case)]
 pub fn ResponsesIndexContent() -> impl IntoView {
-    let submissions = RwSignal::new(Vec::<SubmissionSummary>::new());
+    let submissions = RwSignal::new(Vec::<ResponseSummary>::new());
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
     let search = RwSignal::new(String::new());
@@ -31,35 +31,35 @@ pub fn ResponsesIndexContent() -> impl IntoView {
         submissions
             .get()
             .into_iter()
-            .filter(|submission| {
-                let status_key = submission_status_key(submission);
-                let assignee_label = submission_assignee_label(submission);
+            .filter(|response| {
+                let status_key = response_status_key(response);
+                let assignee_label = response_assignee_label(response);
                 let matches_assignee = assignee == "all" || assignee_label == assignee;
                 (status == "all" || status_key == status)
                     && matches_assignee
                     && text_matches(
                         &query,
                         &[
-                            submission.form_name.as_str(),
-                            submission.workflow_name.as_deref().unwrap_or_default(),
-                            submission
+                            response.form_name.as_str(),
+                            response.workflow_name.as_deref().unwrap_or_default(),
+                            response
                                 .current_workflow_step_title
                                 .as_deref()
                                 .unwrap_or_default(),
-                            submission
+                            response
                                 .next_workflow_step_title
                                 .as_deref()
                                 .unwrap_or_default(),
-                            submission
+                            response
                                 .next_workflow_step_form_name
                                 .as_deref()
                                 .unwrap_or_default(),
-                            submission.node_name.as_str(),
-                            submission
+                            response.node_name.as_str(),
+                            response
                                 .assigned_to_display_name
                                 .as_deref()
                                 .unwrap_or_default(),
-                            submission.status.as_str(),
+                            response.status.as_str(),
                         ],
                     )
             })
@@ -70,7 +70,7 @@ pub fn ResponsesIndexContent() -> impl IntoView {
             submissions
                 .get()
                 .iter()
-                .map(submission_status_key)
+                .map(response_status_key)
                 .collect::<Vec<_>>(),
         )
     };
@@ -79,7 +79,7 @@ pub fn ResponsesIndexContent() -> impl IntoView {
             submissions
                 .get()
                 .iter()
-                .map(submission_assignee_label)
+                .map(response_assignee_label)
                 .collect::<Vec<_>>(),
         )
     };

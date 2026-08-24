@@ -2,13 +2,13 @@
 
 use crate::metadata::metadata_label;
 use crate::text::nonempty_text;
-use crate::types::SubmissionRuntimeDetail;
+use crate::types::ResponseRuntimeDetail;
 use leptos::prelude::*;
 use tessara_module_ui::InfoListTable;
 
 /// Renders workflow runtime progress for a response.
 #[component]
-pub(crate) fn ResponseRuntimeCard(runtime: SubmissionRuntimeDetail) -> impl IntoView {
+pub(crate) fn ResponseRuntimeCard(runtime: ResponseRuntimeDetail) -> impl IntoView {
     let current_position = runtime.current_step_position + 1;
     let next_step = nonempty_text(runtime.next_step_title.as_deref(), "Final step");
     let history = runtime.history.clone();

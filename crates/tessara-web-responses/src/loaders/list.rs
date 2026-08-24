@@ -2,14 +2,14 @@
 
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
-use crate::types::SubmissionSummary;
+use crate::types::ResponseSummary;
 use leptos::prelude::*;
 
 #[cfg(feature = "hydrate")]
-use super::super::api::{ResponseApiError, fetch_submissions};
+use super::super::api::{ResponseApiError, fetch_responses};
 
 pub(crate) fn load_submissions(
-    submissions: RwSignal<Vec<SubmissionSummary>>,
+    submissions: RwSignal<Vec<ResponseSummary>>,
     is_loading: RwSignal<bool>,
     load_error: RwSignal<Option<String>>,
 ) {
@@ -19,7 +19,7 @@ pub(crate) fn load_submissions(
             is_loading.set(true);
             load_error.set(None);
 
-            match fetch_submissions().await {
+            match fetch_responses().await {
                 Ok(loaded_submissions) => {
                     submissions.set(loaded_submissions);
                     is_loading.set(false);

@@ -17,6 +17,9 @@ pub const FORM_VERSION_CATALOG_ACTION: &str = "forms.form_version_catalog";
 pub const FORM_VERSION_SCHEMA_ACTION: &str = "forms.form_version_schema";
 pub const FORM_VERSION_CATALOG_PATH: &str = "/api/private/forms/form-version-catalog";
 pub const FORM_VERSION_SCHEMA_PATH: &str = "/api/private/forms/form-version-schema";
+pub const RESPONSE_FORM_VERSION_SCHEMA_ACTION: &str = "forms.response_form_version_schema";
+pub const RESPONSE_FORM_VERSION_SCHEMA_PATH: &str =
+    "/api/private/forms/response-form-version-schema";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

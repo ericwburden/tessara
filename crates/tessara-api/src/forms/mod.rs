@@ -833,6 +833,7 @@ async fn load_form_dataset_sources(
             contract_version: DATASET_REVERSE_CONTRACT_VERSION,
             authorization_action: DATASET_SOURCE_USAGE_ACTION,
             path: DATASET_SOURCE_USAGE_PATH,
+            media_type: "application/json",
             correlation_id,
             actor_capability: "forms:read",
             body: &request,

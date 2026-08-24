@@ -41,10 +41,10 @@ pub(crate) fn response_content(bootstrap: &ResponseRouteBootstrap) -> leptos::pr
         ResponseRouteBootstrap::Directory => view! { <ResponsesIndexContent/> }.into_any(),
         ResponseRouteBootstrap::Start => view! { <ResponseStartContent/> }.into_any(),
         ResponseRouteBootstrap::Detail { response_id } => {
-            view! { <ResponseDetailContent submission_id=response_id.clone()/> }.into_any()
+            view! { <ResponseDetailContent response_id=response_id.clone()/> }.into_any()
         }
         ResponseRouteBootstrap::Edit { response_id } => {
-            view! { <ResponseEditContent submission_id=response_id.clone()/> }.into_any()
+            view! { <ResponseEditContent response_id=response_id.clone()/> }.into_any()
         }
     };
     view! { <div class="tessara-response">{content}</div> }.into_any()

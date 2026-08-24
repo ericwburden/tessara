@@ -28,6 +28,7 @@ mod response_export_provider;
 mod response_owner_actions;
 mod submissions;
 mod users;
+mod workflow_response_provider;
 mod workflows;
 
 /// Test-facing projection of the exact fail-closed row validator used by the
@@ -364,6 +365,7 @@ fn api_routes() -> Router<AppState> {
         .merge(operations::routes())
         .merge(forms::routes())
         .merge(form_version_schema_provider::routes())
+        .merge(workflow_response_provider::routes())
         .merge(workflows::routes())
         .merge(submissions::routes())
         .merge(analytics::routes())

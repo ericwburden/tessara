@@ -28,6 +28,7 @@ tessara-control-plane-contract = { path = "../tessara-control-plane-contract" }
 tessara-datasets-contract = { path = "../tessara-datasets-contract" }
 tessara-forms-contract = { path = "../tessara-forms-contract" }
 tessara-responses-contract = { path = "../tessara-responses-contract" }
+tessara-workflows-contract = { path = "../tessara-workflows-contract" }
 tessara-composition = { path = "../tessara-composition" }
 tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }

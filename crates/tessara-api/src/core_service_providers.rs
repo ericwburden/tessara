@@ -20,6 +20,10 @@ pub(crate) const PRINCIPAL_DISPLAY_CONTRACT: &str =
     tessara_control_plane_contract::PRINCIPAL_DISPLAY_CONTRACT_ID;
 pub(crate) const PRINCIPAL_DISPLAY_CONTRACT_VERSION: &str =
     tessara_control_plane_contract::PRINCIPAL_DISPLAY_CONTRACT_VERSION;
+pub(crate) const WORKFLOW_RESPONSE_CONTEXT_CONTRACT: &str =
+    tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID;
+pub(crate) const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT: &str =
+    tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct CoreServiceAction {
@@ -58,7 +62,7 @@ const RESPONSE_EXPORT_ACTIONS: [CoreServiceAction; 3] = [
     },
 ];
 
-const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 2] = [
+const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
     CoreServiceAction {
         path: tessara_forms_contract::FORM_VERSION_CATALOG_PATH,
         method: ServiceActionMethod::Post,
@@ -73,6 +77,14 @@ const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 2] = [
         authorization_action: tessara_forms_contract::FORM_VERSION_SCHEMA_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
         required_capability: "datasets:manage",
+        functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
+    },
+    CoreServiceAction {
+        path: tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action: tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capability: "submissions:respond",
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
 ];
@@ -96,6 +108,26 @@ const CONTROL_PLANE_ACTIONS: [CoreServiceAction; 2] = [
     },
 ];
 
+const WORKFLOW_RESPONSE_ACTIONS: [CoreServiceAction; 2] = [
+    CoreServiceAction {
+        path: tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action: tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capability: "submissions:respond",
+        functional_contract: WORKFLOW_RESPONSE_CONTEXT_CONTRACT,
+    },
+    CoreServiceAction {
+        path: tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action:
+            tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capability: "submissions:respond",
+        functional_contract: WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT,
+    },
+];
+
 pub(crate) fn resolve_service_action(
     functional_contract: &str,
     authorization_action: &str,
@@ -104,6 +136,7 @@ pub(crate) fn resolve_service_action(
         .iter()
         .chain(FORM_VERSION_SCHEMA_ACTIONS.iter())
         .chain(CONTROL_PLANE_ACTIONS.iter())
+        .chain(WORKFLOW_RESPONSE_ACTIONS.iter())
         .copied()
         .find(|declaration| {
             declaration.functional_contract == functional_contract
@@ -124,6 +157,9 @@ pub(crate) fn contract_version(functional_contract: &str) -> Option<Version> {
         }
         PRINCIPAL_DISPLAY_CONTRACT => {
             Some(Version::parse(PRINCIPAL_DISPLAY_CONTRACT_VERSION).expect("static version"))
+        }
+        WORKFLOW_RESPONSE_CONTEXT_CONTRACT | WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT => {
+            Some(Version::new(1, 0, 0))
         }
         _ => None,
     }

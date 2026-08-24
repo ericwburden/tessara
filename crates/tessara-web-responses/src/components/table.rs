@@ -1,21 +1,21 @@
 //! Desktop response table for response summaries.
 
 use crate::display::{
-    submission_assignee_label, submission_progress_label, submission_status_key,
-    submission_status_label, submission_step_label, submission_workflow_label,
+    response_assignee_label, response_progress_label, response_status_key, response_status_label,
+    response_step_label, response_workflow_label,
 };
 #[cfg(feature = "hydrate")]
 use crate::http::navigate_to_href;
 use crate::pagination::pagination_page_start;
 use crate::status::status_badge_class;
-use crate::types::SubmissionSummary;
+use crate::types::ResponseSummary;
 use icons::{PanelRight, Pencil};
 use leptos::prelude::*;
 use tessara_module_ui::{DataTable, DropdownMenu, TableFilterHeader, Timestamp, empty_view};
 
 #[component]
 pub(crate) fn ResponseDesktopTable(
-    submissions: Vec<SubmissionSummary>,
+    submissions: Vec<ResponseSummary>,
     total_count: usize,
     page_size: RwSignal<usize>,
     page_index: RwSignal<usize>,
@@ -66,20 +66,20 @@ pub(crate) fn ResponseDesktopTable(
                         .skip(pagination_page_start(total_count, page_size.get(), page_index.get()))
                         .take(page_size.get())
                         .cloned()
-                        .map(|submission| {
-                            let detail_href = format!("/responses/{}", submission.id);
-                            let edit_href = format!("/responses/{}/edit", submission.id);
-                            let form_href = format!("/forms/{}", submission.form_id);
-                            let node_href = format!("/organization/{}", submission.node_id);
-                            let form_name = submission.form_name.clone();
+                        .map(|response| {
+                            let detail_href = format!("/responses/{}", response.id);
+                            let edit_href = format!("/responses/{}/edit", response.id);
+                            let form_href = format!("/forms/{}", response.form_id);
+                            let node_href = format!("/organization/{}", response.node_id);
+                            let form_name = response.form_name.clone();
                             let form_version_label =
-                                format!("Form Version {}", submission.version_label);
-                            let status_key = submission_status_key(&submission);
-                            let status_label = submission_status_label(&submission);
-                            let workflow_label = submission_workflow_label(&submission);
-                            let step_label = submission_step_label(&submission);
-                            let progress_label = submission_progress_label(&submission);
-                            let assignee = submission_assignee_label(&submission);
+                                format!("Form Version {}", response.version_label);
+                            let status_key = response_status_key(&response);
+                            let status_label = response_status_label(&response);
+                            let workflow_label = response_workflow_label(&response);
+                            let step_label = response_step_label(&response);
+                            let progress_label = response_progress_label(&response);
+                            let assignee = response_assignee_label(&response);
                             let is_draft = status_key == "draft";
                             let detail_href_for_click = detail_href.clone();
                             let edit_href_for_click = edit_href.clone();
@@ -96,12 +96,12 @@ pub(crate) fn ResponseDesktopTable(
                                         <small class="workflow-assignment-step-meta">{step_label}</small>
                                         <small class="workflow-assignment-step-meta">{progress_label}</small>
                                     </td>
-                                    <td><a href=node_href>{submission.node_name}</a></td>
+                                    <td><a href=node_href>{response.node_name}</a></td>
                                     <td>{assignee}</td>
                                     <td class="data-table__cell--center">
                                         <span class=status_badge_class(&status_key)>{status_label}</span>
                                     </td>
-                                    <td><Timestamp value=submission.last_modified_at/></td>
+                                    <td><Timestamp value=response.last_modified_at/></td>
                                     <td class="data-table__cell--center">
                                         <DropdownMenu label=format!("Open actions for {form_name}")>
                                             <button

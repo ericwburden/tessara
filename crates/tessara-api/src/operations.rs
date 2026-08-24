@@ -345,6 +345,7 @@ async fn load_dataset_readiness(
             contract_version: DATASET_REVERSE_CONTRACT_VERSION,
             authorization_action: DATASET_OPERATIONS_STATUS_ACTION,
             path: DATASET_OPERATIONS_STATUS_PATH,
+            media_type: "application/json",
             correlation_id,
             actor_capability: "operations:view",
             body: &request,

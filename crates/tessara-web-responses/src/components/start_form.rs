@@ -3,13 +3,13 @@
 use super::ResponseAssignmentStartFields;
 use crate::actions::start_assignment_response_and_navigate;
 use crate::display::{response_selected_assignment, response_start_can_submit};
-use crate::types::AssignmentResponseStartOption;
+use crate::types::ResponseStartOption;
 use leptos::prelude::*;
 
 #[component]
 pub(crate) fn ResponseAssignmentStartForm(
-    assignments: Vec<AssignmentResponseStartOption>,
-    options: RwSignal<Option<crate::types::AssignmentResponseStartOptions>>,
+    assignments: Vec<ResponseStartOption>,
+    options: RwSignal<Option<crate::types::ResponseStartOptions>>,
     is_loading: RwSignal<bool>,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,

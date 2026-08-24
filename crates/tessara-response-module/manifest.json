@@ -104,7 +104,8 @@
   ],
   "dependencies": [
     { "contract_id": "tessara.forms.form-version-schema", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.form-version", "optional": false },
-    { "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.workflow-context", "optional": false }
+    { "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.workflow-context", "optional": false },
+    { "contract_id": "tessara.workflows.response-assignment-catalog", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.workflow-assignments", "optional": false }
   ],
   "resource_types": [{ "id": "tessara.responses.response", "description": "A Response owned by the Response Module Instance." }],
   "typed_reference_schemas": [{ "resource_type": "tessara.responses.response", "resource_id": { "format": "uuid" } }],
@@ -153,8 +154,9 @@
     { "path": "/api/private/responses/resolve", "method": "POST", "authorization_action": "responses.resolve", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.resource-observation" }
   ],
   "consumed_service_actions": [
-    { "dependency_binding": "tessara.responses.form-version", "functional_contract": "tessara.forms.form-version-schema", "authorization_action": "forms.form_version_schema" },
-    { "dependency_binding": "tessara.responses.workflow-context", "functional_contract": "tessara.workflows.response-context", "authorization_action": "workflows.issue_response_context" }
+    { "dependency_binding": "tessara.responses.form-version", "functional_contract": "tessara.forms.form-version-schema", "authorization_action": "forms.response_form_version_schema" },
+    { "dependency_binding": "tessara.responses.workflow-context", "functional_contract": "tessara.workflows.response-context", "authorization_action": "workflows.issue_response_context" },
+    { "dependency_binding": "tessara.responses.workflow-assignments", "functional_contract": "tessara.workflows.response-assignment-catalog", "authorization_action": "workflows.response_assignment_catalog" }
   ],
   "navigation": [{ "id": "tessara.responses.navigation", "destination": "responses.directory", "label": "Responses", "group": "Main", "order_hint": 40, "required_capabilities_any_of": ["submissions:read_own", "submissions:respond", "submissions:manage"] }],
   "security_capabilities": [

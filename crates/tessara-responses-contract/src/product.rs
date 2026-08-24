@@ -5,7 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 pub const RESPONSE_PRODUCT_SCHEMA_VERSION: u16 = 1;
-pub const RESPONSE_IDEMPOTENCY_HEADER: &str = "idempotency-key";
+pub const RESPONSE_IDEMPOTENCY_HEADER: &str = "x-idempotency-key";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -168,6 +168,12 @@ pub struct ResponseMutationResult {
     pub id: Uuid,
     pub revision: u64,
     pub status: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseRevisionRequest {
+    pub expected_revision: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

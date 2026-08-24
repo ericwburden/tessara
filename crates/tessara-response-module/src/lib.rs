@@ -19,7 +19,8 @@ use std::{
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
-    ModuleDefinitionId, ModuleServicePrincipalV1, SecurityCapabilityId,
+    ModuleDefinitionId, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
+    PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, SecurityCapabilityId,
     ShellContextValidationContextV2,
 };
 use tessara_module_runtime::{
@@ -35,8 +36,13 @@ use tessara_response_ui::{
 };
 use uuid::Uuid;
 
+mod event_provider;
+mod export_provider;
 mod owner;
+mod private_provider_auth;
+mod product_api;
 mod product_store;
+mod provider_client;
 pub use owner::{
     CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
     ResponseValueInput, canonical_digest,
@@ -54,6 +60,117 @@ pub const MODULE_RELEASE_VERSION: &str = PRIOR_COMPATIBLE_MODULE_RELEASE_VERSION
 pub const MODULE_RELEASE_VERSION: &str = CURRENT_MODULE_RELEASE_VERSION;
 pub const RUNTIME_IDENTITY: &str = "responses-runtime";
 pub const MIGRATION_IDENTITY: &str = "responses-migration";
+pub const RESPONSE_PROVIDER_ENDPOINTS_ENVIRONMENT: &str = "TESSARA_RESPONSE_PROVIDER_ENDPOINTS";
+pub const RESPONSE_FORM_BINDING: &str = "tessara.responses.form-version";
+pub const RESPONSE_WORKFLOW_CONTEXT_BINDING: &str = "tessara.responses.workflow-context";
+pub const RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING: &str = "tessara.responses.workflow-assignments";
+const REQUIRED_RESPONSE_PROVIDER_BINDINGS: [&str; 3] = [
+    RESPONSE_FORM_BINDING,
+    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+];
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResponseServiceEndpoints {
+    core_authorization_url: String,
+    provider_urls: BTreeMap<String, String>,
+}
+
+impl ResponseServiceEndpoints {
+    pub fn from_json(
+        core_authorization_url: &str,
+        configured_provider_endpoints: &str,
+    ) -> Result<Self, ResponseServiceEndpointError> {
+        let provider_urls: BTreeMap<String, String> =
+            serde_json::from_str(configured_provider_endpoints)
+                .map_err(ResponseServiceEndpointError::InvalidProviderMap)?;
+        Self::new(core_authorization_url, provider_urls)
+    }
+
+    pub fn new(
+        core_authorization_url: &str,
+        provider_urls: BTreeMap<String, String>,
+    ) -> Result<Self, ResponseServiceEndpointError> {
+        for binding in REQUIRED_RESPONSE_PROVIDER_BINDINGS {
+            if !provider_urls.contains_key(binding) {
+                return Err(ResponseServiceEndpointError::MissingBinding(binding.into()));
+            }
+        }
+        if let Some(binding) = provider_urls
+            .keys()
+            .find(|binding| !REQUIRED_RESPONSE_PROVIDER_BINDINGS.contains(&binding.as_str()))
+        {
+            return Err(ResponseServiceEndpointError::UnknownBinding(
+                binding.clone(),
+            ));
+        }
+        let provider_urls = provider_urls
+            .into_iter()
+            .map(|(binding, endpoint)| {
+                normalize_service_endpoint(&binding, &endpoint).map(|endpoint| (binding, endpoint))
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Self {
+            core_authorization_url: normalize_service_endpoint(
+                "TESSARA_CORE_INTERNAL_URL",
+                core_authorization_url,
+            )?,
+            provider_urls,
+        })
+    }
+
+    pub(crate) fn core_authorization_url(&self) -> &str {
+        &self.core_authorization_url
+    }
+
+    pub(crate) fn provider_url(&self, binding: &str) -> Option<&str> {
+        self.provider_urls.get(binding).map(String::as_str)
+    }
+}
+
+fn normalize_service_endpoint(
+    name: &str,
+    endpoint: &str,
+) -> Result<String, ResponseServiceEndpointError> {
+    let endpoint = endpoint.trim();
+    let parsed = reqwest::Url::parse(endpoint).map_err(|_| {
+        ResponseServiceEndpointError::InvalidEndpoint {
+            name: name.into(),
+            reason: "an absolute HTTP or HTTPS URL is required",
+        }
+    })?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err(ResponseServiceEndpointError::InvalidEndpoint {
+            name: name.into(),
+            reason: "an absolute HTTP or HTTPS URL is required",
+        });
+    }
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err(ResponseServiceEndpointError::InvalidEndpoint {
+            name: name.into(),
+            reason: "embedded credentials are forbidden",
+        });
+    }
+    if parsed.path() != "/" || parsed.query().is_some() || parsed.fragment().is_some() {
+        return Err(ResponseServiceEndpointError::InvalidEndpoint {
+            name: name.into(),
+            reason: "the endpoint must be an origin without a path, query, or fragment",
+        });
+    }
+    Ok(parsed.as_str().trim_end_matches('/').into())
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ResponseServiceEndpointError {
+    #[error("TESSARA_RESPONSE_PROVIDER_ENDPOINTS must be a binding-keyed JSON object: {0}")]
+    InvalidProviderMap(serde_json::Error),
+    #[error("TESSARA_RESPONSE_PROVIDER_ENDPOINTS is missing required binding '{0}'")]
+    MissingBinding(String),
+    #[error("TESSARA_RESPONSE_PROVIDER_ENDPOINTS contains unknown binding '{0}'")]
+    UnknownBinding(String),
+    #[error("service endpoint '{name}' is invalid: {reason}")]
+    InvalidEndpoint { name: String, reason: &'static str },
+}
 
 pub fn manifest() -> tessara_module_contract::ModuleManifest {
     let mut manifest: tessara_module_contract::ModuleManifest =
@@ -71,10 +188,30 @@ pub fn manifest() -> tessara_module_contract::ModuleManifest {
 pub struct ResponseRuntime {
     pool: PgPool,
     verifiers: CoreVerifiers,
+    provider_client: reqwest::Client,
+    service_request_signer: Arc<PurposeBoundSigningKeyV1>,
+    core_service_request_verifier: PurposeBoundVerifyingKeyV1,
+    service_identity_registry: ModuleServiceIdentityRegistryV1,
+    service_endpoints: ResponseServiceEndpoints,
 }
 impl ResponseRuntime {
-    pub fn new(pool: PgPool, verifiers: CoreVerifiers) -> Self {
-        Self { pool, verifiers }
+    pub fn new(
+        pool: PgPool,
+        verifiers: CoreVerifiers,
+        service_request_signer: Arc<PurposeBoundSigningKeyV1>,
+        core_service_request_verifier: PurposeBoundVerifyingKeyV1,
+        service_identity_registry: ModuleServiceIdentityRegistryV1,
+        service_endpoints: ResponseServiceEndpoints,
+    ) -> Self {
+        Self {
+            pool,
+            verifiers,
+            provider_client: reqwest::Client::new(),
+            service_request_signer,
+            core_service_request_verifier,
+            service_identity_registry,
+            service_endpoints,
+        }
     }
 }
 
@@ -352,6 +489,28 @@ impl DiagnosticsProvider for ResponseRuntime {
 
 pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
     Router::new()
+        .route(
+            "/api/responses",
+            get(product_api::list_responses).post(product_api::start_response),
+        )
+        .route(
+            "/api/responses/start-options",
+            get(product_api::list_start_options),
+        )
+        .route(
+            "/api/responses/{response_id}",
+            get(product_api::get_response).delete(product_api::delete_response),
+        )
+        .route(
+            "/api/responses/{response_id}/values",
+            axum::routing::put(product_api::save_response),
+        )
+        .route(
+            "/api/responses/{response_id}/submit",
+            axum::routing::post(product_api::submit_response),
+        )
+        .merge(event_provider::routes())
+        .merge(export_provider::routes())
         .route("/responses", get(directory_document))
         .route("/responses/new", get(start_document))
         .route("/responses/{response_id}", get(detail_document))

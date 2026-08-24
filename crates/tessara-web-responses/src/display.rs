@@ -5,18 +5,18 @@
 use crate::metadata::metadata_label;
 use crate::text::nonempty_text;
 use crate::types::{
-    AssignmentResponseStartOption, AssignmentResponseStartOptions, RESPONSE_FORM_GRID_COLUMN_COUNT,
-    RenderedField, SubmissionSummary,
+    RESPONSE_FORM_GRID_COLUMN_COUNT, ResponseFormField, ResponseStartOption, ResponseStartOptions,
+    ResponseSummary,
 };
 use leptos::prelude::*;
 use serde_json::Value;
 
-pub(crate) fn submission_status_key(submission: &SubmissionSummary) -> String {
-    submission.status.trim().to_lowercase()
+pub(crate) fn response_status_key(response: &ResponseSummary) -> String {
+    response.status.trim().to_lowercase()
 }
 
-pub(crate) fn submission_status_label(submission: &SubmissionSummary) -> String {
-    metadata_label(&submission.status)
+pub(crate) fn response_status_label(response: &ResponseSummary) -> String {
+    metadata_label(&response.status)
 }
 
 pub(crate) fn workflow_revision_label_from_raw(label: &str) -> String {
@@ -44,22 +44,22 @@ pub(crate) fn workflow_revision_label_from_option(label: Option<String>) -> Stri
         .unwrap_or_else(|| "-".to_string())
 }
 
-pub(crate) fn submission_workflow_label(submission: &SubmissionSummary) -> String {
-    nonempty_text(submission.workflow_name.as_deref(), "Standalone Response")
+pub(crate) fn response_workflow_label(response: &ResponseSummary) -> String {
+    nonempty_text(response.workflow_name.as_deref(), "Standalone Response")
 }
 
-pub(crate) fn submission_assignee_label(submission: &SubmissionSummary) -> String {
-    nonempty_text(submission.assigned_to_display_name.as_deref(), "Unassigned")
+pub(crate) fn response_assignee_label(response: &ResponseSummary) -> String {
+    nonempty_text(response.assigned_to_display_name.as_deref(), "Unassigned")
 }
 
-pub(crate) fn submission_step_label(submission: &SubmissionSummary) -> String {
+pub(crate) fn response_step_label(response: &ResponseSummary) -> String {
     let title = nonempty_text(
-        submission.current_workflow_step_title.as_deref(),
+        response.current_workflow_step_title.as_deref(),
         "No active step",
     );
     match (
-        submission.workflow_step_position,
-        submission.workflow_step_count,
+        response.workflow_step_position,
+        response.workflow_step_count,
     ) {
         (Some(position), Some(count)) if count > 0 => {
             format!("Step {} of {count}: {title}", position + 1)
@@ -68,20 +68,20 @@ pub(crate) fn submission_step_label(submission: &SubmissionSummary) -> String {
     }
 }
 
-pub(crate) fn submission_progress_label(submission: &SubmissionSummary) -> String {
+pub(crate) fn response_progress_label(response: &ResponseSummary) -> String {
     match (
-        submission.workflow_steps_completed,
-        submission.workflow_step_count,
+        response.workflow_steps_completed,
+        response.workflow_step_count,
     ) {
         (Some(completed), Some(count)) if count > 0 => format!("{completed} of {count} completed"),
-        _ => format!("{} saved values", submission.value_count),
+        _ => format!("{} saved values", response.value_count),
     }
 }
 
 pub(crate) fn response_selected_assignment(
-    options: RwSignal<Option<AssignmentResponseStartOptions>>,
+    options: RwSignal<Option<ResponseStartOptions>>,
     selected_assignment_index: RwSignal<String>,
-) -> Option<AssignmentResponseStartOption> {
+) -> Option<ResponseStartOption> {
     let index = selected_assignment_index.get().parse::<usize>().ok()?;
     options
         .get()
@@ -89,7 +89,7 @@ pub(crate) fn response_selected_assignment(
 }
 
 pub(crate) fn response_start_can_submit(
-    options: RwSignal<Option<AssignmentResponseStartOptions>>,
+    options: RwSignal<Option<ResponseStartOptions>>,
     is_loading: RwSignal<bool>,
     is_saving: RwSignal<bool>,
     selected_assignment_index: RwSignal<String>,
@@ -129,7 +129,7 @@ pub(crate) fn response_value_label(value: Option<&Value>) -> String {
     }
 }
 
-pub(crate) fn rendered_form_field_layout_style(field: &RenderedField) -> String {
+pub(crate) fn rendered_form_field_layout_style(field: &ResponseFormField) -> String {
     let width = field.grid_width.clamp(1, RESPONSE_FORM_GRID_COLUMN_COUNT);
     let max_column = (RESPONSE_FORM_GRID_COLUMN_COUNT - width + 1).max(1);
     let column = field.grid_column.clamp(1, max_column);

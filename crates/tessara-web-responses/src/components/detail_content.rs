@@ -3,12 +3,12 @@
 use super::{ResponseAuditTable, ResponseRuntimeCard, ResponseValuesTable};
 use crate::metadata::metadata_label;
 use crate::status::status_badge_class;
-use crate::types::SubmissionDetail;
+use crate::types::ResponseDetail;
 use leptos::prelude::*;
 use tessara_module_ui::{InfoListTable, Timestamp, empty_view};
 
 #[component]
-pub(crate) fn ResponseDetailContent(detail: SubmissionDetail) -> impl IntoView {
+pub(crate) fn ResponseDetailContent(detail: ResponseDetail) -> impl IntoView {
     let values_expanded = RwSignal::new(false);
     let audit_expanded = RwSignal::new(false);
     let status_key = detail.status.trim().to_lowercase();

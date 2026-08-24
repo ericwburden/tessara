@@ -26,6 +26,26 @@ CREATE TABLE response_module_security_state (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE response_consumed_service_nonces (
+    module_instance_id UUID NOT NULL,
+    nonce UUID NOT NULL,
+    authorization_jti UUID NOT NULL UNIQUE,
+    correlation_id TEXT NOT NULL CHECK (btrim(correlation_id) <> ''),
+    issued_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (module_instance_id, nonce)
+);
+
+CREATE TABLE response_consumed_core_service_nonces (
+    installation_id UUID NOT NULL,
+    nonce UUID NOT NULL,
+    authorization_jti UUID NOT NULL UNIQUE,
+    correlation_id TEXT NOT NULL CHECK (btrim(correlation_id) <> ''),
+    issued_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, nonce)
+);
+
 CREATE TABLE responses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     form_id UUID NOT NULL,
@@ -118,6 +138,8 @@ INSERT INTO response_export_state (singleton) VALUES (TRUE);
 CREATE TABLE response_export_changes (
     sequence BIGSERIAL PRIMARY KEY,
     response_id UUID NOT NULL,
+    form_version_id UUID NOT NULL,
+    node_id UUID NOT NULL,
     change_kind TEXT NOT NULL CHECK (change_kind IN ('upsert', 'tombstone')),
     payload JSONB NOT NULL,
     content_digest TEXT NOT NULL CHECK (content_digest ~ '^sha256:[0-9a-f]{64}$'),
@@ -125,6 +147,8 @@ CREATE TABLE response_export_changes (
 );
 CREATE INDEX response_export_changes_response_idx
     ON response_export_changes (response_id, sequence DESC);
+CREATE INDEX response_export_changes_partition_idx
+    ON response_export_changes (form_version_id, node_id, sequence);
 
 CREATE TABLE response_bootstrap_receipts (
     logical_key TEXT PRIMARY KEY,
