@@ -227,7 +227,7 @@ async fn load_schema(
         return Err(restricted());
     }
     let section_rows = sqlx::query(
-        "SELECT id,title,position FROM form_sections
+        "SELECT id,title,description,position FROM form_sections
          WHERE form_version_id=$1 ORDER BY position,id",
     )
     .bind(form_version_id)
@@ -241,13 +241,15 @@ async fn load_schema(
                 section_id,
                 key: section_id.to_string(),
                 label: row.try_get("title")?,
+                description: row.try_get("description")?,
                 position: row.try_get("position")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let field_rows = sqlx::query(
         "SELECT ff.field_id,ff.key,ff.label,ff.field_type::text AS field_type,
-                ff.required,ff.section_id,ff.position,ff.grid_row,ff.grid_column
+                ff.required,ff.section_id,ff.position,ff.grid_row,ff.grid_column,
+                ff.grid_width,ff.grid_height
          FROM form_fields ff
          JOIN form_sections fs ON fs.id=ff.section_id
          WHERE ff.form_version_id=$1
@@ -271,6 +273,8 @@ async fn load_schema(
                 position: row.try_get("position")?,
                 grid_row: row.try_get("grid_row")?,
                 grid_column: row.try_get("grid_column")?,
+                grid_width: row.try_get("grid_width")?,
+                grid_height: row.try_get("grid_height")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;

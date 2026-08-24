@@ -772,6 +772,7 @@ async fn mock_form_schema(
             section_id,
             key: "metrics".into(),
             label: "Metrics".into(),
+            description: String::new(),
             position: 0,
         }],
         fields: vec![FormVersionField {
@@ -785,6 +786,8 @@ async fn mock_form_schema(
             position: 0,
             grid_row: 1,
             grid_column: 1,
+            grid_width: 6,
+            grid_height: 1,
         }],
     }
     .with_recomputed_digests()

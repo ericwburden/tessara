@@ -16,6 +16,15 @@ pub const WORKFLOW_RESPONSE_CONTEXT_ACTION: &str = "workflows.issue_response_con
 pub const WORKFLOW_RESPONSE_CONTEXT_PATH: &str = "/api/private/workflows/response-context";
 pub const WORKFLOW_RESPONSE_CONTEXT_MEDIA_TYPE: &str =
     "application/vnd.tessara.workflows.response-context+json;version=1";
+pub const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID: &str =
+    "tessara.workflows.response-assignment-catalog";
+pub const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_VERSION: &str = "1.0.0";
+pub const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION: &str =
+    "workflows.response_assignment_catalog";
+pub const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH: &str =
+    "/api/private/workflows/response-assignment-catalog";
+pub const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_MEDIA_TYPE: &str =
+    "application/vnd.tessara.workflows.response-assignment-catalog+json;version=1";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,17 +45,41 @@ pub enum WorkflowResponseContextState {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct WorkflowResponseStepSnapshot {
+    pub workflow_step_id: Uuid,
+    pub title: String,
+    pub form_name: String,
+    pub status: String,
+    pub position: i32,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowResponseStartContext {
     #[serde(deserialize_with = "deserialize_schema_version")]
     pub schema_version: u16,
     pub workflow_assignment_id: Uuid,
+    pub workflow_id: Uuid,
+    pub workflow_name: String,
+    pub workflow_description: String,
     pub workflow_version_id: Uuid,
+    pub workflow_version_label: Option<String>,
     pub workflow_step_id: Uuid,
+    pub workflow_step_title: String,
+    pub workflow_step_position: i32,
+    pub workflow_step_count: i64,
+    pub next_workflow_step_title: Option<String>,
+    pub next_workflow_step_form_name: Option<String>,
+    pub history: Vec<WorkflowResponseStepSnapshot>,
     pub workflow_instance_id: Uuid,
     pub workflow_step_instance_id: Uuid,
+    pub form_id: Uuid,
     pub form_version_id: Uuid,
     pub node_id: Uuid,
+    pub node_name: String,
     pub assignee_account_id: Uuid,
+    pub assignee_display_name: String,
     pub started_by_account_id: Uuid,
     pub delegation_basis: Option<String>,
     pub one_use_nonce: Uuid,
@@ -82,10 +115,12 @@ impl WorkflowResponseStartContext {
         }
         let ids = [
             self.workflow_assignment_id,
+            self.workflow_id,
             self.workflow_version_id,
             self.workflow_step_id,
             self.workflow_instance_id,
             self.workflow_step_instance_id,
+            self.form_id,
             self.form_version_id,
             self.node_id,
             self.assignee_account_id,
@@ -97,9 +132,28 @@ impl WorkflowResponseStartContext {
         }
         if self.issued_at.trim().is_empty()
             || self.expires_at.trim().is_empty()
+            || self.workflow_name.trim().is_empty()
+            || self.workflow_step_title.trim().is_empty()
+            || self.workflow_step_position < 0
+            || self.workflow_step_count <= 0
+            || self.node_name.trim().is_empty()
+            || self.assignee_display_name.trim().is_empty()
             || self.delegation_basis.as_deref().is_some_and(str::is_empty)
         {
             return Err(WorkflowResponseContextError::AuthorityWindow);
+        }
+        let mut previous_position = None;
+        for step in &self.history {
+            if step.workflow_step_id.is_nil()
+                || step.title.trim().is_empty()
+                || step.form_name.trim().is_empty()
+                || step.status.trim().is_empty()
+                || step.position < 0
+                || previous_position.is_some_and(|position| position >= step.position)
+            {
+                return Err(WorkflowResponseContextError::Identity);
+            }
+            previous_position = Some(step.position);
         }
         Ok(())
     }
@@ -109,13 +163,26 @@ impl WorkflowResponseStartContext {
         struct DigestInput<'a> {
             schema_version: u16,
             workflow_assignment_id: &'a Uuid,
+            workflow_id: &'a Uuid,
+            workflow_name: &'a str,
+            workflow_description: &'a str,
             workflow_version_id: &'a Uuid,
+            workflow_version_label: &'a Option<String>,
             workflow_step_id: &'a Uuid,
+            workflow_step_title: &'a str,
+            workflow_step_position: i32,
+            workflow_step_count: i64,
+            next_workflow_step_title: &'a Option<String>,
+            next_workflow_step_form_name: &'a Option<String>,
+            history: &'a [WorkflowResponseStepSnapshot],
             workflow_instance_id: &'a Uuid,
             workflow_step_instance_id: &'a Uuid,
+            form_id: &'a Uuid,
             form_version_id: &'a Uuid,
             node_id: &'a Uuid,
+            node_name: &'a str,
             assignee_account_id: &'a Uuid,
+            assignee_display_name: &'a str,
             started_by_account_id: &'a Uuid,
             delegation_basis: &'a Option<String>,
             one_use_nonce: &'a Uuid,
@@ -125,13 +192,26 @@ impl WorkflowResponseStartContext {
         let bytes = serde_jcs::to_vec(&DigestInput {
             schema_version: self.schema_version,
             workflow_assignment_id: &self.workflow_assignment_id,
+            workflow_id: &self.workflow_id,
+            workflow_name: &self.workflow_name,
+            workflow_description: &self.workflow_description,
             workflow_version_id: &self.workflow_version_id,
+            workflow_version_label: &self.workflow_version_label,
             workflow_step_id: &self.workflow_step_id,
+            workflow_step_title: &self.workflow_step_title,
+            workflow_step_position: self.workflow_step_position,
+            workflow_step_count: self.workflow_step_count,
+            next_workflow_step_title: &self.next_workflow_step_title,
+            next_workflow_step_form_name: &self.next_workflow_step_form_name,
+            history: &self.history,
             workflow_instance_id: &self.workflow_instance_id,
             workflow_step_instance_id: &self.workflow_step_instance_id,
+            form_id: &self.form_id,
             form_version_id: &self.form_version_id,
             node_id: &self.node_id,
+            node_name: &self.node_name,
             assignee_account_id: &self.assignee_account_id,
+            assignee_display_name: &self.assignee_display_name,
             started_by_account_id: &self.started_by_account_id,
             delegation_basis: &self.delegation_basis,
             one_use_nonce: &self.one_use_nonce,
@@ -140,6 +220,102 @@ impl WorkflowResponseStartContext {
         })
         .map_err(|_| WorkflowResponseContextError::Canonicalization)?;
         Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowResponseAssignmentCatalogRequest {
+    #[serde(deserialize_with = "deserialize_schema_version")]
+    pub schema_version: u16,
+    pub assignee_account_id: Uuid,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowResponseAssignmentCatalogItem {
+    pub workflow_assignment_id: Uuid,
+    pub workflow_id: Uuid,
+    pub workflow_name: String,
+    pub workflow_description: String,
+    pub workflow_version_id: Uuid,
+    pub workflow_version_label: Option<String>,
+    pub workflow_step_id: Uuid,
+    pub workflow_step_title: String,
+    pub workflow_step_position: i32,
+    pub workflow_step_count: i64,
+    pub next_workflow_step_title: Option<String>,
+    pub next_workflow_step_form_name: Option<String>,
+    pub form_id: Uuid,
+    pub form_name: String,
+    pub form_version_id: Uuid,
+    pub form_version_label: Option<String>,
+    pub node_id: Uuid,
+    pub node_name: String,
+    pub assignee_account_id: Uuid,
+    pub assignee_display_name: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowResponseAssignmentCatalogResponse {
+    #[serde(deserialize_with = "deserialize_schema_version")]
+    pub schema_version: u16,
+    pub state: WorkflowResponseContextState,
+    pub assignments: Vec<WorkflowResponseAssignmentCatalogItem>,
+}
+
+impl WorkflowResponseAssignmentCatalogResponse {
+    pub fn validate_for(
+        &self,
+        assignee_account_id: Uuid,
+    ) -> Result<(), WorkflowResponseContextError> {
+        if self.schema_version != WORKFLOW_RESPONSE_CONTEXT_SCHEMA_VERSION
+            || assignee_account_id.is_nil()
+        {
+            return Err(WorkflowResponseContextError::SchemaVersion);
+        }
+        match self.state {
+            WorkflowResponseContextState::Available => {}
+            WorkflowResponseContextState::Undisclosed
+            | WorkflowResponseContextState::Unavailable
+            | WorkflowResponseContextState::Incompatible => {
+                return if self.assignments.is_empty() {
+                    Ok(())
+                } else {
+                    Err(WorkflowResponseContextError::RestrictedCarriesContext)
+                };
+            }
+        }
+        let mut previous = None;
+        for item in &self.assignments {
+            if item.assignee_account_id != assignee_account_id
+                || [
+                    item.workflow_assignment_id,
+                    item.workflow_id,
+                    item.workflow_version_id,
+                    item.workflow_step_id,
+                    item.form_id,
+                    item.form_version_id,
+                    item.node_id,
+                    item.assignee_account_id,
+                ]
+                .iter()
+                .any(Uuid::is_nil)
+                || item.workflow_name.trim().is_empty()
+                || item.workflow_step_title.trim().is_empty()
+                || item.form_name.trim().is_empty()
+                || item.node_name.trim().is_empty()
+                || item.assignee_display_name.trim().is_empty()
+                || item.workflow_step_position < 0
+                || item.workflow_step_count <= 0
+                || previous.is_some_and(|id| id >= item.workflow_assignment_id)
+            {
+                return Err(WorkflowResponseContextError::Identity);
+            }
+            previous = Some(item.workflow_assignment_id);
+        }
+        Ok(())
     }
 }
 
@@ -217,13 +393,26 @@ mod tests {
         WorkflowResponseStartContext {
             schema_version: 1,
             workflow_assignment_id: Uuid::from_u128(1),
+            workflow_id: Uuid::from_u128(10),
+            workflow_name: "Enrollment".into(),
+            workflow_description: "Enrollment workflow".into(),
             workflow_version_id: Uuid::from_u128(2),
+            workflow_version_label: Some("Published".into()),
             workflow_step_id: Uuid::from_u128(3),
+            workflow_step_title: "Applicant".into(),
+            workflow_step_position: 0,
+            workflow_step_count: 1,
+            next_workflow_step_title: None,
+            next_workflow_step_form_name: None,
+            history: Vec::new(),
             workflow_instance_id: Uuid::from_u128(4),
             workflow_step_instance_id: Uuid::from_u128(5),
+            form_id: Uuid::from_u128(11),
             form_version_id: Uuid::from_u128(6),
             node_id: Uuid::from_u128(7),
+            node_name: "North".into(),
             assignee_account_id: Uuid::from_u128(8),
+            assignee_display_name: "Ada".into(),
             started_by_account_id: Uuid::from_u128(8),
             delegation_basis: None,
             one_use_nonce: Uuid::from_u128(9),

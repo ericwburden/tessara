@@ -36,9 +36,13 @@ use tessara_response_ui::{
 use uuid::Uuid;
 
 mod owner;
+mod product_store;
 pub use owner::{
     CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
     ResponseValueInput, canonical_digest,
+};
+pub use product_store::{
+    ResponseAccess, ResponseListFilter, ResponseMutationCommand, SaveResponseCommand,
 };
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.responses";

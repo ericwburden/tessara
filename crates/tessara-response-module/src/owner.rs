@@ -52,7 +52,7 @@ pub enum IdempotentCommit<T> {
 
 #[derive(Clone)]
 pub struct ResponseOwnerRepository {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl ResponseOwnerRepository {
@@ -258,7 +258,7 @@ fn validate_create(command: &CreateResponseCommand) -> Result<(), ResponseOwnerE
     Ok(())
 }
 
-fn is_digest(value: &str) -> bool {
+pub(crate) fn is_digest(value: &str) -> bool {
     value.strip_prefix("sha256:").is_some_and(|digest| {
         digest.len() == 64
             && digest
@@ -280,6 +280,20 @@ pub enum ResponseOwnerError {
     IdempotencyConflict,
     #[error("stored idempotency receipt is invalid")]
     CorruptReceipt,
+    #[error("stored Response source snapshot is invalid")]
+    CorruptSnapshot,
+    #[error("Response was not found")]
+    NotFound,
+    #[error("submitted or deleted Responses are immutable")]
+    Immutable,
+    #[error("Response revision conflict: expected {expected}, actual {actual}")]
+    RevisionConflict { expected: u64, actual: u64 },
+    #[error("unknown or invalid Response field '{0}'")]
+    InvalidField(String),
+    #[error("required field '{0}' is missing")]
+    MissingRequiredField(String),
+    #[error("Response security state is unavailable")]
+    SecurityStateUnavailable,
     #[error("Response persistence is unavailable")]
     Persistence(#[from] sqlx::Error),
 }

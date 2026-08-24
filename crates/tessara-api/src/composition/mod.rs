@@ -2055,6 +2055,8 @@ async fn materialize_core_bootstrap_forms(
                 position: field.position,
                 grid_row: field.grid_row,
                 grid_column: field.grid_column,
+                grid_width: 1,
+                grid_height: 1,
             })
             .collect::<Vec<_>>();
         schema_fields.sort_by(|left, right| {
@@ -2092,6 +2094,7 @@ async fn materialize_core_bootstrap_forms(
                 section_id,
                 key: section_id.to_string(),
                 label: "Response".into(),
+                description: String::new(),
                 position: 0,
             }],
             fields: schema_fields,

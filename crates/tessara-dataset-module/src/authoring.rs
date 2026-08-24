@@ -4179,12 +4179,14 @@ mod tests {
                     section_id: first_section,
                     key: first_section.to_string(),
                     label: "Applicant".into(),
+                    description: String::new(),
                     position: 0,
                 },
                 FormVersionSection {
                     section_id: second_section,
                     key: second_section.to_string(),
                     label: "Program".into(),
+                    description: String::new(),
                     position: 1,
                 },
             ],
@@ -4200,6 +4202,8 @@ mod tests {
                     position: 0,
                     grid_row: 1,
                     grid_column: 1,
+                    grid_width: 6,
+                    grid_height: 1,
                 },
                 FormVersionField {
                     field_id: Uuid::from_u128(21),
@@ -4212,6 +4216,8 @@ mod tests {
                     position: 0,
                     grid_row: 1,
                     grid_column: 7,
+                    grid_width: 6,
+                    grid_height: 1,
                 },
                 FormVersionField {
                     field_id: Uuid::from_u128(22),
@@ -4224,6 +4230,8 @@ mod tests {
                     position: 0,
                     grid_row: 1,
                     grid_column: 1,
+                    grid_width: 12,
+                    grid_height: 1,
                 },
             ],
         }

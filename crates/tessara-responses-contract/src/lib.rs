@@ -13,8 +13,10 @@ use tessara_module_contract::ModuleServicePrincipalV1;
 use uuid::Uuid;
 
 mod boundary;
+mod product;
 
 pub use boundary::*;
+pub use product::*;
 
 pub const RESPONSE_EXPORT_CONTRACT_ID: &str = "tessara.responses.submitted-response-export";
 pub const RESPONSE_EXPORT_CONTRACT_VERSION: &str = "1.0.0";
