@@ -30,6 +30,8 @@ $expectedOwnerOrder = @(
     "tessara.dashboards",
     "tessara.reference.scoped-records"
 )
+$compositionBuildServices = @("responses", "datasets", "components")
+$compositionNavigationHrefs = @("/responses", "/datasets", "/components")
 
 function Invoke-Sprint8CFocusedCoreFreshProof {
     $containerName = "tessara-s8c-core-fresh-$([guid]::NewGuid().ToString('N').Substring(0, 12))"
@@ -356,8 +358,8 @@ function Invoke-Sprint8CCompositionBootstrap {
         ExpectedProject = $ResolvedComposeProject
         InstallationId = $installationId
         RuntimeLabel = "sprint-8c"
-        AdditionalBuildServices = @("datasets", "components")
-        AdditionalExpectedNavigationHrefs = @("/datasets", "/components")
+        AdditionalBuildServices = @($compositionBuildServices)
+        AdditionalExpectedNavigationHrefs = @($compositionNavigationHrefs)
         SkipLegacySeed = $true
         SemanticNoOp = [bool]$NoOp
         ExcludePublicGateway = [bool]$ExcludeGateway
@@ -441,6 +443,18 @@ function Test-Sprint8CMaterializationHarness {
         $compositionBootstrapSource -cnotmatch 'actor_id = \$authenticatedAccountId\.ToString\(\)' -or
         $compositionBootstrapSource -cmatch 'actor_id = "local:\$RuntimeLabel-(?:bootstrap|approver)"') {
         throw "Sprint 8C materialization must bind its signed apply authorization to the authenticated Core account UUID."
+    }
+    $expectedCompositionBuildServices = @("responses", "datasets", "components")
+    $expectedCompositionNavigationHrefs = @("/responses", "/datasets", "/components")
+    if (($compositionBuildServices -join "`n") -cne
+            ($expectedCompositionBuildServices -join "`n") -or
+        @($compositionBuildServices | Select-Object -Unique).Count -ne
+            $compositionBuildServices.Count -or
+        ($compositionNavigationHrefs -join "`n") -cne
+            ($expectedCompositionNavigationHrefs -join "`n") -or
+        @($compositionNavigationHrefs | Select-Object -Unique).Count -ne
+            $compositionNavigationHrefs.Count) {
+        throw "Sprint 8C materialization does not build and navigate the exact Response, Dataset, and Component module projection."
     }
     $datasetMigration = Get-Content -Raw -LiteralPath (
         Join-Path $repoRoot "crates/tessara-dataset-module/migrations/001_dataset_module.sql"
@@ -541,6 +555,10 @@ function Test-Sprint8CMaterializationHarness {
         state = "passed"
         database_free = $true
         compose_project = $null
+        composition_bootstrap = [pscustomobject][ordered]@{
+            build_services = @($compositionBuildServices)
+            navigation_hrefs = @($compositionNavigationHrefs)
+        }
         environment_fingerprint_sha256 = Get-Sprint7ASha256 -Text "sprint-8c-materialization-self-test`n"
         cleanup_restoration = [pscustomobject][ordered]@{
             state = "passed"
