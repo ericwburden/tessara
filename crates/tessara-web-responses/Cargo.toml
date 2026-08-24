@@ -28,7 +28,7 @@ leptos = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
-tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
+tessara-module-ui = { path = "../tessara-module-ui", default-features = false, features = ["components"] }
 tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-responses-contract = { path = "../tessara-responses-contract" }
 wasm-bindgen = { workspace = true }
