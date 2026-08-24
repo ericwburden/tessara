@@ -12,6 +12,10 @@ use sha2::{Digest, Sha256};
 use tessara_module_contract::ModuleServicePrincipalV1;
 use uuid::Uuid;
 
+mod boundary;
+
+pub use boundary::*;
+
 pub const RESPONSE_EXPORT_CONTRACT_ID: &str = "tessara.responses.submitted-response-export";
 pub const RESPONSE_EXPORT_CONTRACT_VERSION: &str = "1.0.0";
 pub const RESPONSE_EXPORT_SCHEMA_VERSION: u16 = 1;
