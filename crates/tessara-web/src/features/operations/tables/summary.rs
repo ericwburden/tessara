@@ -1,13 +1,25 @@
 //! Summary components for the Operations feature.
 
-use crate::features::operations::types::{OperationsSummary, ReportingDataStatus};
+use crate::features::operations::types::{
+    OperationsSummary, ResponseOwnerStatus, ResponseProviderResultState,
+};
 use leptos::prelude::*;
 
 #[component]
 pub(crate) fn OperationsSummaryPanel(
     summary: OperationsSummary,
-    reporting_data: ReportingDataStatus,
+    response_owner: ResponseOwnerStatus,
 ) -> impl IntoView {
+    let response_status = match response_owner.state {
+        ResponseProviderResultState::Available => response_owner.status.map_or_else(
+            || "Unavailable".to_string(),
+            |status| if status.ready { "Ready" } else { "Attention" }.to_string(),
+        ),
+        ResponseProviderResultState::Empty | ResponseProviderResultState::Unavailable => {
+            "Unavailable".to_string()
+        }
+        ResponseProviderResultState::Undisclosed => "Restricted".to_string(),
+    };
     view! {
         <section class="route-panel__section operations-summary" aria-label="Operations overview">
             <div class="metric-grid operations-action-metrics">
@@ -17,7 +29,7 @@ pub(crate) fn OperationsSummaryPanel(
                     label="Datasets needing attention"
                     value=summary.dataset_attention_count.map_or_else(|| "Unavailable".into(), |count| count.to_string())
                 />
-                <OperationsMetric label="Reporting data status" value=reporting_data.status.clone()/>
+                <OperationsMetric label="Response owner status" value=response_status/>
             </div>
         </section>
     }

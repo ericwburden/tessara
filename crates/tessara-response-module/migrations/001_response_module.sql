@@ -176,9 +176,12 @@ CREATE INDEX response_export_changes_partition_idx
     ON response_export_changes (form_version_id, node_id, sequence);
 
 CREATE TABLE response_bootstrap_receipts (
-    logical_key TEXT PRIMARY KEY,
-    request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
-    response_id UUID NOT NULL REFERENCES responses(id),
-    signed_receipt JSONB NOT NULL,
+    idempotency_key TEXT PRIMARY KEY,
+    locked_input_digest TEXT NOT NULL CHECK (locked_input_digest ~ '^sha256:[0-9a-f]{64}$'),
+    input_digest TEXT NOT NULL CHECK (input_digest ~ '^sha256:[0-9a-f]{64}$'),
+    desired_revision BIGINT NOT NULL CHECK (desired_revision > 0),
+    apply_sequence BIGINT NOT NULL CHECK (apply_sequence > 0),
+    authority_jti UUID NOT NULL,
+    receipt JSONB NOT NULL,
     committed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

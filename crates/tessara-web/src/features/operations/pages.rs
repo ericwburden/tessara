@@ -45,7 +45,7 @@ pub fn OperationsPage() -> impl IntoView {
                         .into_any()
                     } else if let Some(loaded_status) = status.get() {
                         view! {
-                            <OperationsSummaryPanel summary=loaded_status.summary.clone() reporting_data=loaded_status.reporting_data.clone()/>
+                            <OperationsSummaryPanel summary=loaded_status.summary.clone() response_owner=loaded_status.response_owner.clone()/>
                             <WorkflowAssignmentsTable assignments=loaded_status.workflow_assignments.clone()/>
                             <DatasetReadinessTable readiness=loaded_status.dataset_readiness.clone()/>
                         }

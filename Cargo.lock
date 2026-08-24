@@ -4683,7 +4683,6 @@ dependencies = [
  "tessara-module-contract",
  "tessara-reference-scoped-records",
  "tessara-responses-contract",
- "tessara-submissions",
  "tessara-web",
  "tessara-workflows-contract",
  "thiserror 2.0.18",
@@ -5163,11 +5162,13 @@ dependencies = [
  "chrono",
  "leptos",
  "reqwest",
+ "semver",
  "serde",
  "serde_jcs",
  "serde_json",
  "sha2",
  "sqlx",
+ "tessara-composition",
  "tessara-forms-contract",
  "tessara-module-contract",
  "tessara-module-runtime",
@@ -5217,10 +5218,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tessara-submissions"
-version = "0.1.0"
-
-[[package]]
 name = "tessara-supervisor"
 version = "0.1.0"
 dependencies = [
@@ -5258,7 +5255,6 @@ dependencies = [
  "serde_json",
  "tessara-module-contract",
  "tessara-module-ui",
- "tessara-response-ui",
  "tessara-web-forms",
  "tessara-web-http",
  "tessara-web-organization",

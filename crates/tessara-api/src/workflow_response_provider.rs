@@ -11,6 +11,8 @@ use axum::{
 use chrono::{Duration, Utc};
 use serde::Serialize;
 use sqlx::{Postgres, Row, Transaction};
+use tessara_module_contract::ModuleServicePrincipalV1;
+use tessara_responses_contract::RESPONSE_MODULE_DEFINITION_ID;
 use tessara_workflows_contract::{
     WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION, WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
     WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_MEDIA_TYPE, WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
@@ -40,6 +42,16 @@ pub(crate) fn routes() -> Router<AppState> {
         .route(WORKFLOW_RESPONSE_CONTEXT_PATH, post(response_context))
 }
 
+fn require_response_presenter(grant: &CoreProviderAuthorizationV1) -> ApiResult<()> {
+    match &grant.payload.presenting_service {
+        ModuleServicePrincipalV1::ModuleInstance {
+            module_definition_id,
+            ..
+        } if module_definition_id.as_str() == RESPONSE_MODULE_DEFINITION_ID => Ok(()),
+        _ => Err(restricted()),
+    }
+}
+
 async fn assignment_catalog(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -56,6 +68,7 @@ async fn assignment_catalog(
         "Workflow Response assignments are unavailable",
     )
     .await?;
+    require_response_presenter(&grant)?;
     let request: WorkflowResponseAssignmentCatalogRequest =
         serde_json::from_slice(&body).map_err(|_| restricted())?;
     if request.schema_version != WORKFLOW_RESPONSE_CONTEXT_SCHEMA_VERSION {
@@ -117,9 +130,6 @@ async fn assignment_catalog(
           AND NOT EXISTS(SELECT 1 FROM workflow_response_reservations r
                          WHERE r.workflow_assignment_id=wa.id
                            AND r.consumed_at IS NULL)
-          AND NOT EXISTS(SELECT 1 FROM submissions s
-                         WHERE s.workflow_assignment_id=wa.id
-                           AND s.status IN ('draft'::submission_status,'submitted'::submission_status))
         ORDER BY wa.id
         "#,
     )
@@ -158,6 +168,7 @@ async fn response_context(
         "Workflow Response context is unavailable",
     )
     .await?;
+    require_response_presenter(&grant)?;
     let request: WorkflowResponseContextRequest =
         serde_json::from_slice(&body).map_err(|_| restricted())?;
     if request.schema_version != WORKFLOW_RESPONSE_CONTEXT_SCHEMA_VERSION
@@ -196,7 +207,8 @@ async fn response_context(
         transaction.commit().await?;
         return context_state(WorkflowResponseContextState::Unavailable, None);
     }
-    let workflow_instance_id = resolve_workflow_instance(&mut transaction, &row, &grant).await?;
+    let workflow_instance_id =
+        resolve_workflow_instance(&mut transaction, &row, grant.payload.original_actor_id).await?;
     let position: i32 = row.get("workflow_step_position");
     if position > 0
         && !previous_step_completed(
@@ -311,7 +323,7 @@ async fn response_already_exists(
     assignment_id: Uuid,
 ) -> ApiResult<bool> {
     Ok(sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM workflow_response_projection WHERE workflow_assignment_id=$1 AND response_state IN ('draft','submitted')) OR EXISTS(SELECT 1 FROM submissions WHERE workflow_assignment_id=$1 AND status IN ('draft'::submission_status,'submitted'::submission_status))",
+        "SELECT EXISTS(SELECT 1 FROM workflow_response_projection WHERE workflow_assignment_id=$1 AND response_state IN ('draft','submitted'))",
     )
     .bind(assignment_id)
     .fetch_one(&mut **transaction)
@@ -357,7 +369,7 @@ async fn unresolved_reservation(
 async fn resolve_workflow_instance(
     transaction: &mut Transaction<'_, Postgres>,
     row: &sqlx::postgres::PgRow,
-    grant: &CoreProviderAuthorizationV1,
+    started_by_account_id: Uuid,
 ) -> ApiResult<Uuid> {
     if let Some(existing) = sqlx::query_scalar(
         "SELECT id FROM workflow_instances WHERE workflow_version_id=$1 AND node_id=$2 AND assignee_account_id=$3 AND status='in_progress' ORDER BY created_at DESC LIMIT 1",
@@ -375,9 +387,101 @@ async fn resolve_workflow_instance(
         .bind(row.get::<Uuid, _>("workflow_version_id"))
         .bind(row.get::<Uuid, _>("node_id"))
         .bind(row.get::<Uuid, _>("assignee_account_id"))
-        .bind(grant.payload.original_actor_id)
+        .bind(started_by_account_id)
         .fetch_one(&mut **transaction)
         .await?)
+}
+
+pub(crate) async fn issue_bootstrap_context_tx(
+    transaction: &mut Transaction<'_, Postgres>,
+    workflow_assignment_id: Uuid,
+    actor_account_id: Uuid,
+) -> ApiResult<WorkflowResponseStartContext> {
+    let row = load_assignment(transaction, workflow_assignment_id)
+        .await?
+        .ok_or_else(|| ApiError::BadRequest("Workflow bootstrap assignment is missing".into()))?;
+    if row.get::<Uuid, _>("assignee_account_id") != actor_account_id
+        || !row.get::<bool, _>("is_active")
+        || !matches!(
+            row.get::<String, _>("workflow_status").as_str(),
+            "published" | "superseded"
+        )
+        || response_already_exists(transaction, workflow_assignment_id).await?
+        || unresolved_reservation(transaction, workflow_assignment_id).await?
+    {
+        return Err(ApiError::BadRequest(
+            "Workflow bootstrap assignment is not startable".into(),
+        ));
+    }
+    let workflow_instance_id =
+        resolve_workflow_instance(transaction, &row, actor_account_id).await?;
+    let position: i32 = row.get("workflow_step_position");
+    if position > 0
+        && !previous_step_completed(
+            transaction,
+            workflow_instance_id,
+            row.get("workflow_version_id"),
+            position - 1,
+        )
+        .await?
+    {
+        return Err(ApiError::BadRequest(
+            "Workflow bootstrap assignment has an incomplete predecessor".into(),
+        ));
+    }
+    let workflow_step_instance_id: Uuid = sqlx::query_scalar(
+        "INSERT INTO workflow_step_instances(workflow_instance_id,workflow_step_id,status) VALUES($1,$2,'in_progress') RETURNING id",
+    )
+    .bind(workflow_instance_id)
+    .bind(row.get::<Uuid, _>("workflow_step_id"))
+    .fetch_one(&mut **transaction)
+    .await?;
+    let now = Utc::now();
+    let expires_at = now + Duration::seconds(RESERVATION_LIFETIME_SECONDS);
+    let context = WorkflowResponseStartContext {
+        schema_version: WORKFLOW_RESPONSE_CONTEXT_SCHEMA_VERSION,
+        workflow_assignment_id,
+        workflow_id: row.get("workflow_id"),
+        workflow_name: row.get("workflow_name"),
+        workflow_description: row.get("workflow_description"),
+        workflow_version_id: row.get("workflow_version_id"),
+        workflow_version_label: row.get("workflow_version_label"),
+        workflow_step_id: row.get("workflow_step_id"),
+        workflow_step_title: row.get("workflow_step_title"),
+        workflow_step_position: position,
+        workflow_step_count: row.get("workflow_step_count"),
+        next_workflow_step_title: row.get("next_workflow_step_title"),
+        next_workflow_step_form_name: row.get("next_workflow_step_form_name"),
+        history: load_history(transaction, workflow_instance_id).await?,
+        workflow_instance_id,
+        workflow_step_instance_id,
+        form_id: row.get("form_id"),
+        form_version_id: row.get("form_version_id"),
+        node_id: row.get("node_id"),
+        node_name: row.get("node_name"),
+        assignee_account_id: actor_account_id,
+        assignee_display_name: row.get("assignee_display_name"),
+        started_by_account_id: actor_account_id,
+        delegation_basis: None,
+        one_use_nonce: Uuid::new_v4(),
+        issued_at: now.to_rfc3339(),
+        expires_at: expires_at.to_rfc3339(),
+        context_digest: String::new(),
+    }
+    .with_recomputed_digest()
+    .map_err(|_| ApiError::BadRequest("Workflow bootstrap context is invalid".into()))?;
+    sqlx::query("INSERT INTO workflow_response_reservations(workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,started_by_account_id,one_use_nonce,context_payload,context_digest,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
+        .bind(context.workflow_assignment_id)
+        .bind(context.workflow_instance_id)
+        .bind(context.workflow_step_instance_id)
+        .bind(context.started_by_account_id)
+        .bind(context.one_use_nonce)
+        .bind(serde_json::to_value(&context).map_err(|error| ApiError::Internal(error.into()))?)
+        .bind(&context.context_digest)
+        .bind(expires_at)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(context)
 }
 
 async fn previous_step_completed(

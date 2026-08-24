@@ -1625,21 +1625,6 @@ async fn require_form_version_render_access(
         r#"
         SELECT EXISTS (
             SELECT 1
-            FROM submissions
-            JOIN workflow_assignments
-              ON workflow_assignments.id = submissions.workflow_assignment_id
-            WHERE submissions.form_version_id = $1
-              AND (
-                workflow_assignments.account_id = $2
-                OR EXISTS (
-                    SELECT 1
-                    FROM account_delegations
-                    WHERE account_delegations.delegator_account_id = $2
-                      AND account_delegations.delegate_account_id = workflow_assignments.account_id
-                )
-              )
-            UNION
-            SELECT 1
             FROM workflow_assignments
             JOIN workflow_steps
               ON workflow_steps.id = workflow_assignments.workflow_step_id

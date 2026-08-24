@@ -2,6 +2,29 @@ services:
   core:
     environment:
       TESSARA_MODULE_SERVICE_IDENTITIES: &sprint-8c-module-service-identities '{"schema_version":1,"identities":{"tessara.components":{"key_id":"component-development-v1","public_key":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"},"tessara.dashboards":{"key_id":"dashboard-development-v1","public_key":"Aj3Yn25zFNp2K7PJZlqC2JapsIt2mdj-HO55ltKYygw"},"tessara.datasets":{"key_id":"dataset-development-v1","public_key":"oJql9HpnWYAv-VX43C0qFKXJnSO-l_hkEn_5ODRVpPA"},"tessara.reference.scoped-records":{"key_id":"scoped-records-development-v1","public_key":"hA9gif24vm7UTPtnXSL_HzcrDxbb66vSaSHW9-0pZ0s"},"tessara.responses":{"key_id":"response-development-v1","public_key":"F8t5-ytBIPKx7GXkGY1uCLKOgT_rAeSkAIObheGAgM4"}}}'
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008c}
+      TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER: ${TESSARA_COMPOSITION_APPLY_SIGNING_ISSUER:-tessara.local.sprint-8c}
+      TESSARA_MODULE_CONTROL_ENDPOINTS: &sprint-8c-control-endpoints '{"tessara.reference.scoped-records":"http://scoped-records:8090","tessara.responses":"http://responses:8094","tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091"}'
+      TESSARA_MODULE_SERVICE_ENDPOINTS: '{"tessara.responses":"http://responses:8094","tessara.datasets":"http://datasets:8093","tessara.components":"http://components:8092","tessara.dashboards":"http://dashboards:8091","tessara.reference.scoped-records":"http://scoped-records:8090"}'
+
+  core-migrate:
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008c}
+
+  supervisor:
+    environment:
+      TESSARA_INSTALLATION_ID: ${TESSARA_INSTALLATION_ID:-01980000-0000-7000-8000-00000000008c}
+      TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8c}
+      TESSARA_MODULE_SERVICE_IDENTITIES: *sprint-8c-module-service-identities
+      TESSARA_MODULE_CONTROL_ENDPOINTS: *sprint-8c-control-endpoints
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8b-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8b-scoped-records","tessara.responses":["tessara-sprint-8c-responses"],"tessara.datasets":["tessara-sprint-8b-datasets","tessara-sprint-8b-datasets-upgrade-baseline:latest"],"tessara.components":"tessara-sprint-8b-components","tessara.dashboards":"tessara-sprint-8b-dashboards"}'
+      TESSARA_DEPLOYMENT_COMPOSE_FILE: /workspace/deploy/sprint-8c/compose.yaml
+      TESSARA_DEPLOYMENT_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-tessara-sprint-8c}
+      TESSARA_DEPLOYMENT_TARGETS: '{"core":{"image_environment":"TESSARA_CORE_IMAGE","migration_service":"core-migrate","runtime_service":"core"},"tessara.responses":{"image_environment":"TESSARA_RESPONSE_IMAGE","migration_service":"responses-migrate","runtime_service":"responses"},"tessara.datasets":{"image_environment":"TESSARA_DATASET_IMAGE","migration_service":"datasets-migrate","runtime_service":"datasets"},"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"},"tessara.dashboards":{"image_environment":"TESSARA_DASHBOARD_IMAGE","migration_service":"dashboards-migrate","runtime_service":"dashboards"},"tessara.reference.scoped-records":{"image_environment":"TESSARA_REFERENCE_MODULE_IMAGE","migration_service":"scoped-records-migrate","runtime_service":"scoped-records"}}'
+
+  datasets:
+    environment:
+      TESSARA_MODULE_SERVICE_IDENTITIES: *sprint-8c-module-service-identities
 
   postgres:
     environment:
@@ -64,3 +87,9 @@ services:
       retries: 30
       start_period: 5s
     profiles: ["reference"]
+
+  response-provider-proxy:
+    volumes:
+      - ../sprint-8c/provider-proxy.conf:/etc/nginx/templates/nginx.conf.template:ro
+    depends_on: !override
+      responses: { condition: service_healthy }

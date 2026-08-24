@@ -9,7 +9,7 @@ use tessara_module_contract::{
 };
 use uuid::Uuid;
 
-const FROZEN_CATALOG: [FrozenCatalogEntry; 4] = [
+const FROZEN_CATALOG: [FrozenCatalogEntry; 3] = [
     FrozenCatalogEntry {
         name: "Forms",
         definition_id: "tessara.forms",
@@ -19,11 +19,6 @@ const FROZEN_CATALOG: [FrozenCatalogEntry; 4] = [
         name: "Workflows",
         definition_id: "tessara.workflows",
         navigation: Some(("main_between_organization_and_operations", 1)),
-    },
-    FrozenCatalogEntry {
-        name: "Responses",
-        definition_id: "tessara.responses",
-        navigation: Some(("main_between_organization_and_operations", 2)),
     },
     FrozenCatalogEntry {
         name: "Migration",
@@ -157,17 +152,6 @@ pub(crate) fn canonical_inputs() -> Vec<CatalogInput> {
                 "../../../tessara-module-contract/tests/fixtures/transition-workflows-v1.json.sha256"
             ),
             Some(("main_between_organization_and_operations", 1)),
-        ),
-        canonical_input(
-            "Responses",
-            "tessara.responses",
-            include_bytes!(
-                "../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json"
-            ),
-            include_str!(
-                "../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json.sha256"
-            ),
-            Some(("main_between_organization_and_operations", 2)),
         ),
         canonical_input(
             "Migration",

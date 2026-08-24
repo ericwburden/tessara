@@ -1,10 +1,15 @@
 use axum::{Json, extract::State, http::HeaderMap};
 use serde::Serialize;
-use sqlx::Row;
 use tessara_datasets_contract::{
     DATASET_CORE_BINDING_KEY, DATASET_MODULE_DEFINITION_ID, DATASET_OPERATIONAL_STATUS_CONTRACT_ID,
     DATASET_REVERSE_CONTRACT_VERSION, DATASET_SUMMARY_ACTION, DATASET_SUMMARY_PATH,
     DatasetProviderResultState, DatasetSummaryRequest, DatasetSummaryResponse,
+};
+use tessara_responses_contract::{
+    RESPONSE_MODULE_DEFINITION_ID, RESPONSE_REVERSE_CONTRACT_VERSION,
+    RESPONSE_REVERSE_SCHEMA_VERSION, RESPONSE_SUMMARY_ACTION, RESPONSE_SUMMARY_BINDING_KEY,
+    RESPONSE_SUMMARY_CONTRACT_ID, RESPONSE_SUMMARY_MEDIA_TYPE, RESPONSE_SUMMARY_PATH,
+    ResponseProviderResultState, ResponseSummaryRequest, ResponseSummaryResponse,
 };
 
 use crate::{
@@ -21,8 +26,9 @@ use crate::{
 #[derive(Serialize)]
 pub struct ApplicationSummary {
     published_form_versions: i64,
-    draft_submissions: i64,
-    submitted_submissions: i64,
+    response_state: ResponseProviderResultState,
+    draft_submissions: Option<i64>,
+    submitted_submissions: Option<i64>,
     dataset_state: DatasetProviderResultState,
     datasets: Option<i64>,
     dataset_revisions: Option<i64>,
@@ -32,6 +38,12 @@ struct DatasetSummaryProjection {
     state: DatasetProviderResultState,
     datasets: Option<i64>,
     dataset_revisions: Option<i64>,
+}
+
+struct ResponseSummaryProjection {
+    state: ResponseProviderResultState,
+    draft: Option<i64>,
+    submitted: Option<i64>,
 }
 
 /// Returns app-readiness counters for the current deployment.
@@ -44,93 +56,134 @@ pub async fn get_summary(
         auth::capability_boundary(&state.pool, &request.account, "admin:all").await?,
         auth::CapabilityBoundary::Global
     ) {
-        let row = sqlx::query(
-            r#"
-            SELECT
-                (SELECT COUNT(*) FROM form_versions WHERE status = 'published') AS published_form_versions,
-                (SELECT COUNT(*) FROM submissions WHERE status = 'draft') AS draft_submissions,
-                (SELECT COUNT(*) FROM submissions WHERE status = 'submitted') AS submitted_submissions
-            "#,
-        )
-        .fetch_one(&state.pool)
-        .await?;
-
-        let datasets =
-            load_dataset_summary(&state, &request, request_correlation_id_or_new(&headers)).await?;
-        return summary_from_row(row, datasets);
+        let published_form_versions =
+            sqlx::query_scalar("SELECT COUNT(*) FROM form_versions WHERE status = 'published'")
+                .fetch_one(&state.pool)
+                .await?;
+        let correlation_id = request_correlation_id_or_new(&headers);
+        let responses =
+            load_response_summary(&state, &request, correlation_id, Vec::new(), "admin:all")
+                .await?;
+        let datasets = load_dataset_summary(&state, &request, uuid::Uuid::new_v4()).await?;
+        return Ok(summary(published_form_versions, responses, datasets));
     }
 
     if let auth::CapabilityBoundary::Scoped(scope_ids) =
         auth::capability_boundary(&state.pool, &request.account, "forms:read").await?
     {
-        let row = sqlx::query(
+        let published_form_versions = sqlx::query_scalar(
             r#"
-            SELECT
-                (
-                    SELECT COUNT(DISTINCT form_versions.id)
-                    FROM form_versions
-                    JOIN forms ON forms.id = form_versions.form_id
-                    JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
-                    WHERE form_versions.status = 'published'::form_version_status
-                      AND form_scope_nodes.node_id = ANY($1)
-                ) AS published_form_versions,
-                (
-                    SELECT COUNT(*)
-                    FROM submissions
-                    WHERE submissions.status = 'draft'::submission_status
-                      AND submissions.node_id = ANY($1)
-                ) AS draft_submissions,
-                (
-                    SELECT COUNT(*)
-                    FROM submissions
-                    WHERE submissions.status = 'submitted'::submission_status
-                      AND submissions.node_id = ANY($1)
-                ) AS submitted_submissions
+            SELECT COUNT(DISTINCT form_versions.id)
+            FROM form_versions
+            JOIN forms ON forms.id = form_versions.form_id
+            JOIN form_scope_nodes ON form_scope_nodes.form_id = forms.id
+            WHERE form_versions.status = 'published'::form_version_status
+              AND form_scope_nodes.node_id = ANY($1)
             "#,
         )
-        .bind(scope_ids)
+        .bind(&scope_ids)
         .fetch_one(&state.pool)
         .await?;
-
-        return summary_from_row(row, undisclosed_dataset_summary());
+        let responses = load_response_summary(
+            &state,
+            &request,
+            request_correlation_id_or_new(&headers),
+            scope_ids,
+            "forms:read",
+        )
+        .await?;
+        return Ok(summary(
+            published_form_versions,
+            responses,
+            undisclosed_dataset_summary(),
+        ));
     }
 
-    let accessible_account_ids = {
-        let mut ids = vec![request.account.account_id];
-        ids.extend(
-            request
-                .account
-                .delegations
-                .iter()
-                .map(|delegate| delegate.account_id),
-        );
-        ids
-    };
-    let row = sqlx::query(
-        r#"
-        SELECT
-            0::bigint AS published_form_versions,
-            (
-                SELECT COUNT(*)
-                FROM submissions
-                JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
-                WHERE submissions.status = 'draft'::submission_status
-                  AND workflow_assignments.account_id = ANY($1)
-            ) AS draft_submissions,
-            (
-                SELECT COUNT(*)
-                FROM submissions
-                JOIN workflow_assignments ON workflow_assignments.id = submissions.workflow_assignment_id
-                WHERE submissions.status = 'submitted'::submission_status
-                  AND workflow_assignments.account_id = ANY($1)
-            ) AS submitted_submissions
-        "#,
+    let responses = load_response_summary(
+        &state,
+        &request,
+        request_correlation_id_or_new(&headers),
+        Vec::new(),
+        "submissions:read_own",
     )
-    .bind(accessible_account_ids)
-    .fetch_one(&state.pool)
     .await?;
+    Ok(summary(0, responses, undisclosed_dataset_summary()))
+}
 
-    summary_from_row(row, undisclosed_dataset_summary())
+async fn load_response_summary(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    correlation_id: uuid::Uuid,
+    requested_scope_node_ids: Vec<uuid::Uuid>,
+    actor_capability: &str,
+) -> ApiResult<ResponseSummaryProjection> {
+    let request = ResponseSummaryRequest {
+        schema_version: RESPONSE_REVERSE_SCHEMA_VERSION,
+        requested_scope_node_ids,
+    };
+    let response = call_private_provider::<_, ResponseSummaryResponse>(
+        state,
+        actor,
+        CorePrivateProviderRequest {
+            module_definition_id: RESPONSE_MODULE_DEFINITION_ID,
+            expected_owner: None,
+            dependency_binding: RESPONSE_SUMMARY_BINDING_KEY,
+            functional_contract: RESPONSE_SUMMARY_CONTRACT_ID,
+            contract_version: RESPONSE_REVERSE_CONTRACT_VERSION,
+            authorization_action: RESPONSE_SUMMARY_ACTION,
+            path: RESPONSE_SUMMARY_PATH,
+            media_type: RESPONSE_SUMMARY_MEDIA_TYPE,
+            correlation_id,
+            actor_capability,
+            body: &request,
+        },
+    )
+    .await?;
+    Ok(match response {
+        CorePrivateProviderResult::Response(response) => project_response_summary(response),
+        CorePrivateProviderResult::Unavailable => {
+            restricted_response_summary(ResponseProviderResultState::Unavailable)
+        }
+        CorePrivateProviderResult::Undisclosed => {
+            restricted_response_summary(ResponseProviderResultState::Undisclosed)
+        }
+    })
+}
+
+fn project_response_summary(response: ResponseSummaryResponse) -> ResponseSummaryProjection {
+    if response.validate().is_err() {
+        return restricted_response_summary(ResponseProviderResultState::Unavailable);
+    }
+    match response.state {
+        ResponseProviderResultState::Available | ResponseProviderResultState::Empty => {
+            let Some(draft) = response
+                .draft_count
+                .and_then(|value| i64::try_from(value).ok())
+            else {
+                return restricted_response_summary(ResponseProviderResultState::Unavailable);
+            };
+            let Some(submitted) = response
+                .submitted_count
+                .and_then(|value| i64::try_from(value).ok())
+            else {
+                return restricted_response_summary(ResponseProviderResultState::Unavailable);
+            };
+            ResponseSummaryProjection {
+                state: response.state,
+                draft: Some(draft),
+                submitted: Some(submitted),
+            }
+        }
+        state => restricted_response_summary(state),
+    }
+}
+
+fn restricted_response_summary(state: ResponseProviderResultState) -> ResponseSummaryProjection {
+    ResponseSummaryProjection {
+        state,
+        draft: None,
+        submitted: None,
+    }
 }
 
 async fn load_dataset_summary(
@@ -209,18 +262,20 @@ fn undisclosed_dataset_summary() -> DatasetSummaryProjection {
     }
 }
 
-fn summary_from_row(
-    row: sqlx::postgres::PgRow,
+fn summary(
+    published_form_versions: i64,
+    responses: ResponseSummaryProjection,
     datasets: DatasetSummaryProjection,
-) -> ApiResult<Json<ApplicationSummary>> {
-    Ok(Json(ApplicationSummary {
-        published_form_versions: row.try_get("published_form_versions")?,
-        draft_submissions: row.try_get("draft_submissions")?,
-        submitted_submissions: row.try_get("submitted_submissions")?,
+) -> Json<ApplicationSummary> {
+    Json(ApplicationSummary {
+        published_form_versions,
+        response_state: responses.state,
+        draft_submissions: responses.draft,
+        submitted_submissions: responses.submitted,
         dataset_state: datasets.state,
         datasets: datasets.datasets,
         dataset_revisions: datasets.dataset_revisions,
-    }))
+    })
 }
 
 #[cfg(test)]

@@ -34,7 +34,6 @@ tessara-forms = { path = "../tessara-forms" }
 tessara-hierarchy = { path = "../tessara-hierarchy" }
 tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-reference-scoped-records = { path = "../tessara-reference-scoped-records" }
-tessara-submissions = { path = "../tessara-submissions" }
 tessara-web = { path = "../tessara-web", default-features = false }
 thiserror = { workspace = true }
 tokio = { workspace = true }

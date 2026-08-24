@@ -245,8 +245,7 @@ $domainCrates = @(
     "tessara-core",
     "tessara-dashboards",
     "tessara-forms",
-    "tessara-hierarchy",
-    "tessara-submissions"
+    "tessara-hierarchy"
 )
 $frameworkNeutralContractCrates = @("tessara-module-contract", "tessara-components-contract")
 $domainTransitiveForbidden = @("leptos", "axum", "sqlx", "gloo-net")
@@ -278,10 +277,10 @@ try {
                 ($name -like "tessara-web-*" -and $name -notin @("tessara-web-workflows", "tessara-web-http", "tessara-module-ui"))
         }
 
-        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-responses" -Description "tessara-web-responses must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
+        Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-response-ui" -Description "tessara-response-ui must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {
             param($name)
             $name -in @("tessara-web", "tessara-api", "leptos_router", "leptos_meta") -or
-                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-responses", "tessara-web-http", "tessara-module-ui"))
+                ($name -like "tessara-web-*" -and $name -notin @("tessara-web-http", "tessara-module-ui"))
         }
 
         Assert-NoDependencyPath -Graph $graph -StartPackage "tessara-web-organization" -Description "tessara-web-organization must not depend on root/API/sibling web feature crates or router/meta crates." -IsForbiddenPackage {

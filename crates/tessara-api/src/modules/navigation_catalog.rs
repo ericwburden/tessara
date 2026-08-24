@@ -74,7 +74,7 @@ pub(crate) fn is_frozen_destination(id: &str) -> bool {
     DESTINATIONS.iter().any(|destination| destination.id == id)
 }
 
-pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 12] = [
+pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 11] = [
     NavigationCatalogDestination {
         id: "core.home",
         key: "home",
@@ -122,20 +122,6 @@ pub(crate) const DESTINATIONS: [NavigationCatalogDestination; 12] = [
         definition_id: "tessara.workflows",
         capabilities: &["workflows:read", "workflows:manage"],
         default_order: 3,
-    }),
-    contribution(ContributionSpec {
-        id: "tessara.responses.navigation",
-        key: "responses",
-        label: "Responses",
-        route: "/responses",
-        semantic_destination: "responses.directory",
-        definition_id: "tessara.responses",
-        capabilities: &[
-            "submissions:read_own",
-            "submissions:respond",
-            "submissions:manage",
-        ],
-        default_order: 4,
     }),
     NavigationCatalogDestination {
         id: "core.operations",

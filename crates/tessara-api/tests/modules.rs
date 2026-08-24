@@ -36,7 +36,6 @@ const RESPONSES_DEFINITION: &str = "tessara.responses";
 const MIGRATION_DEFINITION: &str = "tessara.migration";
 const UNKNOWN_DEFINITION: &str = "tessara.unknown-definition";
 const FORM_RESOURCE_TYPE: &str = "tessara.transition.form";
-const RESPONSE_RESOURCE_TYPE: &str = "tessara.transition.response";
 #[cfg(not(debug_assertions))]
 const RESTRICTED_TIMING_SAMPLES_PER_IDENTIFIER: usize = 200;
 #[cfg(not(debug_assertions))]
@@ -1313,135 +1312,6 @@ async fn platform_http_apis_enforce_strict_wires_authority_order_and_non_disclos
     );
 }
 
-#[tokio::test]
-async fn response_reference_resolution_preserves_ownership_delegation_scope_and_non_disclosure() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let state = test_state().await;
-    let pool = state.pool.clone();
-    let app = router(state);
-    let admin_token = login_token(app.clone()).await;
-    let seed = tessara_api::demo::seed_demo(&pool)
-        .await
-        .expect("deterministic Response reference fixtures should seed");
-
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-    let delegator_token = login_token_for(
-        app.clone(),
-        "delegator@tessara.local",
-        "tessara-dev-delegator",
-    )
-    .await;
-    let no_access = create_actor(
-        app.clone(),
-        &admin_token,
-        "response-reference-no-access",
-        &[],
-    )
-    .await;
-    let scoped_manager = create_actor(
-        app.clone(),
-        &admin_token,
-        "response-reference-scoped-manager",
-        &["submissions:manage"],
-    )
-    .await;
-    force_scoped_assignment(&pool, scoped_manager.account_id, seed.session_node_id).await;
-
-    let delegate_submission_id: Uuid = sqlx::query_scalar(
-        r#"
-        SELECT submissions.id
-        FROM submissions
-        JOIN workflow_assignments
-          ON workflow_assignments.id = submissions.workflow_assignment_id
-        JOIN accounts ON accounts.id = workflow_assignments.account_id
-        WHERE accounts.email = 'delegate@tessara.local'
-          AND submissions.node_id <> $1
-        ORDER BY submissions.id
-        LIMIT 1
-        "#,
-    )
-    .bind(seed.session_node_id)
-    .fetch_one(&pool)
-    .await
-    .expect("the seed should contain an out-of-scope delegate Response");
-    let respondent_submission_id = seed.submission_id;
-    let random_submission_id = Uuid::new_v4();
-
-    let inventory = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/admin/modules", &admin_token, None),
-    )
-    .await;
-    let installation_id = inventory["installation"]["id"]
-        .as_str()
-        .expect("inventory should expose installation id");
-    let respondent_reference = response_reference(installation_id, respondent_submission_id);
-    let delegate_reference = response_reference(installation_id, delegate_submission_id);
-    let random_reference = response_reference(installation_id, random_submission_id);
-
-    let admin_known =
-        resolve_reference(app.clone(), &admin_token, respondent_reference.clone()).await;
-    assert_eq!(admin_known["access_state"], "authorized");
-    assert_eq!(admin_known["resource_identity_state"], "resolved");
-    assert_eq!(
-        admin_known["resource_lifecycle_state"],
-        json!({ "kind": "provider_defined", "state": "submitted" })
-    );
-    let admin_random = resolve_reference(app.clone(), &admin_token, random_reference.clone()).await;
-    assert_eq!(admin_random, authorized_unknown_resolution());
-
-    let respondent_own =
-        resolve_reference(app.clone(), &respondent_token, respondent_reference.clone()).await;
-    assert_eq!(respondent_own, admin_known);
-    let respondent_unrelated =
-        resolve_reference(app.clone(), &respondent_token, delegate_reference.clone()).await;
-    let respondent_random =
-        resolve_reference(app.clone(), &respondent_token, random_reference.clone()).await;
-    assert_eq!(respondent_unrelated, restricted_resolution("not_evaluated"));
-    assert_eq!(respondent_unrelated, respondent_random);
-
-    let delegator_delegated =
-        resolve_reference(app.clone(), &delegator_token, delegate_reference.clone()).await;
-    assert_eq!(delegator_delegated["access_state"], "authorized");
-    assert_eq!(delegator_delegated["resource_identity_state"], "resolved");
-    let delegator_unrelated =
-        resolve_reference(app.clone(), &delegator_token, respondent_reference.clone()).await;
-    let delegator_random =
-        resolve_reference(app.clone(), &delegator_token, random_reference.clone()).await;
-    assert_eq!(delegator_unrelated, restricted_resolution("not_evaluated"));
-    assert_eq!(delegator_unrelated, delegator_random);
-
-    let scoped_known = resolve_reference(
-        app.clone(),
-        &scoped_manager.token,
-        respondent_reference.clone(),
-    )
-    .await;
-    assert_eq!(scoped_known["access_state"], "authorized");
-    assert_eq!(scoped_known["resource_identity_state"], "resolved");
-    let scoped_outside = resolve_reference(
-        app.clone(),
-        &scoped_manager.token,
-        delegate_reference.clone(),
-    )
-    .await;
-    let scoped_random =
-        resolve_reference(app.clone(), &scoped_manager.token, random_reference.clone()).await;
-    assert_eq!(scoped_outside, restricted_resolution("not_evaluated"));
-    assert_eq!(scoped_outside, scoped_random);
-
-    let no_access_known =
-        resolve_reference(app.clone(), &no_access.token, respondent_reference).await;
-    let no_access_random = resolve_reference(app, &no_access.token, random_reference).await;
-    assert_eq!(no_access_known, restricted_resolution("unauthorized"));
-    assert_eq!(no_access_known, no_access_random);
-}
-
 /// Full validation invokes this exact test under `cargo test --release` with
 /// `--nocapture`. The test is absent from debug suites because an unoptimized
 /// timing result is not valid evidence.
@@ -2168,31 +2038,6 @@ fn authorized_unknown_resolution() -> Value {
         "compatibility_state": "compatible",
         "availability_state": "available",
     })
-}
-
-fn response_reference(installation_id: &str, submission_id: Uuid) -> Value {
-    json!({
-        "installation_id": installation_id,
-        "owner": {
-            "kind": "core_installation",
-            "installation_id": installation_id,
-        },
-        "resource_type": RESPONSE_RESOURCE_TYPE,
-        "resource_id": submission_id.to_string(),
-    })
-}
-
-async fn resolve_reference(app: axum::Router, token: &str, reference: Value) -> Value {
-    request_json(
-        app,
-        authorized_request(
-            "POST",
-            "/api/platform/resource-references/resolve",
-            token,
-            Some(json!({ "schema_version": 1, "reference": reference })),
-        ),
-    )
-    .await
 }
 
 #[cfg(not(debug_assertions))]

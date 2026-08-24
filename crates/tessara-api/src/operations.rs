@@ -9,6 +9,13 @@ use tessara_datasets_contract::{
     DatasetOperationsStatusRequest, DatasetOperationsStatusResponse, DatasetProviderResultState,
     DatasetReadinessLabel,
 };
+use tessara_responses_contract::{
+    RESPONSE_MODULE_DEFINITION_ID, RESPONSE_OPERATIONAL_STATUS_CONTRACT_ID,
+    RESPONSE_OPERATIONS_STATUS_ACTION, RESPONSE_OPERATIONS_STATUS_BINDING_KEY,
+    RESPONSE_OPERATIONS_STATUS_MEDIA_TYPE, RESPONSE_OPERATIONS_STATUS_PATH,
+    RESPONSE_REVERSE_CONTRACT_VERSION, RESPONSE_REVERSE_SCHEMA_VERSION, ResponseOperationsStatus,
+    ResponseOperationsStatusRequest, ResponseOperationsStatusResponse, ResponseProviderResultState,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -26,7 +33,7 @@ pub struct OperationsStatus {
     pub summary: OperationsSummary,
     pub workflow_assignments: Vec<WorkflowAssignmentStatus>,
     pub dataset_readiness: DatasetReadiness,
-    pub reporting_data: ReportingDataStatus,
+    pub response_owner: ResponseOwnerStatus,
 }
 
 #[derive(Serialize)]
@@ -77,12 +84,9 @@ pub struct DatasetStatus {
 }
 
 #[derive(Serialize)]
-pub struct ReportingDataStatus {
-    pub status: String,
-    pub reporting_node_count: i64,
-    pub submitted_response_count: i64,
-    pub response_value_count: i64,
-    pub message: String,
+pub struct ResponseOwnerStatus {
+    pub state: ResponseProviderResultState,
+    pub status: Option<ResponseOperationsStatus>,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -111,7 +115,9 @@ pub async fn get_operations_status(
         request_correlation_id_or_new(&headers),
     )
     .await?;
-    let reporting_data = load_reporting_data_status(&state.pool, &boundary).await?;
+    let response_owner =
+        load_response_owner_status(&state, &request, request_correlation_id_or_new(&headers))
+            .await?;
 
     let summary = OperationsSummary {
         open_workflow_assignment_count: workflow_assignments
@@ -129,7 +135,7 @@ pub async fn get_operations_status(
         summary,
         workflow_assignments,
         dataset_readiness,
-        reporting_data,
+        response_owner,
     }))
 }
 
@@ -214,8 +220,8 @@ fn workflow_assignments_sql(scoped: bool) -> &'static str {
             current_steps.title AS current_step_title,
             COUNT(DISTINCT completed_step_instances.id) AS completed_step_count,
             COUNT(DISTINCT workflow_steps.id) AS total_step_count,
-            COUNT(DISTINCT submissions.id) FILTER (WHERE submissions.status = 'draft') AS draft_response_count,
-            COUNT(DISTINCT submissions.id) FILTER (WHERE submissions.status = 'submitted') AS submitted_response_count,
+            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'draft') AS draft_response_count,
+            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'submitted') AS submitted_response_count,
             workflow_instances.created_at AS started_at,
             workflow_instances.completed_at
         FROM workflow_instances
@@ -232,7 +238,8 @@ fn workflow_assignments_sql(scoped: bool) -> &'static str {
             ON completed_step_instances.workflow_instance_id = workflow_instances.id
            AND completed_step_instances.status = 'completed'
         LEFT JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_instances.workflow_version_id
-        LEFT JOIN submissions ON submissions.workflow_instance_id = workflow_instances.id
+        LEFT JOIN workflow_response_projection AS responses
+            ON responses.workflow_instance_id = workflow_instances.id
         WHERE workflow_instances.node_id = ANY($1)
         GROUP BY
             workflow_instances.id,
@@ -267,8 +274,8 @@ fn workflow_assignments_sql(scoped: bool) -> &'static str {
             current_steps.title AS current_step_title,
             COUNT(DISTINCT completed_step_instances.id) AS completed_step_count,
             COUNT(DISTINCT workflow_steps.id) AS total_step_count,
-            COUNT(DISTINCT submissions.id) FILTER (WHERE submissions.status = 'draft') AS draft_response_count,
-            COUNT(DISTINCT submissions.id) FILTER (WHERE submissions.status = 'submitted') AS submitted_response_count,
+            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'draft') AS draft_response_count,
+            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'submitted') AS submitted_response_count,
             workflow_instances.created_at AS started_at,
             workflow_instances.completed_at
         FROM workflow_instances
@@ -285,7 +292,8 @@ fn workflow_assignments_sql(scoped: bool) -> &'static str {
             ON completed_step_instances.workflow_instance_id = workflow_instances.id
            AND completed_step_instances.status = 'completed'
         LEFT JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_instances.workflow_version_id
-        LEFT JOIN submissions ON submissions.workflow_instance_id = workflow_instances.id
+        LEFT JOIN workflow_response_projection AS responses
+            ON responses.workflow_instance_id = workflow_instances.id
         GROUP BY
             workflow_instances.id,
             workflow_assignments.id,
@@ -428,78 +436,49 @@ fn dataset_attention_count(readiness: &DatasetReadiness) -> Option<i64> {
     }
 }
 
-async fn load_reporting_data_status(
-    pool: &sqlx::PgPool,
-    boundary: &CapabilityBoundary,
-) -> ApiResult<ReportingDataStatus> {
-    let (reporting_node_count, submitted_response_count, response_value_count): (i64, i64, i64) =
-        match boundary {
-            CapabilityBoundary::Global => {
-                let row = sqlx::query(
-                    r#"
-                SELECT
-                    (SELECT COUNT(*) FROM analytics.node_dim) AS node_count,
-                    (SELECT COUNT(*) FROM analytics.submission_fact) AS submitted_count,
-                    (SELECT COUNT(*) FROM analytics.submission_value_fact) AS value_count
-                "#,
-                )
-                .fetch_one(pool)
-                .await?;
-                (
-                    row.try_get("node_count")?,
-                    row.try_get("submitted_count")?,
-                    row.try_get("value_count")?,
-                )
-            }
-            CapabilityBoundary::Scoped(node_ids) => {
-                if node_ids.is_empty() {
-                    (0, 0, 0)
-                } else {
-                    let row = sqlx::query(
-                    r#"
-                    SELECT
-                        (SELECT COUNT(*) FROM analytics.node_dim WHERE node_id = ANY($1)) AS node_count,
-                        (SELECT COUNT(*) FROM analytics.submission_fact WHERE node_id = ANY($1)) AS submitted_count,
-                        (
-                            SELECT COUNT(*)
-                            FROM analytics.submission_value_fact
-                            JOIN analytics.submission_fact
-                                ON analytics.submission_fact.submission_id = analytics.submission_value_fact.submission_id
-                            WHERE analytics.submission_fact.node_id = ANY($1)
-                        ) AS value_count
-                    "#,
-                )
-                .bind(node_ids)
-                .fetch_one(pool)
-                .await?;
-                    (
-                        row.try_get("node_count")?,
-                        row.try_get("submitted_count")?,
-                        row.try_get("value_count")?,
-                    )
-                }
-            }
-            CapabilityBoundary::None => (0, 0, 0),
-        };
-
-    let (status, message) = if submitted_response_count > 0 && response_value_count > 0 {
-        (
-            "Available".to_string(),
-            "Submitted responses and field values are available for reporting.".to_string(),
-        )
-    } else {
-        (
-            "Unavailable".to_string(),
-            "No submitted response values are available for reporting in this scope.".to_string(),
-        )
+async fn load_response_owner_status(
+    state: &AppState,
+    actor: &AuthenticatedRequest,
+    correlation_id: Uuid,
+) -> ApiResult<ResponseOwnerStatus> {
+    let request = ResponseOperationsStatusRequest {
+        schema_version: RESPONSE_REVERSE_SCHEMA_VERSION,
     };
-
-    Ok(ReportingDataStatus {
-        status,
-        reporting_node_count,
-        submitted_response_count,
-        response_value_count,
-        message,
+    let response = call_private_provider::<_, ResponseOperationsStatusResponse>(
+        state,
+        actor,
+        CorePrivateProviderRequest {
+            module_definition_id: RESPONSE_MODULE_DEFINITION_ID,
+            expected_owner: None,
+            dependency_binding: RESPONSE_OPERATIONS_STATUS_BINDING_KEY,
+            functional_contract: RESPONSE_OPERATIONAL_STATUS_CONTRACT_ID,
+            contract_version: RESPONSE_REVERSE_CONTRACT_VERSION,
+            authorization_action: RESPONSE_OPERATIONS_STATUS_ACTION,
+            path: RESPONSE_OPERATIONS_STATUS_PATH,
+            media_type: RESPONSE_OPERATIONS_STATUS_MEDIA_TYPE,
+            correlation_id,
+            actor_capability: "operations:view",
+            body: &request,
+        },
+    )
+    .await?;
+    Ok(match response {
+        CorePrivateProviderResult::Response(response) if response.validate().is_ok() => {
+            ResponseOwnerStatus {
+                state: response.state,
+                status: response.status,
+            }
+        }
+        CorePrivateProviderResult::Response(_) | CorePrivateProviderResult::Unavailable => {
+            ResponseOwnerStatus {
+                state: ResponseProviderResultState::Unavailable,
+                status: None,
+            }
+        }
+        CorePrivateProviderResult::Undisclosed => ResponseOwnerStatus {
+            state: ResponseProviderResultState::Undisclosed,
+            status: None,
+        },
     })
 }
 

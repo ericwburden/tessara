@@ -215,16 +215,9 @@ fn resource_observation_provider_from_installed(
 
     let bindings = module
         .manifest
-        .browser_routes
+        .public_api_routes
         .iter()
         .map(|route| route.dependency_binding.as_str())
-        .chain(
-            module
-                .manifest
-                .public_api_routes
-                .iter()
-                .map(|route| route.dependency_binding.as_str()),
-        )
         .collect::<BTreeSet<_>>();
     let mut bindings = bindings.into_iter();
     let Some(dependency_binding) = bindings.next() else {

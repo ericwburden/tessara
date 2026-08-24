@@ -517,7 +517,7 @@ mod tests {
 
     #[test]
     fn sprint_8c_core_fresh_baseline_excludes_independent_module_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0x5b60_ff60_0414_6859);
+        assert_eq!(fnv1a(BASELINE), 0xbc07_37ae_0444_cb90);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
@@ -526,13 +526,18 @@ mod tests {
         assert!(!baseline.contains("CREATE TABLE datasets ("));
         assert!(!baseline.contains("CREATE TABLE dataset_revisions ("));
         assert!(!baseline.contains("CREATE TYPE dataset_revision_status AS ENUM"));
+        assert!(!baseline.contains("CREATE TABLE submissions ("));
+        assert!(!baseline.contains("CREATE TABLE submission_values ("));
+        assert!(!baseline.contains("CREATE TABLE submission_audit_events ("));
+        assert!(!baseline.contains("CREATE TABLE response_export_changes ("));
+        assert!(!baseline.contains("CREATE TABLE response_owner_action_receipts ("));
     }
 
     #[test]
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "43e7dc146db613972ddef9482faf60320d329de6fe50055c4a668fe840ef0175"
+            "02c6ee882416276d3499bf13a34aafd542e507966a46f0c523dcd94627aff03d"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

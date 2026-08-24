@@ -49,10 +49,25 @@ pub const RESPONSE_RESOURCE_OBSERVATION_CONTRACT_ID: &str =
     "tessara.responses.resource-observation";
 pub const RESPONSE_REVERSE_CONTRACT_VERSION: &str = "1.0.0";
 pub const RESPONSE_REVERSE_SCHEMA_VERSION: u16 = 1;
+pub const RESPONSE_FORM_VERSION_USAGE_BINDING_KEY: &str = "tessara.forms.response-usage";
+pub const RESPONSE_SUMMARY_BINDING_KEY: &str = "tessara.core.response-summary";
+pub const RESPONSE_OPERATIONS_STATUS_BINDING_KEY: &str = "tessara.core.response-operations";
+pub const RESPONSE_RESOURCE_OBSERVATION_BINDING_KEY: &str = "tessara.core.response-observation";
+pub const RESPONSE_FORM_VERSION_USAGE_ACTION: &str = "responses.form_version_usage";
+pub const RESPONSE_SUMMARY_ACTION: &str = "responses.summary";
+pub const RESPONSE_OPERATIONS_STATUS_ACTION: &str = "responses.operations_status";
+pub const RESPONSE_RESOLVE_ACTION: &str = "responses.resolve";
 pub const RESPONSE_FORM_VERSION_USAGE_PATH: &str = "/api/private/responses/form-version-usage";
 pub const RESPONSE_SUMMARY_PATH: &str = "/api/private/responses/summary";
 pub const RESPONSE_OPERATIONS_STATUS_PATH: &str = "/api/private/responses/operations-status";
 pub const RESPONSE_RESOLVE_PATH: &str = "/api/private/responses/resolve";
+pub const RESPONSE_FORM_VERSION_USAGE_MEDIA_TYPE: &str =
+    "application/vnd.tessara.responses.form-version-usage+json;version=1";
+pub const RESPONSE_SUMMARY_MEDIA_TYPE: &str =
+    "application/vnd.tessara.responses.summary+json;version=1";
+pub const RESPONSE_OPERATIONS_STATUS_MEDIA_TYPE: &str =
+    "application/vnd.tessara.responses.operational-status+json;version=1";
+pub const RESPONSE_RESOURCE_OBSERVATION_MEDIA_TYPE: &str = "application/json";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ResponseReference {

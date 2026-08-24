@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "profile": "sprint-8c-reference",
+  "data_policy": "fresh_owner_bootstrap_only",
+  "owners": {
+    "core": [
+      "actor.response-owner",
+      "actor.response-manager",
+      "actor.response-outsider",
+      "actor.delegate",
+      "scope.full",
+      "scope.restricted",
+      "scope.disjoint",
+      "form.primary/v1.schema",
+      "form.secondary/v1.schema",
+      "form.disjoint/v1.schema",
+      "workflow.assignment.draft-owner.context",
+      "workflow.assignment.submitted-owner.context",
+      "workflow.assignment.submitted-delegated.context",
+      "workflow.assignment.submitted-restricted.context"
+    ],
+    "tessara.responses": [
+      "response.draft.owner",
+      "response.submitted.owner",
+      "response.submitted.delegated",
+      "response.submitted.restricted"
+    ],
+    "tessara.datasets": [
+      "dataset.base",
+      "dataset.derived",
+      "dataset.derived-second-hop"
+    ],
+    "tessara.components": [
+      "component.dataset-table",
+      "component.dataset-chart",
+      "component.dataset-stat"
+    ],
+    "tessara.dashboards": ["dashboard.dataset-components"]
+  },
+  "invariants": [
+    "no_predicted_response_uuid",
+    "response_receipt_owner_is_tessara.responses",
+    "workflow_context_precedes_response_bootstrap",
+    "response_export_precedes_dataset_bootstrap",
+    "unchanged_second_apply_is_semantic_no_op"
+  ]
+}

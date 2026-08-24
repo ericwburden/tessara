@@ -897,7 +897,11 @@ async fn store_mutation_receipt(
     Ok(())
 }
 
-fn validate_field_value(field_type: &str, options: &[Value], value: &Value) -> Result<(), ()> {
+pub(crate) fn validate_field_value(
+    field_type: &str,
+    options: &[Value],
+    value: &Value,
+) -> Result<(), ()> {
     let valid_type = match field_type {
         "static_text" | "text" | "date" | "single_choice" => value.is_string(),
         "number" => value.is_number(),
@@ -933,7 +937,7 @@ fn nonempty_response_value(value: &Value) -> bool {
     }
 }
 
-fn value_text(value: &Value) -> Option<String> {
+pub(crate) fn value_text(value: &Value) -> Option<String> {
     match value {
         Value::String(value) => Some(value.clone()),
         Value::Number(value) => Some(value.to_string()),

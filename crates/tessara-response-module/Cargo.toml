@@ -17,6 +17,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 leptos = { workspace = true, features = ["ssr"] }
 reqwest = { workspace = true }
+semver = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_jcs = { workspace = true }
@@ -25,6 +26,7 @@ sqlx = { workspace = true, features = ["macros"] }
 tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-module-runtime = { path = "../tessara-module-runtime" }
 tessara-module-ui = { path = "../tessara-module-ui", features = ["ssr"] }
+tessara-composition = { path = "../tessara-composition" }
 tessara-response-ui = { path = "../tessara-web-responses", features = ["ssr"] }
 tessara-responses-contract = { path = "../tessara-responses-contract" }
 tessara-forms-contract = { path = "../tessara-forms-contract" }

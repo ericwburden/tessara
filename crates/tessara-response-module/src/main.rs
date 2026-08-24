@@ -63,6 +63,20 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         core_public_key,
     )?;
+    let core_owner_bootstrap_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
+        "tessara.core",
+        env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
+            .unwrap_or_else(|_| "core-development-v1".into()),
+        ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
+        core_public_key,
+    )?;
+    let bootstrap_receipt_signer = Arc::new(PurposeBoundSigningKeyV1::from_secret_bytes(
+        "tessara.responses",
+        env::var("TESSARA_RESPONSE_SERVICE_SIGNING_KEY_ID")
+            .unwrap_or_else(|_| "response-development-v1".into()),
+        ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
+        service_secret,
+    )?);
     let runtime = Arc::new(ResponseRuntime::new(
         pool,
         CoreVerifiers::from_environment()?,
@@ -70,6 +84,8 @@ async fn main() -> Result<()> {
         core_service_request_verifier,
         service_identity_registry,
         endpoints,
+        core_owner_bootstrap_verifier,
+        bootstrap_receipt_signer,
     ));
     let address: SocketAddr = env::var("RESPONSE_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8094".into())

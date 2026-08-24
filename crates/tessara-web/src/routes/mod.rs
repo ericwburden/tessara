@@ -11,7 +11,6 @@ pub mod module_unavailable;
 pub mod not_found;
 pub mod operations;
 pub mod organization;
-pub mod responses;
 pub mod workflows;
 
 use leptos_router::SsrMode;
@@ -28,7 +27,6 @@ pub fn routes() -> impl leptos_router::MatchNestedRoutes + Clone {
         organization::organization_routes(),
         forms::form_routes(),
         workflows::workflow_routes(),
-        responses::response_routes(),
         operations::operation_routes(),
         administration::administration_routes(),
         // Enrollment and the manifest-owned gateway decide whether a path is

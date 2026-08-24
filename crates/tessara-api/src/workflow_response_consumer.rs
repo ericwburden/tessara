@@ -307,7 +307,7 @@ async fn upsert_projection(
     require_existing: bool,
 ) -> ApiResult<()> {
     let existing = sqlx::query(
-        "SELECT workflow_assignment_id,response_revision,response_state,last_event_sequence FROM workflow_response_projection WHERE response_id=$1 FOR UPDATE",
+        "SELECT workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,response_revision,response_state,last_event_sequence FROM workflow_response_projection WHERE response_id=$1 FOR UPDATE",
     )
     .bind(event.response.response_id())
     .fetch_optional(&mut **tx)
@@ -317,9 +317,11 @@ async fn upsert_projection(
             return Err(invalid_provider("Response event projection"));
         }
         sqlx::query(
-            "INSERT INTO workflow_response_projection(workflow_assignment_id,response_installation_id,response_module_instance_id,response_id,response_revision,response_state,last_event_sequence,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+            "INSERT INTO workflow_response_projection(workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,response_installation_id,response_module_instance_id,response_id,response_revision,response_state,last_event_sequence,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
         )
         .bind(event.workflow_assignment_id)
+        .bind(event.workflow_instance_id)
+        .bind(event.workflow_step_instance_id)
         .bind(response_owner(&event.response).0)
         .bind(response_owner(&event.response).1)
         .bind(event.response.response_id())
@@ -331,8 +333,12 @@ async fn upsert_projection(
         .await?;
         return Ok(());
     };
-    if existing.try_get::<Uuid, _>("workflow_assignment_id")? != event.workflow_assignment_id {
-        return Err(invalid_provider("Response projection assignment"));
+    if existing.try_get::<Uuid, _>("workflow_assignment_id")? != event.workflow_assignment_id
+        || existing.try_get::<Uuid, _>("workflow_instance_id")? != event.workflow_instance_id
+        || existing.try_get::<Uuid, _>("workflow_step_instance_id")?
+            != event.workflow_step_instance_id
+    {
+        return Err(invalid_provider("Response projection context"));
     }
     let revision = u64::try_from(existing.try_get::<i64, _>("response_revision")?)
         .map_err(|_| invalid_provider("Response projection revision"))?;
@@ -419,7 +425,7 @@ async fn release_deleted_runtime(
     workflow_step_instance_id: Uuid,
 ) -> ApiResult<()> {
     sqlx::query(
-        "DELETE FROM workflow_step_instances WHERE id=$1 AND workflow_instance_id=$2 AND status='in_progress' AND submission_id IS NULL",
+        "DELETE FROM workflow_step_instances WHERE id=$1 AND workflow_instance_id=$2 AND status='in_progress'",
     )
     .bind(workflow_step_instance_id)
     .bind(workflow_instance_id)
@@ -531,9 +537,11 @@ async fn apply_reconciliation(
             .execute(&mut *tx)
             .await?;
             sqlx::query(
-                "INSERT INTO workflow_response_projection(workflow_assignment_id,response_installation_id,response_module_instance_id,response_id,response_revision,response_state,last_event_sequence,updated_at) VALUES($1,$2,$3,$4,$5,$6,0,now()) ON CONFLICT(response_id) DO UPDATE SET response_revision=EXCLUDED.response_revision,response_state=EXCLUDED.response_state,updated_at=EXCLUDED.updated_at WHERE workflow_response_projection.last_event_sequence=0",
+                "INSERT INTO workflow_response_projection(workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,response_installation_id,response_module_instance_id,response_id,response_revision,response_state,last_event_sequence,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,now()) ON CONFLICT(response_id) DO UPDATE SET response_revision=EXCLUDED.response_revision,response_state=EXCLUDED.response_state,updated_at=EXCLUDED.updated_at WHERE workflow_response_projection.last_event_sequence=0",
             )
             .bind(request.workflow_assignment_id)
+            .bind(request.workflow_instance_id)
+            .bind(request.workflow_step_instance_id)
             .bind(response_owner(&commit.response).0)
             .bind(response_owner(&commit.response).1)
             .bind(commit.response.response_id())
@@ -744,7 +752,9 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
-    async fn workflow_events_consume_once_and_submission_advances_once(pool: sqlx::PgPool) {
+    async fn workflow_events_consume_once_and_advance_the_same_actor_and_node_once(
+        pool: sqlx::PgPool,
+    ) {
         crate::db::seed_dev_admin(
             &pool,
             &crate::config::Config {
@@ -768,6 +778,21 @@ mod tests {
         .await
         .unwrap();
         let assignment_id: Uuid = assignment.get("id");
+        let next_form_version_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM form_versions WHERE id<>(SELECT form_version_id FROM workflow_steps WHERE id=$1) AND status='published'::form_version_status ORDER BY id LIMIT 1",
+        )
+        .bind(assignment.get::<Uuid, _>("workflow_step_id"))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let next_step_id: Uuid = sqlx::query_scalar(
+            "INSERT INTO workflow_steps(workflow_version_id,form_version_id,title,position) VALUES($1,$2,'Second response step',1) RETURNING id",
+        )
+        .bind(assignment.get::<Uuid, _>("workflow_version_id"))
+        .bind(next_form_version_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
         let instance_id: Uuid = sqlx::query_scalar(
             "INSERT INTO workflow_instances(workflow_assignment_id,workflow_version_id,node_id,assignee_account_id,started_by_account_id) VALUES($1,$2,$3,$4,$4) RETURNING id",
         )
@@ -844,6 +869,26 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(step_state, "completed");
+        let next_assignment: (Uuid, Uuid, i64) = sqlx::query_as(
+            "SELECT node_id,account_id,COUNT(*) OVER() FROM workflow_assignments WHERE workflow_step_id=$1",
+        )
+        .bind(next_step_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(next_assignment.0, assignment.get::<Uuid, _>("node_id"));
+        assert_eq!(next_assignment.1, assignment.get::<Uuid, _>("account_id"));
+        assert_eq!(
+            next_assignment.2, 1,
+            "duplicate events must not double-advance"
+        );
+        let instance_state: String =
+            sqlx::query_scalar("SELECT status FROM workflow_instances WHERE id=$1")
+                .bind(instance_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(instance_state, "in_progress");
 
         let gap = event(
             3,

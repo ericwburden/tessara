@@ -27,9 +27,9 @@ mod dto;
 pub(crate) use dto::{
     CreateNodeMetadataFieldRequest, CreateNodeRequest, CreateNodeTypeRelationshipRequest,
     CreateNodeTypeRequest, IdResponse, ListNodesQuery, NodeDetail, NodeFormLink,
-    NodeMetadataFieldSummary, NodeResponse, NodeSubmissionLink, NodeTypeCatalogEntry,
-    NodeTypeDefinition, NodeTypeFormLink, NodeTypePeerLink, NodeTypeRelationshipSummary,
-    NodeTypeSummary, UpdateNodeMetadataFieldRequest, UpdateNodeRequest, UpdateNodeTypeRequest,
+    NodeMetadataFieldSummary, NodeResponse, NodeTypeCatalogEntry, NodeTypeDefinition,
+    NodeTypeFormLink, NodeTypePeerLink, NodeTypeRelationshipSummary, NodeTypeSummary,
+    UpdateNodeMetadataFieldRequest, UpdateNodeRequest, UpdateNodeTypeRequest,
 };
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -836,57 +836,6 @@ pub async fn get_node(
     })
     .collect::<Result<Vec<_>, sqlx::Error>>()?;
 
-    let related_responses = sqlx::query(
-        r#"
-        SELECT
-            submissions.id AS submission_id,
-            forms.id AS form_id,
-            forms.name AS form_name,
-            submissions.form_version_id,
-            form_versions.version_label,
-            submissions.status::text AS status,
-            submissions.created_at,
-            submissions.submitted_at,
-            submitters.submitted_by
-        FROM submissions
-        JOIN form_versions ON form_versions.id = submissions.form_version_id
-        JOIN forms ON forms.id = form_versions.form_id
-        LEFT JOIN LATERAL (
-            SELECT accounts.display_name AS submitted_by
-            FROM submission_audit_events
-            LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
-            WHERE submission_audit_events.submission_id = submissions.id
-              AND submission_audit_events.account_id IS NOT NULL
-            ORDER BY
-                CASE WHEN submission_audit_events.event_type = 'submit' THEN 0 ELSE 1 END,
-                submission_audit_events.created_at DESC,
-                submission_audit_events.id DESC
-            LIMIT 1
-        ) AS submitters ON TRUE
-        WHERE submissions.node_id = $1
-        ORDER BY submissions.created_at DESC, submissions.id DESC
-        LIMIT 10
-        "#,
-    )
-    .bind(node_id)
-    .fetch_all(&state.pool)
-    .await?
-    .into_iter()
-    .map(|row| {
-        Ok(NodeSubmissionLink {
-            submission_id: row.try_get("submission_id")?,
-            form_id: row.try_get("form_id")?,
-            form_name: row.try_get("form_name")?,
-            form_version_id: row.try_get("form_version_id")?,
-            version_label: row.try_get("version_label")?,
-            status: row.try_get("status")?,
-            created_at: row.try_get("created_at")?,
-            submitted_at: row.try_get("submitted_at")?,
-            submitted_by: row.try_get("submitted_by")?,
-        })
-    })
-    .collect::<Result<Vec<_>, sqlx::Error>>()?;
-
     Ok(Json(NodeDetail {
         id: node.try_get("id")?,
         node_type_id: node.try_get("node_type_id")?,
@@ -904,7 +853,6 @@ pub async fn get_node(
         name: node.try_get("name")?,
         metadata: node.try_get("metadata")?,
         related_forms,
-        related_responses,
     }))
 }
 

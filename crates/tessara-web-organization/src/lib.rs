@@ -12,7 +12,6 @@ mod node_options;
 mod pages;
 mod pagination;
 mod related_work;
-mod related_work_controls;
 mod related_work_tables;
 mod text;
 mod tree;

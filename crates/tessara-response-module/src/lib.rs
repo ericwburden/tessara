@@ -36,6 +36,11 @@ use tessara_response_ui::{
 };
 use uuid::Uuid;
 
+mod bootstrap;
+pub use bootstrap::{
+    RESPONSE_BOOTSTRAP_SCHEMA_VERSION, ResponseBootstrapDefinitionV1,
+    ResponseBootstrapLifecycleStateV1, ResponseBootstrapReadBackV1, ResponseBootstrapV1,
+};
 mod event_provider;
 mod export_provider;
 mod owner;
@@ -44,6 +49,7 @@ mod product_api;
 mod product_store;
 mod provider_client;
 mod reconciliation_provider;
+mod reverse_provider;
 pub use owner::{
     CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
     ResponseValueInput, StartResponseClaimCommand, canonical_digest,
@@ -194,6 +200,8 @@ pub struct ResponseRuntime {
     core_service_request_verifier: PurposeBoundVerifyingKeyV1,
     service_identity_registry: ModuleServiceIdentityRegistryV1,
     service_endpoints: ResponseServiceEndpoints,
+    core_owner_bootstrap_verifier: PurposeBoundVerifyingKeyV1,
+    bootstrap_receipt_signer: Arc<PurposeBoundSigningKeyV1>,
 }
 impl ResponseRuntime {
     pub fn new(
@@ -203,6 +211,8 @@ impl ResponseRuntime {
         core_service_request_verifier: PurposeBoundVerifyingKeyV1,
         service_identity_registry: ModuleServiceIdentityRegistryV1,
         service_endpoints: ResponseServiceEndpoints,
+        core_owner_bootstrap_verifier: PurposeBoundVerifyingKeyV1,
+        bootstrap_receipt_signer: Arc<PurposeBoundSigningKeyV1>,
     ) -> Self {
         Self {
             pool,
@@ -212,6 +222,8 @@ impl ResponseRuntime {
             core_service_request_verifier,
             service_identity_registry,
             service_endpoints,
+            core_owner_bootstrap_verifier,
+            bootstrap_receipt_signer,
         }
     }
 }
@@ -513,6 +525,11 @@ pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
         .merge(event_provider::routes())
         .merge(export_provider::routes())
         .merge(reconciliation_provider::routes())
+        .merge(reverse_provider::routes())
+        .route(
+            "/api/private/bootstrap",
+            axum::routing::post(bootstrap::apply_bootstrap),
+        )
         .route("/responses", get(directory_document))
         .route("/responses/new", get(start_document))
         .route("/responses/{response_id}", get(detail_document))
@@ -832,9 +849,9 @@ mod tests {
         assert!(!sql.contains("REFERENCES forms"));
         assert!(!sql.contains("REFERENCES workflow"));
         assert!(!sql.contains("submission_value_multi"));
-        assert_ne!(
+        assert_eq!(
             format!("{:x}", Sha256::digest(BASELINE)),
-            format!("{:064x}", 0)
+            "b6c550168df05e933f1f19327b9ce0ccb0c498561ac9fa461a334ae9b93058f7"
         );
     }
 }

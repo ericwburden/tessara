@@ -31,7 +31,6 @@ members = [
     "crates/tessara-reference-scoped-records",
     "crates/tessara-responses-contract",
     "crates/tessara-response-module",
-    "crates/tessara-submissions",
     "crates/tessara-web",
     "crates/tessara-dashboard-placement-renderer",
     "crates/tessara-dashboard-ui",
