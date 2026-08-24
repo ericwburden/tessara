@@ -8,6 +8,37 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-08-23 - Sprint 8C Response Module Separation Kickoff
+
+- Status: kickoff planning complete; implementation authorized on 2026-08-23.
+- Branch: `codex/sprint-8c`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8c`.
+- Execution contract: `docs/sprints/sprint-8c-plan.md`.
+- Planned validation record: `docs/sprints/sprint-8c-verification.md`.
+- Policy-v2 contract: `docs/sprints/sprint-8c-validation-contract.json` using
+  `phase8-module-extraction` for Module Definition and transition identity
+  `tessara.responses`.
+- Planned verification includes `cargo fmt --all -- --check`, warnings-denied
+  Clippy, `cargo test --workspace --locked`, `npm --prefix .\end2end test`,
+  `.\scripts\local-launch.ps1`, `.\scripts\smoke.ps1`, and
+  `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`, plus exact
+  Response owner, provider, Workflow-event, Dataset-export, UI conformance,
+  isolation, clean materialization/no-op/recovery and upgrade/rollback targets.
+- Product blockers: none. The user approved durable eventual Workflow-event
+  delivery during Workflow outage, pinned-snapshot editing for existing drafts,
+  live compatible providers for new starts, and fresh reset/reseed with no data
+  migration. A newly discovered storage dependency, consumer edge,
+  unbounded event state, or UI ownership ambiguity returns to planning before
+  cutover; a required provider contract that would move Forms/Workflow product
+  policy requires user direction.
+- Authorized first slice: freeze Response v2, Workflow context/event and
+  reverse-consumer contracts; capture the source-exact Response UI baseline;
+  and encode the complete Core subtraction/provider-consumer inventory as
+  failing executable boundary tests.
+- This kickoff created planning artifacts only. No product source, test,
+  migration, fixture, script, manifest, deployment, or generated asset change
+  has begun.
+
 ## 2026-08-23 - Validation Platform Foundation Diversion Closeout
 
 The post-Sprint 8B validation-platform diversion is complete independently of
