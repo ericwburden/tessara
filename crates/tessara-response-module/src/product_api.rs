@@ -41,7 +41,7 @@ use crate::{
     CreateResponseCommand, IdempotentCommit, MODULE_DEFINITION_ID, RESPONSE_FORM_BINDING,
     RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING, RESPONSE_WORKFLOW_CONTEXT_BINDING, ResponseAccess,
     ResponseListFilter, ResponseMutationCommand, ResponseOwnerError, ResponseOwnerRepository,
-    ResponseRuntime, SaveResponseCommand, canonical_digest,
+    ResponseRuntime, SaveResponseCommand, StartResponseClaimCommand, canonical_digest,
 };
 
 const CORE_RESPONSE_BINDING: &str = "tessara.core.responses";
@@ -248,6 +248,21 @@ pub(crate) async fn start_response(
             _ => return Err(ProductApiError::Incompatible),
         };
         validate_start_authority(&workflow, grant.payload.original_actor_id)?;
+        let expires_at = chrono::DateTime::parse_from_rfc3339(&workflow.expires_at)
+            .map_err(|_| ProductApiError::Incompatible)?
+            .with_timezone(&chrono::Utc);
+        repository
+            .claim_start(&StartResponseClaimCommand {
+                workflow_assignment_id: workflow.workflow_assignment_id,
+                workflow_instance_id: workflow.workflow_instance_id,
+                workflow_step_instance_id: workflow.workflow_step_instance_id,
+                one_use_nonce: workflow.one_use_nonce,
+                actor_account_id: grant.payload.original_actor_id,
+                idempotency_key_digest: idempotency_key_digest.clone(),
+                request_digest: request_digest.clone(),
+                expires_at,
+            })
+            .await?;
         let form: FormVersionSchemaResponse = provider_client::post(
             &runtime,
             &grant,
@@ -297,6 +312,7 @@ pub(crate) async fn start_response(
                 workflow_step_id: workflow.workflow_step_id,
                 workflow_instance_id: workflow.workflow_instance_id,
                 workflow_step_instance_id: workflow.workflow_step_instance_id,
+                workflow_start_nonce: workflow.one_use_nonce,
                 assignee_account_id: workflow.assignee_account_id,
                 started_by_account_id: workflow.started_by_account_id,
                 delegation_basis: workflow.delegation_basis.clone(),
@@ -644,13 +660,14 @@ impl From<ResponseOwnerError> for ProductApiError {
             ResponseOwnerError::NotFound => Self::NotFound,
             ResponseOwnerError::Immutable
             | ResponseOwnerError::IdempotencyConflict
+            | ResponseOwnerError::StartLeaseExpired
             | ResponseOwnerError::RevisionConflict { .. } => Self::Conflict(error.to_string()),
             ResponseOwnerError::Persistence(_) | ResponseOwnerError::SecurityStateUnavailable => {
                 Self::Unavailable
             }
-            ResponseOwnerError::CorruptReceipt | ResponseOwnerError::CorruptSnapshot => {
-                Self::Internal
-            }
+            ResponseOwnerError::CorruptReceipt
+            | ResponseOwnerError::CorruptSnapshot
+            | ResponseOwnerError::InvariantViolation(_) => Self::Internal,
         }
     }
 }

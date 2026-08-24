@@ -16,6 +16,7 @@
       "provided_contracts": {
         "tessara.forms.form-version-schema": "1.0.0",
         "tessara.workflows.response-context": "1.0.0",
+        "tessara.workflows.response-assignment-catalog": "1.0.0",
         "tessara.core.scope-catalog": "1.0.0",
         "tessara.core.principal-display-catalog": "1.0.0"
       }
@@ -25,7 +26,7 @@
     {
       "definition_id": "tessara.responses",
       "version": "1.0.0",
-      "manifest_digest": "sha256:2a5d49522053f4a4993c419ea828031b37f96fc96b1aa37d8ff0ea86ce6eb6a2",
+      "manifest_digest": "sha256:1af4d43481c5b91d9657adbf5236c2a394ad517d211a19db92936b3bf244dbc5",
       "runtime_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile": "tessara-oci-v1",
       "configuration_schema_version": "tessara.io/response-configuration/v1",
@@ -35,6 +36,7 @@
         "tessara.responses.response-lifecycle": "2.0.0",
         "tessara.responses.submitted-response-export": "1.0.0",
         "tessara.responses.response-events": "1.0.0",
+        "tessara.responses.start-reconciliation": "1.0.0",
         "tessara.responses.form-version-usage": "1.0.0",
         "tessara.responses.summary": "1.0.0",
         "tessara.responses.operational-status": "1.0.0",
@@ -42,7 +44,8 @@
       },
       "dependencies": [
         {"binding_key": "tessara.responses.form-version", "contract_id": "tessara.forms.form-version-schema", "version_requirement": "=1.0.0", "optional": false},
-        {"binding_key": "tessara.responses.workflow-context", "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "optional": false}
+        {"binding_key": "tessara.responses.workflow-context", "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "optional": false},
+        {"binding_key": "tessara.responses.workflow-assignments", "contract_id": "tessara.workflows.response-assignment-catalog", "version_requirement": "=1.0.0", "optional": false}
       ],
       "configuration_schema": {
         "type": "object",

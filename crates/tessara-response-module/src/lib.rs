@@ -43,9 +43,10 @@ mod private_provider_auth;
 mod product_api;
 mod product_store;
 mod provider_client;
+mod reconciliation_provider;
 pub use owner::{
     CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
-    ResponseValueInput, canonical_digest,
+    ResponseValueInput, StartResponseClaimCommand, canonical_digest,
 };
 pub use product_store::{
     ResponseAccess, ResponseListFilter, ResponseMutationCommand, SaveResponseCommand,
@@ -511,6 +512,7 @@ pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
         )
         .merge(event_provider::routes())
         .merge(export_provider::routes())
+        .merge(reconciliation_provider::routes())
         .route("/responses", get(directory_document))
         .route("/responses/new", get(start_document))
         .route("/responses/{response_id}", get(detail_document))

@@ -58,7 +58,7 @@ async fn main() -> Result<()> {
         .map_err(|_| anyhow::anyhow!("Core authorization public key must contain 32 bytes"))?;
     let core_service_request_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
         "tessara.core",
-        &env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
+        env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
             .unwrap_or_else(|_| "core-development-v1".into()),
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         core_public_key,

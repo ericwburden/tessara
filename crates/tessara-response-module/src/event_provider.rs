@@ -9,18 +9,15 @@ use axum::{
 use serde::Serialize;
 use sqlx::Row;
 use tessara_responses_contract::{
-    MAX_RESPONSE_EVENT_PAGE_SIZE, RESPONSE_EVENT_BINDING_KEY, RESPONSE_EVENT_CHECKPOINT_PATH,
-    RESPONSE_EVENT_CONTRACT_ID, RESPONSE_EVENT_MEDIA_TYPE, RESPONSE_EVENT_PAGE_PATH,
-    RESPONSE_EVENT_SCHEMA_VERSION, RESPONSE_EVENT_START_PATH, ResponseEventCheckpointRequest,
+    MAX_RESPONSE_EVENT_PAGE_SIZE, RESPONSE_EVENT_BINDING_KEY, RESPONSE_EVENT_CHECKPOINT_ACTION,
+    RESPONSE_EVENT_CHECKPOINT_PATH, RESPONSE_EVENT_CONTRACT_ID, RESPONSE_EVENT_MEDIA_TYPE,
+    RESPONSE_EVENT_PAGE_ACTION, RESPONSE_EVENT_PAGE_PATH, RESPONSE_EVENT_SCHEMA_VERSION,
+    RESPONSE_EVENT_START_ACTION, RESPONSE_EVENT_START_PATH, ResponseEventCheckpointRequest,
     ResponseEventCheckpointResponse, ResponseEventPageRequest, ResponseEventPageResponse,
     ResponseEventStartRequest, ResponseEventStartResponse, ResponseWorkflowEvent,
 };
 
 use crate::ResponseRuntime;
-
-const CHECKPOINT_ACTION: &str = "responses.events_checkpoint";
-const START_ACTION: &str = "responses.events_start";
-const PAGE_ACTION: &str = "responses.events_page";
 
 pub(crate) fn routes() -> Router<std::sync::Arc<ResponseRuntime>> {
     Router::new()
@@ -39,12 +36,14 @@ async fn checkpoint(
         crate::private_provider_auth::authorize(
             &runtime,
             &headers,
-            RESPONSE_EVENT_CHECKPOINT_PATH,
             &body,
-            RESPONSE_EVENT_BINDING_KEY,
-            RESPONSE_EVENT_CONTRACT_ID,
-            CHECKPOINT_ACTION,
-            "submissions:manage",
+            crate::private_provider_auth::PrivateProviderContract {
+                path: RESPONSE_EVENT_CHECKPOINT_PATH,
+                binding: RESPONSE_EVENT_BINDING_KEY,
+                contract: RESPONSE_EVENT_CONTRACT_ID,
+                action: RESPONSE_EVENT_CHECKPOINT_ACTION,
+                capability: "submissions:manage",
+            },
         )
         .await?;
         let request: ResponseEventCheckpointRequest =
@@ -72,12 +71,14 @@ async fn start(
         crate::private_provider_auth::authorize(
             &runtime,
             &headers,
-            RESPONSE_EVENT_START_PATH,
             &body,
-            RESPONSE_EVENT_BINDING_KEY,
-            RESPONSE_EVENT_CONTRACT_ID,
-            START_ACTION,
-            "submissions:manage",
+            crate::private_provider_auth::PrivateProviderContract {
+                path: RESPONSE_EVENT_START_PATH,
+                binding: RESPONSE_EVENT_BINDING_KEY,
+                contract: RESPONSE_EVENT_CONTRACT_ID,
+                action: RESPONSE_EVENT_START_ACTION,
+                capability: "submissions:manage",
+            },
         )
         .await?;
         let request: ResponseEventStartRequest = serde_json::from_slice(&body).map_err(|_| ())?;
@@ -109,12 +110,14 @@ async fn page(
         crate::private_provider_auth::authorize(
             &runtime,
             &headers,
-            RESPONSE_EVENT_PAGE_PATH,
             &body,
-            RESPONSE_EVENT_BINDING_KEY,
-            RESPONSE_EVENT_CONTRACT_ID,
-            PAGE_ACTION,
-            "submissions:manage",
+            crate::private_provider_auth::PrivateProviderContract {
+                path: RESPONSE_EVENT_PAGE_PATH,
+                binding: RESPONSE_EVENT_BINDING_KEY,
+                contract: RESPONSE_EVENT_CONTRACT_ID,
+                action: RESPONSE_EVENT_PAGE_ACTION,
+                capability: "submissions:manage",
+            },
         )
         .await?;
         let request: ResponseEventPageRequest = serde_json::from_slice(&body).map_err(|_| ())?;

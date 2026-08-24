@@ -60,7 +60,7 @@ fn ResponsesDetailPage() -> impl IntoView {
 
     view! {
         <AppShell active_route="responses" title="Response Detail">
-            <ResponseDetailContent submission_id=params.submission_id/>
+            <ResponseDetailContent response_id=params.submission_id/>
         </AppShell>
     }
 }
@@ -71,7 +71,7 @@ fn ResponsesEditPage() -> impl IntoView {
 
     view! {
         <AppShell active_route="responses" title="Edit Response">
-            <ResponseEditContent submission_id=params.submission_id/>
+            <ResponseEditContent response_id=params.submission_id/>
         </AppShell>
     }
 }

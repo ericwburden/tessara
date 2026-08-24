@@ -76,6 +76,6 @@ pub(crate) fn routes() -> Router<AppState> {
 }
 
 pub(crate) use handlers::{
-    complete_workflow_step_and_advance_tx, ensure_submission_runtime_linkage_tx,
-    ensure_workflow_assignment_for_form_version_tx,
+    complete_workflow_step_and_advance_tx, ensure_specific_workflow_assignment_tx,
+    ensure_submission_runtime_linkage_tx, ensure_workflow_assignment_for_form_version_tx,
 };

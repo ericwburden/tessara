@@ -56,6 +56,7 @@ CREATE TABLE responses (
     workflow_step_id UUID NOT NULL,
     workflow_instance_id UUID NOT NULL,
     workflow_step_instance_id UUID NOT NULL,
+    workflow_start_nonce UUID NOT NULL UNIQUE,
     assignee_account_id UUID NOT NULL,
     started_by_account_id UUID NOT NULL,
     delegation_basis TEXT,
@@ -73,6 +74,30 @@ CREATE TABLE responses (
     CHECK (status <> 'draft' OR (submitted_at IS NULL AND deleted_at IS NULL)),
     CHECK (status <> 'deleted' OR deleted_at IS NOT NULL)
 );
+
+CREATE TABLE response_start_claims (
+    one_use_nonce UUID PRIMARY KEY,
+    workflow_assignment_id UUID NOT NULL,
+    workflow_instance_id UUID NOT NULL,
+    workflow_step_instance_id UUID NOT NULL,
+    actor_account_id UUID NOT NULL,
+    idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
+    request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    expires_at TIMESTAMPTZ NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('pending', 'committed', 'abandoned')),
+    response_id UUID UNIQUE,
+    claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finalized_at TIMESTAMPTZ,
+    UNIQUE (actor_account_id, idempotency_key_digest),
+    CHECK ((state = 'committed') = (response_id IS NOT NULL)),
+    CHECK ((state = 'pending') = (finalized_at IS NULL))
+);
+ALTER TABLE responses
+    ADD CONSTRAINT responses_start_claim_fk
+    FOREIGN KEY (workflow_start_nonce) REFERENCES response_start_claims(one_use_nonce);
+ALTER TABLE response_start_claims
+    ADD CONSTRAINT response_start_claim_response_fk
+    FOREIGN KEY (response_id) REFERENCES responses(id);
 
 CREATE INDEX responses_scope_status_idx ON responses (node_id, status, updated_at DESC, id);
 CREATE UNIQUE INDEX responses_active_assignment_idx

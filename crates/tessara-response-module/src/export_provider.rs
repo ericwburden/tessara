@@ -228,12 +228,14 @@ async fn authorize(
     crate::private_provider_auth::authorize(
         runtime,
         headers,
-        path,
         body,
-        RESPONSE_EXPORT_BINDING_KEY,
-        RESPONSE_EXPORT_CONTRACT_ID,
-        action,
-        "submissions:manage",
+        crate::private_provider_auth::PrivateProviderContract {
+            path,
+            binding: RESPONSE_EXPORT_BINDING_KEY,
+            contract: RESPONSE_EXPORT_CONTRACT_ID,
+            action,
+            capability: "submissions:manage",
+        },
     )
     .await
 }

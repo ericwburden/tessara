@@ -72,11 +72,12 @@ async fn next_workflow_version_label_tx(
 
 pub async fn list_workflows(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<WorkflowSummary>>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:read").await?;
+    auth::ensure_capability(&request.account, "workflows:read")?;
+    synchronize_response_events(&state, &request).await;
     Ok(Json(
-        list_workflows_inner(&state.pool, Some(&account)).await?,
+        list_workflows_inner(&state.pool, Some(&request.account)).await?,
     ))
 }
 
@@ -400,12 +401,13 @@ pub async fn publish_workflow_version(
 
 pub async fn list_workflow_assignments(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    request: AuthenticatedRequest,
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<WorkflowAssignmentSummary>>> {
-    let account = auth::require_capability(&state.pool, &headers, "workflows:read").await?;
+    auth::ensure_capability(&request.account, "workflows:read")?;
+    synchronize_response_events(&state, &request).await;
     Ok(Json(
-        list_workflow_assignments_inner(&state.pool, &account, &query).await?,
+        list_workflow_assignments_inner(&state.pool, &request.account, &query).await?,
     ))
 }
 
@@ -574,6 +576,7 @@ pub async fn list_pending_work(
     request: AuthenticatedRequest,
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<PendingWorkflowWork>>> {
+    synchronize_response_events(&state, &request).await;
     let delegate_account_id = if request.account.has_capability("workflows:manage") {
         query
             .delegate_account_id
@@ -1480,6 +1483,18 @@ pub async fn list_pending_assignments_for_account(
               WHERE submissions.workflow_assignment_id = workflow_assignments.id
                 AND submissions.status = 'submitted'::submission_status
           )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM workflow_response_projection
+              WHERE workflow_response_projection.workflow_assignment_id = workflow_assignments.id
+                AND workflow_response_projection.response_state IN ('draft', 'submitted')
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM workflow_response_reservations
+              WHERE workflow_response_reservations.workflow_assignment_id = workflow_assignments.id
+                AND workflow_response_reservations.consumed_at IS NULL
+          )
         ORDER BY workflows.name, nodes.name, workflow_assignments.created_at
         "#,
     )
@@ -1514,6 +1529,12 @@ pub async fn list_pending_assignments_for_account(
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
         .map_err(Into::into)
+}
+
+async fn synchronize_response_events(state: &AppState, request: &AuthenticatedRequest) {
+    if let Err(error) = crate::workflow_response_consumer::synchronize(state, request).await {
+        tracing::warn!(error = %error, "Workflow Response consumer will retry after synchronization failure");
+    }
 }
 
 async fn list_workflows_inner(
@@ -2392,7 +2413,7 @@ async fn ensure_workflow_assignment_with_status_tx(
         .await
 }
 
-async fn ensure_specific_workflow_assignment_tx(
+pub(crate) async fn ensure_specific_workflow_assignment_tx(
     tx: &mut Transaction<'_, Postgres>,
     workflow_version_id: Uuid,
     step_id: Uuid,

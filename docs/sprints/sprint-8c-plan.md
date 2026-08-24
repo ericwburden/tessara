@@ -609,6 +609,16 @@ fresh-reset policy: no existing Response data is migrated; disposable databases
 are cleared and reseeded after the owner structures and bootstrap contracts are
 settled.
 
+The user additionally approved on 2026-08-24 the race-safe start recovery
+policy discovered during implementation. Response durably registers the exact
+Workflow start claim before its Forms provider call. Response creation and
+start reconciliation lock that same claim: creation commits it exactly once,
+while reconciliation may abandon it only after expiry. Workflow retains a
+`pending` reservation, consumes a `committed` reservation and its typed Response
+reference, and releases runtime state only after Response proves the claim
+`absent`. No product data migration is introduced; the settled fresh schemas
+are rebuilt and reseeded together.
+
 Product blockers: none at kickoff. If implementation finds a Response rule
 that cannot be expressed without provider storage access, a missing reverse or
 operational consumer, an unbounded event/outbox state, or an ambiguous UI owner,

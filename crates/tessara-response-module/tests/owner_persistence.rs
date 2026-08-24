@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::{Duration, Utc};
 use serde_json::{Value, json};
 use tessara_forms_contract::{FormVersionField, FormVersionSchemaResponse, FormVersionSection};
 use tessara_response_module::{
     CreateResponseCommand, IdempotentCommit, ResponseAccess, ResponseListFilter,
     ResponseMutationCommand, ResponseOwnerError, ResponseOwnerRepository, ResponseValueInput,
-    SaveResponseCommand, canonical_digest,
+    SaveResponseCommand, StartResponseClaimCommand, canonical_digest,
 };
 use tessara_responses_contract::{ResponseReference, ResponseWorkflowEvent};
 use tessara_workflows_contract::{WorkflowResponseStartContext, WorkflowResponseStepSnapshot};
@@ -50,6 +51,8 @@ fn create_command() -> CreateResponseCommand {
     }
     .with_recomputed_digests()
     .unwrap();
+    let issued_at = Utc::now();
+    let expires_at = issued_at + Duration::minutes(5);
     let workflow_context = WorkflowResponseStartContext {
         schema_version: 1,
         workflow_assignment_id: Uuid::from_u128(7),
@@ -83,8 +86,8 @@ fn create_command() -> CreateResponseCommand {
         started_by_account_id: Uuid::from_u128(13),
         delegation_basis: Some("direct_assignment".into()),
         one_use_nonce: Uuid::from_u128(23),
-        issued_at: "2026-08-23T12:00:00Z".into(),
-        expires_at: "2026-08-23T12:05:00Z".into(),
+        issued_at: issued_at.to_rfc3339(),
+        expires_at: expires_at.to_rfc3339(),
         context_digest: String::new(),
     }
     .with_recomputed_digest()
@@ -106,6 +109,7 @@ fn create_command() -> CreateResponseCommand {
         workflow_step_id: Uuid::from_u128(9),
         workflow_instance_id: Uuid::from_u128(10),
         workflow_step_instance_id: Uuid::from_u128(11),
+        workflow_start_nonce: Uuid::from_u128(23),
         assignee_account_id: Uuid::from_u128(12),
         started_by_account_id: Uuid::from_u128(13),
         delegation_basis: Some("direct_assignment".into()),
@@ -121,6 +125,27 @@ fn create_command() -> CreateResponseCommand {
         }],
         idempotency_key_digest: canonical_digest("start-idempotency-key").unwrap(),
         request_digest: canonical_digest(&json!({"assignment_id": Uuid::from_u128(7)})).unwrap(),
+    }
+}
+
+async fn claim_start(repository: &ResponseOwnerRepository, command: &CreateResponseCommand) {
+    repository.claim_start(&start_claim(command)).await.unwrap();
+}
+
+fn start_claim(command: &CreateResponseCommand) -> StartResponseClaimCommand {
+    let workflow: WorkflowResponseStartContext =
+        serde_json::from_value(command.workflow_context.clone()).unwrap();
+    StartResponseClaimCommand {
+        workflow_assignment_id: command.workflow_assignment_id,
+        workflow_instance_id: command.workflow_instance_id,
+        workflow_step_instance_id: command.workflow_step_instance_id,
+        one_use_nonce: command.workflow_start_nonce,
+        actor_account_id: command.started_by_account_id,
+        idempotency_key_digest: command.idempotency_key_digest.clone(),
+        request_digest: command.request_digest.clone(),
+        expires_at: chrono::DateTime::parse_from_rfc3339(&workflow.expires_at)
+            .unwrap()
+            .with_timezone(&Utc),
     }
 }
 
@@ -147,6 +172,7 @@ async fn seed_security(pool: &sqlx::PgPool) {
 async fn create_is_atomic_audited_evented_and_idempotent(pool: sqlx::PgPool) {
     let repository = ResponseOwnerRepository::new(pool.clone());
     let command = create_command();
+    claim_start(&repository, &command).await;
     let first = repository.create(&command).await.unwrap();
     let IdempotentCommit::Applied(snapshot) = first else {
         panic!("first create must apply");
@@ -172,6 +198,17 @@ async fn create_is_atomic_audited_evented_and_idempotent(pool: sqlx::PgPool) {
         .unwrap();
     let event: ResponseWorkflowEvent = serde_json::from_value(event_payload).unwrap();
     event.validate().unwrap();
+    let claim: (String, Option<Uuid>) = sqlx::query_as(
+        "SELECT state,response_id FROM response_start_claims WHERE one_use_nonce=$1",
+    )
+    .bind(command.workflow_start_nonce)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        claim,
+        ("committed".into(), Some(command.response.response_id()))
+    );
 
     let replay = repository.create(&command).await.unwrap();
     assert!(matches!(replay, IdempotentCommit::Replayed(value) if value == snapshot));
@@ -190,10 +227,52 @@ async fn create_is_atomic_audited_evented_and_idempotent(pool: sqlx::PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn create_requires_the_exact_live_start_claim(pool: sqlx::PgPool) {
+    let repository = ResponseOwnerRepository::new(pool);
+    let command = create_command();
+    assert!(matches!(
+        repository.create(&command).await,
+        Err(ResponseOwnerError::StartLeaseExpired)
+    ));
+
+    let claim = start_claim(&command);
+    repository.claim_start(&claim).await.unwrap();
+    repository.claim_start(&claim).await.unwrap();
+    let mut conflicting = claim;
+    conflicting.request_digest = canonical_digest("different start request").unwrap();
+    assert!(matches!(
+        repository.claim_start(&conflicting).await,
+        Err(ResponseOwnerError::IdempotencyConflict)
+    ));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn expired_start_claim_cannot_create_a_response(pool: sqlx::PgPool) {
+    let repository = ResponseOwnerRepository::new(pool.clone());
+    let command = create_command();
+    let mut claim = start_claim(&command);
+    claim.expires_at = Utc::now() - Duration::seconds(1);
+    assert!(matches!(
+        repository.claim_start(&claim).await,
+        Err(ResponseOwnerError::StartLeaseExpired)
+    ));
+    assert!(matches!(
+        repository.create(&command).await,
+        Err(ResponseOwnerError::StartLeaseExpired)
+    ));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM responses")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn pinned_draft_saves_submits_and_exports_without_live_providers(pool: sqlx::PgPool) {
     seed_security(&pool).await;
     let repository = ResponseOwnerRepository::new(pool.clone());
     let command = create_command();
+    claim_start(&repository, &command).await;
     repository.create(&command).await.unwrap();
     let actor = access(Uuid::from_u128(13));
 
@@ -290,7 +369,9 @@ async fn pinned_draft_saves_submits_and_exports_without_live_providers(pool: sql
 #[sqlx::test(migrations = "./migrations")]
 async fn inaccessible_response_is_nondisclosing(pool: sqlx::PgPool) {
     let repository = ResponseOwnerRepository::new(pool.clone());
-    repository.create(&create_command()).await.unwrap();
+    let command = create_command();
+    claim_start(&repository, &command).await;
+    repository.create(&command).await.unwrap();
     let stranger = ResponseAccess {
         installation_id: Uuid::from_u128(1),
         actor_account_id: Uuid::from_u128(99),

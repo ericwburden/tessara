@@ -9,6 +9,7 @@ use tessara_responses_contract::{
     RESPONSE_CONTRACT_SCHEMA_VERSION, RESPONSE_EVENT_SCHEMA_VERSION, ResponseEventKind,
     ResponseLifecycleSnapshot, ResponseLifecycleState, ResponseReference, ResponseWorkflowEvent,
 };
+use tessara_workflows_contract::WorkflowResponseStartContext;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -32,6 +33,7 @@ pub struct CreateResponseCommand {
     pub workflow_step_id: Uuid,
     pub workflow_instance_id: Uuid,
     pub workflow_step_instance_id: Uuid,
+    pub workflow_start_nonce: Uuid,
     pub assignee_account_id: Uuid,
     pub started_by_account_id: Uuid,
     pub delegation_basis: Option<String>,
@@ -42,6 +44,18 @@ pub struct CreateResponseCommand {
     pub values: Vec<ResponseValueInput>,
     pub idempotency_key_digest: String,
     pub request_digest: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StartResponseClaimCommand {
+    pub workflow_assignment_id: Uuid,
+    pub workflow_instance_id: Uuid,
+    pub workflow_step_instance_id: Uuid,
+    pub one_use_nonce: Uuid,
+    pub actor_account_id: Uuid,
+    pub idempotency_key_digest: String,
+    pub request_digest: String,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -58,6 +72,61 @@ pub struct ResponseOwnerRepository {
 impl ResponseOwnerRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
+    }
+
+    pub async fn claim_start(
+        &self,
+        command: &StartResponseClaimCommand,
+    ) -> Result<(), ResponseOwnerError> {
+        validate_start_claim(command)?;
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO response_start_claims(one_use_nonce,workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,actor_account_id,idempotency_key_digest,request_digest,expires_at,state)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending') ON CONFLICT DO NOTHING",
+        )
+        .bind(command.one_use_nonce)
+        .bind(command.workflow_assignment_id)
+        .bind(command.workflow_instance_id)
+        .bind(command.workflow_step_instance_id)
+        .bind(command.actor_account_id)
+        .bind(&command.idempotency_key_digest)
+        .bind(&command.request_digest)
+        .bind(command.expires_at)
+        .execute(&mut *transaction)
+        .await?;
+        let row = sqlx::query_as::<_, (Uuid, Uuid, Uuid, Uuid, String, String, DateTime<Utc>, String)>(
+            "SELECT workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,actor_account_id,idempotency_key_digest,request_digest,expires_at,state
+             FROM response_start_claims
+             WHERE one_use_nonce=$1 OR (actor_account_id=$2 AND idempotency_key_digest=$3)
+             FOR UPDATE",
+        )
+        .bind(command.one_use_nonce)
+        .bind(command.actor_account_id)
+        .bind(&command.idempotency_key_digest)
+        .fetch_all(&mut *transaction)
+        .await?;
+        if row.len() != 1 {
+            return Err(ResponseOwnerError::IdempotencyConflict);
+        }
+        let row = &row[0];
+        if row.0 != command.workflow_assignment_id
+            || row.1 != command.workflow_instance_id
+            || row.2 != command.workflow_step_instance_id
+            || row.3 != command.actor_account_id
+            || row.4 != command.idempotency_key_digest
+            || row.5 != command.request_digest
+            || row.6.timestamp_micros() != command.expires_at.timestamp_micros()
+        {
+            return Err(ResponseOwnerError::IdempotencyConflict);
+        }
+        if row.7 == "abandoned" || command.expires_at <= Utc::now() {
+            return Err(ResponseOwnerError::StartLeaseExpired);
+        }
+        if row.7 != "pending" && row.7 != "committed" {
+            return Err(ResponseOwnerError::CorruptSnapshot);
+        }
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn create(
@@ -119,8 +188,32 @@ impl ResponseOwnerRepository {
     ) -> Result<ResponseLifecycleSnapshot, ResponseOwnerError> {
         let response_id = command.response.response_id();
         let mut transaction = self.pool.begin().await?;
+        let claim_state: Option<String> = sqlx::query_scalar(
+            "SELECT state FROM response_start_claims
+             WHERE one_use_nonce=$1
+               AND workflow_assignment_id=$2
+               AND workflow_instance_id=$3
+               AND workflow_step_instance_id=$4
+               AND actor_account_id=$5
+               AND idempotency_key_digest=$6
+               AND request_digest=$7
+               AND expires_at>now()
+             FOR UPDATE",
+        )
+        .bind(command.workflow_start_nonce)
+        .bind(command.workflow_assignment_id)
+        .bind(command.workflow_instance_id)
+        .bind(command.workflow_step_instance_id)
+        .bind(command.started_by_account_id)
+        .bind(&command.idempotency_key_digest)
+        .bind(&command.request_digest)
+        .fetch_optional(&mut *transaction)
+        .await?;
+        if claim_state.as_deref() != Some("pending") {
+            return Err(ResponseOwnerError::StartLeaseExpired);
+        }
         let created_at: DateTime<Utc> = sqlx::query_scalar(
-            "INSERT INTO responses(id,form_id,form_version_id,node_id,workflow_assignment_id,workflow_version_id,workflow_step_id,workflow_instance_id,workflow_step_instance_id,assignee_account_id,started_by_account_id,delegation_basis,form_snapshot,form_snapshot_digest,workflow_context,workflow_context_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING created_at",
+            "INSERT INTO responses(id,form_id,form_version_id,node_id,workflow_assignment_id,workflow_version_id,workflow_step_id,workflow_instance_id,workflow_step_instance_id,workflow_start_nonce,assignee_account_id,started_by_account_id,delegation_basis,form_snapshot,form_snapshot_digest,workflow_context,workflow_context_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING created_at",
         )
         .bind(response_id)
         .bind(command.form_id)
@@ -131,6 +224,7 @@ impl ResponseOwnerRepository {
         .bind(command.workflow_step_id)
         .bind(command.workflow_instance_id)
         .bind(command.workflow_step_instance_id)
+        .bind(command.workflow_start_nonce)
         .bind(command.assignee_account_id)
         .bind(command.started_by_account_id)
         .bind(command.delegation_basis.as_deref())
@@ -199,6 +293,16 @@ impl ResponseOwnerRepository {
             .bind(response_body)
             .execute(&mut *transaction)
             .await?;
+        let claimed = sqlx::query("UPDATE response_start_claims SET state='committed',response_id=$2,finalized_at=now() WHERE one_use_nonce=$1 AND state='pending'")
+            .bind(command.workflow_start_nonce)
+            .bind(response_id)
+            .execute(&mut *transaction)
+            .await?;
+        if claimed.rows_affected() != 1 {
+            return Err(ResponseOwnerError::InvariantViolation(
+                "Response start claim did not commit exactly once".into(),
+            ));
+        }
         transaction.commit().await?;
         Ok(snapshot)
     }
@@ -260,6 +364,7 @@ fn validate_create(command: &CreateResponseCommand) -> Result<(), ResponseOwnerE
         command.workflow_step_id,
         command.workflow_instance_id,
         command.workflow_step_instance_id,
+        command.workflow_start_nonce,
         command.assignee_account_id,
         command.started_by_account_id,
     ]
@@ -274,6 +379,19 @@ fn validate_create(command: &CreateResponseCommand) -> Result<(), ResponseOwnerE
     {
         return Err(ResponseOwnerError::InvalidCommand);
     }
+    let workflow: WorkflowResponseStartContext =
+        serde_json::from_value(command.workflow_context.clone())
+            .map_err(|_| ResponseOwnerError::InvalidCommand)?;
+    workflow
+        .validate_for(command.workflow_assignment_id)
+        .map_err(|_| ResponseOwnerError::InvalidCommand)?;
+    if workflow.workflow_instance_id != command.workflow_instance_id
+        || workflow.workflow_step_instance_id != command.workflow_step_instance_id
+        || workflow.one_use_nonce != command.workflow_start_nonce
+        || workflow.started_by_account_id != command.started_by_account_id
+    {
+        return Err(ResponseOwnerError::InvalidCommand);
+    }
     let mut ids = HashSet::new();
     let mut keys = HashSet::new();
     for value in &command.values {
@@ -284,6 +402,24 @@ fn validate_create(command: &CreateResponseCommand) -> Result<(), ResponseOwnerE
         {
             return Err(ResponseOwnerError::InvalidCommand);
         }
+    }
+    Ok(())
+}
+
+fn validate_start_claim(command: &StartResponseClaimCommand) -> Result<(), ResponseOwnerError> {
+    if [
+        command.workflow_assignment_id,
+        command.workflow_instance_id,
+        command.workflow_step_instance_id,
+        command.one_use_nonce,
+        command.actor_account_id,
+    ]
+    .iter()
+    .any(Uuid::is_nil)
+        || !is_digest(&command.idempotency_key_digest)
+        || !is_digest(&command.request_digest)
+    {
+        return Err(ResponseOwnerError::InvalidCommand);
     }
     Ok(())
 }
@@ -308,10 +444,14 @@ pub enum ResponseOwnerError {
     InvalidCommand,
     #[error("idempotency key was already used for a different request")]
     IdempotencyConflict,
+    #[error("Response start lease expired before the owner commit")]
+    StartLeaseExpired,
     #[error("stored idempotency receipt is invalid")]
     CorruptReceipt,
     #[error("stored Response source snapshot is invalid")]
     CorruptSnapshot,
+    #[error("Response owner invariant failed: {0}")]
+    InvariantViolation(String),
     #[error("Response was not found")]
     NotFound,
     #[error("submitted or deleted Responses are immutable")]
@@ -340,7 +480,41 @@ mod tests {
         let module_instance_id = Uuid::from_u128(2);
         let field_id = Uuid::from_u128(20);
         let form_snapshot = json!({"schema_version": 1});
-        let workflow_context = json!({"schema_version": 1});
+        let workflow_context = serde_json::to_value(
+            WorkflowResponseStartContext {
+                schema_version: 1,
+                workflow_assignment_id: Uuid::from_u128(7),
+                workflow_id: Uuid::from_u128(30),
+                workflow_name: "Workflow".into(),
+                workflow_description: String::new(),
+                workflow_version_id: Uuid::from_u128(8),
+                workflow_version_label: None,
+                workflow_step_id: Uuid::from_u128(9),
+                workflow_step_title: "Step".into(),
+                workflow_step_position: 0,
+                workflow_step_count: 1,
+                next_workflow_step_title: None,
+                next_workflow_step_form_name: None,
+                history: Vec::new(),
+                workflow_instance_id: Uuid::from_u128(10),
+                workflow_step_instance_id: Uuid::from_u128(11),
+                form_id: Uuid::from_u128(4),
+                form_version_id: Uuid::from_u128(5),
+                node_id: Uuid::from_u128(6),
+                node_name: "North".into(),
+                assignee_account_id: Uuid::from_u128(12),
+                assignee_display_name: "Ada".into(),
+                started_by_account_id: Uuid::from_u128(13),
+                delegation_basis: None,
+                one_use_nonce: Uuid::from_u128(14),
+                issued_at: "2026-08-24T12:00:00Z".into(),
+                expires_at: "2026-08-24T12:05:00Z".into(),
+                context_digest: String::new(),
+            }
+            .with_recomputed_digest()
+            .unwrap(),
+        )
+        .unwrap();
         let mut command = CreateResponseCommand {
             response: ResponseReference::from_parts(
                 installation_id,
@@ -356,6 +530,7 @@ mod tests {
             workflow_step_id: Uuid::from_u128(9),
             workflow_instance_id: Uuid::from_u128(10),
             workflow_step_instance_id: Uuid::from_u128(11),
+            workflow_start_nonce: Uuid::from_u128(14),
             assignee_account_id: Uuid::from_u128(12),
             started_by_account_id: Uuid::from_u128(13),
             delegation_basis: None,

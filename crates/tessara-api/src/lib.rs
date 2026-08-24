@@ -28,6 +28,7 @@ mod response_export_provider;
 mod response_owner_actions;
 mod submissions;
 mod users;
+mod workflow_response_consumer;
 mod workflow_response_provider;
 mod workflows;
 

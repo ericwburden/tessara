@@ -21,12 +21,26 @@ pub const RESPONSE_EVENT_CONTRACT_ID: &str = "tessara.responses.response-events"
 pub const RESPONSE_EVENT_CONTRACT_VERSION: &str = "1.0.0";
 pub const RESPONSE_EVENT_SCHEMA_VERSION: u16 = 1;
 pub const RESPONSE_EVENT_BINDING_KEY: &str = "tessara.workflows.response-events";
+pub const RESPONSE_EVENT_CHECKPOINT_ACTION: &str = "responses.events_checkpoint";
+pub const RESPONSE_EVENT_START_ACTION: &str = "responses.events_start";
+pub const RESPONSE_EVENT_PAGE_ACTION: &str = "responses.events_page";
 pub const RESPONSE_EVENT_CHECKPOINT_PATH: &str = "/api/private/responses/events/checkpoint";
 pub const RESPONSE_EVENT_START_PATH: &str = "/api/private/responses/events/start";
 pub const RESPONSE_EVENT_PAGE_PATH: &str = "/api/private/responses/events/page";
 pub const RESPONSE_EVENT_MEDIA_TYPE: &str =
     "application/vnd.tessara.responses.response-events+json;version=1";
 pub const MAX_RESPONSE_EVENT_PAGE_SIZE: u16 = 1_000;
+
+pub const RESPONSE_START_RECONCILIATION_CONTRACT_ID: &str =
+    "tessara.responses.start-reconciliation";
+pub const RESPONSE_START_RECONCILIATION_CONTRACT_VERSION: &str = "1.0.0";
+pub const RESPONSE_START_RECONCILIATION_SCHEMA_VERSION: u16 = 1;
+pub const RESPONSE_START_RECONCILIATION_BINDING_KEY: &str =
+    "tessara.workflows.response-reconciliation";
+pub const RESPONSE_START_RECONCILIATION_ACTION: &str = "responses.reconcile_start";
+pub const RESPONSE_START_RECONCILIATION_PATH: &str = "/api/private/responses/start-reconciliation";
+pub const RESPONSE_START_RECONCILIATION_MEDIA_TYPE: &str =
+    "application/vnd.tessara.responses.start-reconciliation+json;version=1";
 
 pub const RESPONSE_FORM_VERSION_USAGE_CONTRACT_ID: &str = "tessara.responses.form-version-usage";
 pub const RESPONSE_SUMMARY_CONTRACT_ID: &str = "tessara.responses.summary";
@@ -395,6 +409,72 @@ impl ResponseEventPageResponse {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseStartReconciliationRequest {
+    #[serde(deserialize_with = "deserialize_reconciliation_schema_version")]
+    pub schema_version: u16,
+    pub workflow_assignment_id: Uuid,
+    pub workflow_instance_id: Uuid,
+    pub workflow_step_instance_id: Uuid,
+    pub one_use_nonce: Uuid,
+}
+
+impl ResponseStartReconciliationRequest {
+    pub fn validate(&self) -> Result<(), ResponseBoundaryError> {
+        if [
+            self.workflow_assignment_id,
+            self.workflow_instance_id,
+            self.workflow_step_instance_id,
+            self.one_use_nonce,
+        ]
+        .iter()
+        .any(Uuid::is_nil)
+        {
+            return Err(ResponseBoundaryError::InvalidStartReconciliation);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResponseStartReconciliationState {
+    Pending,
+    Committed,
+    Absent,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseStartReconciliationCommit {
+    pub response: ResponseReference,
+    pub revision: u64,
+    pub lifecycle_state: ResponseLifecycleState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseStartReconciliationResponse {
+    #[serde(deserialize_with = "deserialize_reconciliation_schema_version")]
+    pub schema_version: u16,
+    pub state: ResponseStartReconciliationState,
+    pub commit: Option<ResponseStartReconciliationCommit>,
+}
+
+impl ResponseStartReconciliationResponse {
+    pub fn validate(&self) -> Result<(), ResponseBoundaryError> {
+        match (self.state, self.commit.as_ref()) {
+            (ResponseStartReconciliationState::Pending, None)
+            | (ResponseStartReconciliationState::Absent, None) => Ok(()),
+            (ResponseStartReconciliationState::Committed, Some(commit)) if commit.revision > 0 => {
+                Ok(())
+            }
+            _ => Err(ResponseBoundaryError::InvalidStartReconciliation),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseProviderResultState {
@@ -590,6 +670,8 @@ pub enum ResponseBoundaryError {
     InvalidEventWindow,
     #[error("Response events are not strictly ordered")]
     InvalidEventOrdering,
+    #[error("Response start reconciliation is invalid")]
+    InvalidStartReconciliation,
     #[error("canonical digest does not match")]
     DigestMismatch,
     #[error("boundary data could not be canonicalized")]
@@ -677,6 +759,19 @@ where
     if version != RESPONSE_EVENT_SCHEMA_VERSION {
         return Err(serde::de::Error::custom(
             "unsupported Response event schema version",
+        ));
+    }
+    Ok(version)
+}
+
+fn deserialize_reconciliation_schema_version<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let version = u16::deserialize(deserializer)?;
+    if version != RESPONSE_START_RECONCILIATION_SCHEMA_VERSION {
+        return Err(serde::de::Error::custom(
+            "unsupported Response start reconciliation schema version",
         ));
     }
     Ok(version)
@@ -784,5 +879,41 @@ mod tests {
             "submission_id":Uuid::from_u128(3)
         });
         assert!(serde_json::from_value::<ResponseEventCheckpointRequest>(mirrored).is_err());
+    }
+
+    #[test]
+    fn start_reconciliation_states_have_one_exact_payload_shape() {
+        for state in [
+            ResponseStartReconciliationState::Pending,
+            ResponseStartReconciliationState::Absent,
+        ] {
+            assert!(
+                ResponseStartReconciliationResponse {
+                    schema_version: RESPONSE_START_RECONCILIATION_SCHEMA_VERSION,
+                    state,
+                    commit: None,
+                }
+                .validate()
+                .is_ok()
+            );
+        }
+        let committed = ResponseStartReconciliationResponse {
+            schema_version: RESPONSE_START_RECONCILIATION_SCHEMA_VERSION,
+            state: ResponseStartReconciliationState::Committed,
+            commit: Some(ResponseStartReconciliationCommit {
+                response: reference(),
+                revision: 1,
+                lifecycle_state: ResponseLifecycleState::Draft,
+            }),
+        };
+        assert!(committed.validate().is_ok());
+        assert_eq!(
+            ResponseStartReconciliationResponse {
+                state: ResponseStartReconciliationState::Absent,
+                ..committed
+            }
+            .validate(),
+            Err(ResponseBoundaryError::InvalidStartReconciliation)
+        );
     }
 }

@@ -116,7 +116,7 @@ async fn assignment_catalog(
                            AND p.response_state IN ('draft','submitted'))
           AND NOT EXISTS(SELECT 1 FROM workflow_response_reservations r
                          WHERE r.workflow_assignment_id=wa.id
-                           AND r.consumed_at IS NULL AND r.expires_at>now())
+                           AND r.consumed_at IS NULL)
           AND NOT EXISTS(SELECT 1 FROM submissions s
                          WHERE s.workflow_assignment_id=wa.id
                            AND s.status IN ('draft'::submission_status,'submitted'::submission_status))
@@ -192,7 +192,10 @@ async fn response_context(
         transaction.commit().await?;
         return context_state(WorkflowResponseContextState::Available, Some(existing));
     }
-    clear_expired_reservation(&mut transaction, request.workflow_assignment_id).await?;
+    if unresolved_reservation(&mut transaction, request.workflow_assignment_id).await? {
+        transaction.commit().await?;
+        return context_state(WorkflowResponseContextState::Unavailable, None);
+    }
     let workflow_instance_id = resolve_workflow_instance(&mut transaction, &row, &grant).await?;
     let position: i32 = row.get("workflow_step_position");
     if position > 0
@@ -339,29 +342,16 @@ async fn active_reservation(
         .transpose()
 }
 
-async fn clear_expired_reservation(
+async fn unresolved_reservation(
     transaction: &mut Transaction<'_, Postgres>,
     assignment_id: Uuid,
-) -> ApiResult<()> {
-    let expired = sqlx::query(
-        "DELETE FROM workflow_response_reservations WHERE workflow_assignment_id=$1 AND consumed_at IS NULL AND expires_at<=now() RETURNING workflow_instance_id,workflow_step_instance_id",
+) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM workflow_response_reservations WHERE workflow_assignment_id=$1 AND consumed_at IS NULL)",
     )
     .bind(assignment_id)
-    .fetch_optional(&mut **transaction)
-    .await?;
-    if let Some(expired) = expired {
-        let step_instance_id: Uuid = expired.try_get("workflow_step_instance_id")?;
-        let workflow_instance_id: Uuid = expired.try_get("workflow_instance_id")?;
-        sqlx::query("DELETE FROM workflow_step_instances WHERE id=$1 AND status='in_progress' AND submission_id IS NULL")
-            .bind(step_instance_id)
-            .execute(&mut **transaction)
-            .await?;
-        sqlx::query("DELETE FROM workflow_instances wi WHERE wi.id=$1 AND NOT EXISTS(SELECT 1 FROM workflow_step_instances wsi WHERE wsi.workflow_instance_id=wi.id)")
-            .bind(workflow_instance_id)
-            .execute(&mut **transaction)
-            .await?;
-    }
-    Ok(())
+    .fetch_one(&mut **transaction)
+    .await?)
 }
 
 async fn resolve_workflow_instance(

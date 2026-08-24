@@ -250,7 +250,7 @@ fn migrations_dir() -> PathBuf {
     PathBuf::from("migrations")
 }
 
-async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
+pub(crate) async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     let admin_account_id: uuid::Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO accounts (email, display_name)
@@ -516,8 +516,8 @@ mod tests {
     }
 
     #[test]
-    fn sprint_8b_core_fresh_baseline_excludes_independent_module_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0x4913_d74d_dd95_46e2);
+    fn sprint_8c_core_fresh_baseline_excludes_independent_module_product_storage() {
+        assert_eq!(fnv1a(BASELINE), 0x5b60_ff60_0414_6859);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
@@ -532,7 +532,7 @@ mod tests {
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "b35d55a0bb502a966f88b8f73856d3cebc30d2d17d8eb6db750c66a02208add4"
+            "43e7dc146db613972ddef9482faf60320d329de6fe50055c4a668fe840ef0175"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

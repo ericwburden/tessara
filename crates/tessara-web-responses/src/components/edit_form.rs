@@ -19,8 +19,8 @@ pub(crate) fn ResponseEditForm(
     message: RwSignal<Option<String>>,
 ) -> impl IntoView {
     let detail_href = format!("/responses/{}", detail.id);
-    let save_response_id = detail.id.clone();
-    let submit_response_id = detail.id.clone();
+    let save_response_id = detail.id;
+    let submit_response_id = detail.id;
     let rendered_for_save = rendered_form.clone();
     let rendered_for_submit = rendered_form.clone();
     let revision = RwSignal::new(detail.revision);
@@ -98,7 +98,7 @@ pub(crate) fn ResponseEditForm(
                     disabled=move || is_saving.get()
                     on:click=move |_| {
                         save_response_values(
-                            save_response_id.clone(),
+                            save_response_id,
                             rendered_for_save.clone(),
                             revision,
                             text_values.get(),
@@ -116,7 +116,7 @@ pub(crate) fn ResponseEditForm(
                     disabled=move || is_saving.get()
                     on:click=move |_| {
                         submit_response_values(
-                            submit_response_id.clone(),
+                            submit_response_id,
                             rendered_for_submit.clone(),
                             revision,
                             text_values.get(),

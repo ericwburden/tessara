@@ -14,15 +14,19 @@ use tessara_module_runtime::{
 
 use crate::{MODULE_DEFINITION_ID, ResponseRuntime};
 
+pub(crate) struct PrivateProviderContract {
+    pub(crate) path: &'static str,
+    pub(crate) binding: &'static str,
+    pub(crate) contract: &'static str,
+    pub(crate) action: &'static str,
+    pub(crate) capability: &'static str,
+}
+
 pub(crate) async fn authorize(
     runtime: &ResponseRuntime,
     headers: &HeaderMap,
-    path: &'static str,
     body: &[u8],
-    binding: &'static str,
-    contract: &'static str,
-    action: &'static str,
-    capability: &'static str,
+    boundary: PrivateProviderContract,
 ) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ()> {
     let encoded_authorization = headers
         .get("x-tessara-authorization")
@@ -61,9 +65,9 @@ pub(crate) async fn authorize(
                 module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
                     .map_err(|_| ())?,
             },
-            dependency_binding: DependencyBindingKey::new(binding).map_err(|_| ())?,
-            functional_contract: FunctionalContractId::new(contract).map_err(|_| ())?,
-            action: action.into(),
+            dependency_binding: DependencyBindingKey::new(boundary.binding).map_err(|_| ())?,
+            functional_contract: FunctionalContractId::new(boundary.contract).map_err(|_| ())?,
+            action: boundary.action.into(),
             operation: AuthorizationGrantOperationV1::Read,
             resource_assertion: None,
             authorization_revision: security.authorization_revision,
@@ -71,7 +75,7 @@ pub(crate) async fn authorize(
             now: Utc::now(),
         })
         .map_err(|_| ())?;
-    let capability = SecurityCapabilityId::new(capability).map_err(|_| ())?;
+    let capability = SecurityCapabilityId::new(boundary.capability).map_err(|_| ())?;
     if !grant
         .payload
         .capability_scope_bindings
@@ -85,7 +89,7 @@ pub(crate) async fn authorize(
             validate_and_consume_service_request(
                 runtime,
                 headers,
-                path,
+                boundary.path,
                 body,
                 encoded_authorization,
                 &presenting_service,
@@ -99,7 +103,7 @@ pub(crate) async fn authorize(
             validate_and_consume_core_service_request(
                 runtime,
                 headers,
-                path,
+                boundary.path,
                 body,
                 encoded_authorization,
                 grant.payload.jti,
