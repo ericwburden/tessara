@@ -30,6 +30,7 @@ members = [
     "crates/tessara-reference-module-sdk",
     "crates/tessara-reference-scoped-records",
     "crates/tessara-responses-contract",
+    "crates/tessara-response-module",
     "crates/tessara-submissions",
     "crates/tessara-web",
     "crates/tessara-dashboard-placement-renderer",
@@ -144,6 +145,19 @@ output-name = "tessara-dataset-ui"
 site-root = "target/dataset-site"
 site-pkg-dir = "pkg"
 site-addr = "127.0.0.1:8093"
+browserquery = "defaults"
+lib-features = ["hydrate"]
+bin-default-features = true
+lib-default-features = false
+
+[[workspace.metadata.leptos]]
+name = "tessara-response-ui"
+bin-package = "tessara-response-module"
+lib-package = "tessara-response-ui"
+output-name = "tessara-response-ui"
+site-root = "target/response-site"
+site-pkg-dir = "pkg"
+site-addr = "127.0.0.1:8094"
 browserquery = "defaults"
 lib-features = ["hydrate"]
 bin-default-features = true

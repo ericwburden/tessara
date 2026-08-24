@@ -1,0 +1,53 @@
+{
+  "api_version": "tessara.io/release-catalog/v1",
+  "catalog_id": "tessara.local.sprint-8c",
+  "revision": 1,
+  "issued_at": "2026-08-23T00:00:00Z",
+  "core_releases": [
+    {
+      "version": "0.1.0",
+      "core_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000001",
+      "gateway_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000002",
+      "database_image": "sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d",
+      "deployment_profile": "tessara-oci-v1",
+      "capability_floor_version": "sprint-8c-v1",
+      "capability_floor": ["admin:all", "composition:approve", "composition:plan", "composition:read"],
+      "configuration_schema_version": "tessara.io/core-configuration/v1",
+      "provided_contracts": {
+        "tessara.forms.form-version-schema": "1.0.0",
+        "tessara.workflows.response-context": "1.0.0",
+        "tessara.core.scope-catalog": "1.0.0",
+        "tessara.core.principal-display-catalog": "1.0.0"
+      }
+    }
+  ],
+  "module_releases": [
+    {
+      "definition_id": "tessara.responses",
+      "version": "1.0.0",
+      "manifest_digest": "sha256:2a5d49522053f4a4993c419ea828031b37f96fc96b1aa37d8ff0ea86ce6eb6a2",
+      "runtime_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000003",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/response-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/response-bootstrap/v1",
+      "provided_contracts": {
+        "tessara.responses.response": "2.0.0",
+        "tessara.responses.response-lifecycle": "2.0.0",
+        "tessara.responses.submitted-response-export": "1.0.0",
+        "tessara.responses.response-events": "1.0.0",
+        "tessara.responses.form-version-usage": "1.0.0",
+        "tessara.responses.summary": "1.0.0",
+        "tessara.responses.operational-status": "1.0.0",
+        "tessara.responses.resource-observation": "1.0.0"
+      },
+      "dependencies": [
+        {"binding_key": "tessara.responses.form-version", "contract_id": "tessara.forms.form-version-schema", "version_requirement": "=1.0.0", "optional": false},
+        {"binding_key": "tessara.responses.workflow-context", "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "optional": false}
+      ],
+      "configuration_schema": {
+        "type": "object",
+        "required": ["schema_version", "display_label", "provider_request_timeout_seconds", "workflow_event_page_size"]
+      }
+    }
+  ]
+}

@@ -1,8 +1,11 @@
 [package]
-name = "tessara-web-responses"
-version = "0.1.0"
+name = "tessara-response-ui"
+version = "1.0.0"
 edition = "2024"
 publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
@@ -17,6 +20,7 @@ ssr = [
 ]
 
 [dependencies]
+any_spawner = { version = "0.3", features = ["wasm-bindgen"] }
 gloo-net = { workspace = true }
 icons = { workspace = true }
 js-sys = { workspace = true }
@@ -25,6 +29,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", default-features = false }
+tessara-module-contract = { path = "../tessara-module-contract" }
+tessara-responses-contract = { path = "../tessara-responses-contract" }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 web-sys = { workspace = true }

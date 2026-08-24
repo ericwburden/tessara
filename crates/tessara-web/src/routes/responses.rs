@@ -9,7 +9,7 @@ use leptos_router::{MatchNestedRoutes, path};
 use crate::routes::PRIMARY_SSR_MODE;
 use crate::types::route_params::{SubmissionRouteParams, require_route_params};
 use crate::ui::AppShell;
-use tessara_web_responses::{
+use tessara_response_ui::{
     ResponseDetailContent, ResponseEditContent, ResponseStartContent, ResponsesIndexContent,
 };
 

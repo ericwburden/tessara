@@ -13,7 +13,7 @@ hydrate = [
     "tessara-web-forms/hydrate",
     "tessara-web-http/hydrate",
     "tessara-web-organization/hydrate",
-    "tessara-web-responses/hydrate",
+    "tessara-response-ui/hydrate",
     "tessara-web-workflows/hydrate",
     "tessara-module-ui/hydrate",
 ]
@@ -23,7 +23,7 @@ ssr = [
     "leptos_router/ssr",
     "tessara-web-forms/ssr",
     "tessara-web-organization/ssr",
-    "tessara-web-responses/ssr",
+    "tessara-response-ui/ssr",
     "tessara-web-workflows/ssr",
     "tessara-module-ui/ssr",
 ]
@@ -43,7 +43,7 @@ tessara-module-contract = { path = "../tessara-module-contract" }
 tessara-web-forms = { path = "../tessara-web-forms", default-features = false }
 tessara-web-http = { path = "../tessara-web-http", default-features = false }
 tessara-web-organization = { path = "../tessara-web-organization", default-features = false }
-tessara-web-responses = { path = "../tessara-web-responses", default-features = false }
+tessara-response-ui = { path = "../tessara-web-responses", default-features = false }
 tessara-web-workflows = { path = "../tessara-web-workflows", default-features = false }
 tessara-module-ui = { path = "../tessara-module-ui", features = ["components"] }
 wasm-bindgen = { workspace = true }

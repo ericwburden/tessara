@@ -1,0 +1,59 @@
+services:
+  postgres:
+    environment:
+      TESSARA_RESPONSE_MIGRATION_PASSWORD: ${TESSARA_RESPONSE_MIGRATION_PASSWORD:-local-response-migration}
+      TESSARA_RESPONSE_RUNTIME_PASSWORD: ${TESSARA_RESPONSE_RUNTIME_PASSWORD:-local-response-runtime}
+    volumes:
+      - ../sprint-8c/postgres-response-init.sh:/docker-entrypoint-initdb.d/20-tessara-response-database.sh:ro
+
+  responses-migrate:
+    image: ${TESSARA_RESPONSE_IMAGE:-tessara-sprint-8c-responses}
+    build:
+      context: ../..
+      dockerfile: deploy/sprint-8c/Dockerfile.response
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://tessara_response_migration:${TESSARA_RESPONSE_MIGRATION_PASSWORD:-local-response-migration}@postgres:5432/tessara_module_responses
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [tessara-data]
+    restart: "no"
+    profiles: ["reference"]
+
+  responses:
+    image: ${TESSARA_RESPONSE_IMAGE:-tessara-sprint-8c-responses}
+    command: ["serve"]
+    stop_grace_period: 30s
+    build:
+      context: ../..
+      dockerfile: deploy/sprint-8c/Dockerfile.response
+      args:
+        TESSARA_SOURCE_COMMIT: ${TESSARA_SOURCE_COMMIT:-unknown}
+        TESSARA_SOURCE_TREE: ${TESSARA_SOURCE_TREE:-unknown}
+        TESSARA_SOURCE_DIRTY: ${TESSARA_SOURCE_DIRTY:-unknown}
+    environment:
+      DATABASE_URL: postgres://tessara_response_runtime:${TESSARA_RESPONSE_RUNTIME_PASSWORD:-local-response-runtime}@postgres:5432/tessara_module_responses
+      RUST_LOG: ${TESSARA_RESPONSE_RUST_LOG:-tessara_response_module=info,tower_http=error}
+      RESPONSE_MODULE_BIND_ADDR: 0.0.0.0:8094
+      TESSARA_CORE_INTERNAL_URL: http://core:8080
+      TESSARA_RESPONSE_PROVIDER_ENDPOINTS: '{"tessara.responses.form-version":"http://core:8080","tessara.responses.workflow-context":"http://core:8080"}'
+      TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
+      TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
+      TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+    depends_on:
+      responses-migrate: { condition: service_completed_successfully }
+    labels:
+      traefik.enable: "false"
+    networks: [tessara-data, tessara-services]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8094/health/live"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+    profiles: ["reference"]

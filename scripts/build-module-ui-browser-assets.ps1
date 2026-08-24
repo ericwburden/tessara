@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("all", "components", "dashboards", "datasets")]
+    [ValidateSet("all", "components", "dashboards", "datasets", "responses")]
     [string]$Module = "all",
     [switch]$Check,
     [switch]$DeclarationsOnly,
@@ -79,6 +79,28 @@ $modules = @(
             [pscustomobject]@{ Path = "/dataset.js"; Constant = "DATASET_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.js") }
             [pscustomobject]@{ Path = "/dataset-bindings.js"; Constant = "DATASET_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset-bindings.js") }
             [pscustomobject]@{ Path = "/dataset.wasm"; Constant = "DATASET_WASM_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.wasm") }
+        )
+    },
+    [pscustomobject]@{
+        Name = "responses"
+        Definition = "tessara.responses"
+        Release = "1.0.0"
+        Package = "tessara-response-ui"
+        Wasm = "tessara_response_ui.wasm"
+        OutputName = "response-bindings"
+        EntryAsset = "crates/tessara-web-responses/assets/response.js"
+        BindingsAsset = "crates/tessara-web-responses/assets/response-bindings.js"
+        WasmAsset = "crates/tessara-web-responses/assets/response.wasm"
+        BindingsName = "response-bindings.js"
+        WasmName = "response.wasm"
+        DigestContract = "crates/tessara-web-responses/src/document.rs"
+        Manifest = "crates/tessara-response-module/manifest.json"
+        ReleaseCatalog = "deploy/sprint-8c/catalogs/local-release-catalog.json"
+        AssetSpecs = @(
+            [pscustomobject]@{ Path = "/response.css"; Constant = "RESPONSE_CSS_SHA256"; Sources = @("crates/tessara-web-responses/assets/response.css") }
+            [pscustomobject]@{ Path = "/response.js"; Constant = "RESPONSE_JS_SHA256"; Sources = @("crates/tessara-web-responses/assets/response.js") }
+            [pscustomobject]@{ Path = "/response-bindings.js"; Constant = "RESPONSE_BINDINGS_JS_SHA256"; Sources = @("crates/tessara-web-responses/assets/response-bindings.js") }
+            [pscustomobject]@{ Path = "/response.wasm"; Constant = "RESPONSE_WASM_SHA256"; Sources = @("crates/tessara-web-responses/assets/response.wasm") }
         )
     }
 )
