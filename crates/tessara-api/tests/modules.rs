@@ -23,16 +23,10 @@ use support::{
 use support::{cookie_authenticated_request, login_cookie_for};
 
 const PASSWORD: &str = "tessara-test-password-123";
-const CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
-    "tessara.forms",
-    "tessara.migration",
-    "tessara.responses",
-    "tessara.workflows",
-];
-const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 3] =
-    ["tessara.forms", "tessara.responses", "tessara.workflows"];
+const CORE_TRANSITION_DEFINITION_IDS: [&str; 3] =
+    ["tessara.forms", "tessara.migration", "tessara.workflows"];
+const ACTIVE_CORE_TRANSITION_DEFINITION_IDS: [&str; 2] = ["tessara.forms", "tessara.workflows"];
 const FORMS_DEFINITION: &str = "tessara.forms";
-const RESPONSES_DEFINITION: &str = "tessara.responses";
 const MIGRATION_DEFINITION: &str = "tessara.migration";
 const UNKNOWN_DEFINITION: &str = "tessara.unknown-definition";
 const FORM_RESOURCE_TYPE: &str = "tessara.transition.form";
@@ -251,19 +245,8 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
     assert!(migration.get("release").is_none());
     assert!(migration.get("instance").is_none());
 
-    let responses = inventory_entry(entries, RESPONSES_DEFINITION);
-    assert_eq!(
-        responses["findings"]
-            .as_array()
-            .expect("Responses findings")
-            .iter()
-            .map(|finding| finding["code"].as_str())
-            .collect::<Vec<_>>(),
-        vec![
-            Some("transition_internal_only"),
-            Some("transition_internal_only")
-        ]
-    );
+    assert!(!transition_definition_ids(entries).contains(&"tessara.responses"));
+    assert!(!transition_definition_ids(entries).contains(&"tessara.datasets"));
 
     let reader_detail = request_json(
         app.clone(),
@@ -451,7 +434,6 @@ async fn module_http_apis_enforce_global_authority_and_preserve_exact_sources() 
             "core.organization",
             "tessara.forms.navigation",
             "tessara.reference.scoped-records.navigation",
-            "tessara.responses.navigation",
             "tessara.workflows.navigation",
         ])
     );

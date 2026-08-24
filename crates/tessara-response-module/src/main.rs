@@ -10,7 +10,8 @@ use tessara_module_runtime::{
     CoreVerifiers, initialize_tracing, serve, shutdown_signal, standard_http_router,
 };
 use tessara_response_module::{
-    RESPONSE_PROVIDER_ENDPOINTS_ENVIRONMENT, ResponseRuntime, ResponseServiceEndpoints, router,
+    RESPONSE_PROVIDER_ENDPOINTS_ENVIRONMENT, ResponseCoreVerifiers, ResponseRuntime,
+    ResponseServiceEndpoints, ResponseValidationFaultControl, router,
 };
 
 #[tokio::main]
@@ -63,6 +64,13 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         core_public_key,
     )?;
+    let core_provider_compatibility_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
+        "tessara.core",
+        env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
+            .unwrap_or_else(|_| "core-development-v1".into()),
+        ProtocolSignaturePurposeV1::ProviderCompatibilityResponse,
+        core_public_key,
+    )?;
     let core_owner_bootstrap_verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
         "tessara.core",
         env::var("TESSARA_CORE_AUTHORIZATION_KEY_ID")
@@ -77,15 +85,21 @@ async fn main() -> Result<()> {
         ProtocolSignaturePurposeV1::OwnerBootstrapReceipt,
         service_secret,
     )?);
+    let validation_fault_control = ResponseValidationFaultControl::from_environment()
+        .context("Response validation-profile failure control is invalid")?;
     let runtime = Arc::new(ResponseRuntime::new(
         pool,
-        CoreVerifiers::from_environment()?,
+        ResponseCoreVerifiers {
+            runtime: CoreVerifiers::from_environment()?,
+            service_request: core_service_request_verifier,
+            provider_compatibility: core_provider_compatibility_verifier,
+            owner_bootstrap: core_owner_bootstrap_verifier,
+        },
         service_request_signer,
-        core_service_request_verifier,
         service_identity_registry,
         endpoints,
-        core_owner_bootstrap_verifier,
         bootstrap_receipt_signer,
+        validation_fault_control,
     ));
     let address: SocketAddr = env::var("RESPONSE_MODULE_BIND_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:8094".into())

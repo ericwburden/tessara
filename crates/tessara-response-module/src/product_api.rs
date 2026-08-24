@@ -2,11 +2,13 @@ use std::collections::BTreeSet;
 
 use axum::{
     Json,
+    body::Bytes,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sha2::{Digest, Sha256};
 use tessara_forms_contract::{
     FORM_VERSION_SCHEMA_CONTRACT_ID, FORM_VERSION_SCHEMA_MEDIA_TYPE, FORM_VERSION_SCHEMA_VERSION,
     FormVersionSchemaAction, FormVersionSchemaRequest, FormVersionSchemaResponse,
@@ -68,7 +70,7 @@ pub(crate) async fn list_responses(
             "responses.list",
             AuthorizationGrantOperationV1::Read,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            "submissions:read_own",
+            &["submissions:read_own"],
         )
         .await?;
         let access = response_access(&grant.payload)?;
@@ -112,7 +114,7 @@ pub(crate) async fn list_start_options(
             "responses.start_options",
             AuthorizationGrantOperationV1::Read,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            "submissions:respond",
+            &["submissions:respond"],
         )
         .await?;
         let access = response_access(&grant.payload)?;
@@ -141,14 +143,47 @@ pub(crate) async fn list_start_options(
             },
         )
         .await?;
-        response
-            .validate_for(assignee_account_id)
-            .map_err(|_| ProductApiError::Incompatible)?;
+        if response.validate_for(assignee_account_id).is_err() {
+            provider_client::record_provider_observation(
+                &runtime,
+                RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                ProviderClientError::Incompatible,
+            )
+            .await;
+            return Err(ProductApiError::Incompatible);
+        }
         match response.state {
-            WorkflowResponseContextState::Available => {}
-            WorkflowResponseContextState::Undisclosed => return Err(ProductApiError::Forbidden),
-            WorkflowResponseContextState::Unavailable => return Err(ProductApiError::Unavailable),
+            WorkflowResponseContextState::Available => {
+                provider_client::record_provider_compatible(
+                    &runtime,
+                    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                )
+                .await;
+            }
+            WorkflowResponseContextState::Undisclosed => {
+                provider_client::record_provider_compatible(
+                    &runtime,
+                    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                )
+                .await;
+                return Err(ProductApiError::Forbidden);
+            }
+            WorkflowResponseContextState::Unavailable => {
+                provider_client::record_provider_observation(
+                    &runtime,
+                    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                    ProviderClientError::Unavailable,
+                )
+                .await;
+                return Err(ProductApiError::Unavailable);
+            }
             WorkflowResponseContextState::Incompatible => {
+                provider_client::record_provider_observation(
+                    &runtime,
+                    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                    ProviderClientError::Incompatible,
+                )
+                .await;
                 return Err(ProductApiError::Incompatible);
             }
         }
@@ -186,7 +221,7 @@ pub(crate) struct StartOptionsQuery {
 pub(crate) async fn start_response(
     State(runtime): State<std::sync::Arc<ResponseRuntime>>,
     headers: HeaderMap,
-    Json(request): Json<StartResponseRequest>,
+    body: Bytes,
 ) -> Response {
     product_response(async {
         let grant = authorize_product(
@@ -195,11 +230,18 @@ pub(crate) async fn start_response(
             "responses.start",
             AuthorizationGrantOperationV1::Mutation,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            "submissions:respond",
+            &["submissions:respond"],
         )
         .await?;
         let idempotency_key_digest = idempotency_key_digest(&headers)?;
-        let request_digest = request_digest("responses.start", Uuid::nil(), &request)?;
+        let request_digest = public_mutation_request_digest(
+            &grant.payload,
+            "POST",
+            "/api/responses",
+            &body,
+            &idempotency_key_digest,
+        )?;
+        let request: StartResponseRequest = decode_public_mutation(&headers, &body)?;
         let repository = ResponseOwnerRepository::new(runtime.pool.clone());
         if let Some(replayed) = repository
             .replay_create(
@@ -231,21 +273,62 @@ pub(crate) async fn start_response(
             },
         )
         .await?;
-        workflow_response
+        if workflow_response
             .validate_for(request.workflow_assignment_id)
-            .map_err(|_| ProductApiError::Incompatible)?;
+            .is_err()
+        {
+            provider_client::record_provider_observation(
+                &runtime,
+                RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                ProviderClientError::Incompatible,
+            )
+            .await;
+            return Err(ProductApiError::Incompatible);
+        }
         let workflow = match (workflow_response.state, workflow_response.context) {
-            (WorkflowResponseContextState::Available, Some(context)) => context,
+            (WorkflowResponseContextState::Available, Some(context)) => {
+                provider_client::record_provider_compatible(
+                    &runtime,
+                    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                )
+                .await;
+                context
+            }
             (WorkflowResponseContextState::Undisclosed, None) => {
+                provider_client::record_provider_compatible(
+                    &runtime,
+                    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                )
+                .await;
                 return Err(ProductApiError::NotFound);
             }
             (WorkflowResponseContextState::Unavailable, None) => {
+                provider_client::record_provider_observation(
+                    &runtime,
+                    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                    ProviderClientError::Unavailable,
+                )
+                .await;
                 return Err(ProductApiError::Unavailable);
             }
             (WorkflowResponseContextState::Incompatible, None) => {
+                provider_client::record_provider_observation(
+                    &runtime,
+                    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                    ProviderClientError::Incompatible,
+                )
+                .await;
                 return Err(ProductApiError::Incompatible);
             }
-            _ => return Err(ProductApiError::Incompatible),
+            _ => {
+                provider_client::record_provider_observation(
+                    &runtime,
+                    RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                    ProviderClientError::Incompatible,
+                )
+                .await;
+                return Err(ProductApiError::Incompatible);
+            }
         };
         validate_start_authority(&workflow, grant.payload.original_actor_id)?;
         let expires_at = chrono::DateTime::parse_from_rfc3339(&workflow.expires_at)
@@ -260,6 +343,8 @@ pub(crate) async fn start_response(
                 actor_account_id: grant.payload.original_actor_id,
                 idempotency_key_digest: idempotency_key_digest.clone(),
                 request_digest: request_digest.clone(),
+                authorization_grant_jti: grant.payload.jti,
+                authorization_correlation_id: grant.payload.correlation_id,
                 expires_at,
             })
             .await?;
@@ -280,13 +365,19 @@ pub(crate) async fn start_response(
             },
         )
         .await?;
-        form.validate_for(workflow.form_version_id)
-            .map_err(|_| ProductApiError::Incompatible)?;
-        if form.form_id != workflow.form_id
+        if form.validate_for(workflow.form_version_id).is_err()
+            || form.form_id != workflow.form_id
             || !form.source_scope_node_ids.contains(&workflow.node_id)
         {
+            provider_client::record_provider_observation(
+                &runtime,
+                RESPONSE_FORM_BINDING,
+                ProviderClientError::Incompatible,
+            )
+            .await;
             return Err(ProductApiError::Incompatible);
         }
+        provider_client::record_provider_compatible(&runtime, RESPONSE_FORM_BINDING).await;
         let security = runtime
             .current_security_state()
             .await
@@ -394,7 +485,7 @@ pub(crate) async fn get_response(
             "responses.get",
             AuthorizationGrantOperationV1::Read,
             RESPONSE_RESOURCE_CONTRACT_ID,
-            "submissions:read_own",
+            &["submissions:read_own"],
         )
         .await?;
         let detail = ResponseOwnerRepository::new(runtime.pool.clone())
@@ -410,7 +501,7 @@ pub(crate) async fn save_response(
     State(runtime): State<std::sync::Arc<ResponseRuntime>>,
     Path(response_id): Path<Uuid>,
     headers: HeaderMap,
-    Json(request): Json<SaveResponseValuesRequest>,
+    body: Bytes,
 ) -> Response {
     product_response(async {
         let grant = authorize_product(
@@ -419,11 +510,19 @@ pub(crate) async fn save_response(
             "responses.save",
             AuthorizationGrantOperationV1::Mutation,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            "submissions:respond",
+            &["submissions:respond"],
         )
         .await?;
         let idempotency_key_digest = idempotency_key_digest(&headers)?;
-        let request_digest = request_digest("responses.save", response_id, &request)?;
+        let path = format!("/api/responses/{response_id}/values");
+        let request_digest = public_mutation_request_digest(
+            &grant.payload,
+            "PUT",
+            &path,
+            &body,
+            &idempotency_key_digest,
+        )?;
+        let request: SaveResponseValuesRequest = decode_public_mutation(&headers, &body)?;
         let result = ResponseOwnerRepository::new(runtime.pool.clone())
             .save(
                 &response_access(&grant.payload)?,
@@ -434,6 +533,8 @@ pub(crate) async fn save_response(
                     actor_account_id: grant.payload.original_actor_id,
                     idempotency_key_digest,
                     request_digest,
+                    authorization_grant_jti: grant.payload.jti,
+                    authorization_correlation_id: grant.payload.correlation_id,
                 },
             )
             .await?;
@@ -446,18 +547,18 @@ pub(crate) async fn submit_response(
     State(runtime): State<std::sync::Arc<ResponseRuntime>>,
     Path(response_id): Path<Uuid>,
     headers: HeaderMap,
-    Json(request): Json<ResponseRevisionRequest>,
+    body: Bytes,
 ) -> Response {
-    mutate_response(runtime, headers, response_id, request, MutationKind::Submit).await
+    mutate_response(runtime, headers, response_id, body, MutationKind::Submit).await
 }
 
 pub(crate) async fn delete_response(
     State(runtime): State<std::sync::Arc<ResponseRuntime>>,
     Path(response_id): Path<Uuid>,
     headers: HeaderMap,
-    Json(request): Json<ResponseRevisionRequest>,
+    body: Bytes,
 ) -> Response {
-    mutate_response(runtime, headers, response_id, request, MutationKind::Delete).await
+    mutate_response(runtime, headers, response_id, body, MutationKind::Delete).await
 }
 
 #[derive(Clone, Copy)]
@@ -470,13 +571,23 @@ async fn mutate_response(
     runtime: std::sync::Arc<ResponseRuntime>,
     headers: HeaderMap,
     response_id: Uuid,
-    request: ResponseRevisionRequest,
+    body: Bytes,
     kind: MutationKind,
 ) -> Response {
     product_response(async {
-        let (action, capability) = match kind {
-            MutationKind::Submit => ("responses.submit", "submissions:respond"),
-            MutationKind::Delete => ("responses.delete", "submissions:manage"),
+        let (action, method, path, capabilities): (&str, &str, String, &[&str]) = match kind {
+            MutationKind::Submit => (
+                "responses.submit",
+                "POST",
+                format!("/api/responses/{response_id}/submit"),
+                &["submissions:respond"],
+            ),
+            MutationKind::Delete => (
+                "responses.delete",
+                "DELETE",
+                format!("/api/responses/{response_id}"),
+                &["submissions:respond", "submissions:manage"],
+            ),
         };
         let grant = authorize_product(
             &runtime,
@@ -484,15 +595,26 @@ async fn mutate_response(
             action,
             AuthorizationGrantOperationV1::Mutation,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            capability,
+            capabilities,
         )
         .await?;
+        let idempotency_key_digest = idempotency_key_digest(&headers)?;
+        let request_digest = public_mutation_request_digest(
+            &grant.payload,
+            method,
+            &path,
+            &body,
+            &idempotency_key_digest,
+        )?;
+        let request: ResponseRevisionRequest = decode_public_mutation(&headers, &body)?;
         let command = ResponseMutationCommand {
             response_id,
             expected_revision: request.expected_revision,
             actor_account_id: grant.payload.original_actor_id,
-            idempotency_key_digest: idempotency_key_digest(&headers)?,
-            request_digest: request_digest(action, response_id, &request)?,
+            idempotency_key_digest,
+            request_digest,
+            authorization_grant_jti: grant.payload.jti,
+            authorization_correlation_id: grant.payload.correlation_id,
         };
         let repository = ResponseOwnerRepository::new(runtime.pool.clone());
         let result = match kind {
@@ -532,7 +654,7 @@ async fn authorize_product(
     action: &str,
     operation: AuthorizationGrantOperationV1,
     contract: &str,
-    required_capability: &str,
+    required_capabilities_any_of: &[&str],
 ) -> Result<SignedEnvelopeV1<AuthorizationGrantV3>, ProductApiError> {
     let envelope: SignedEnvelopeV1<AuthorizationGrantV3> =
         decode_signed_envelope_header(headers, "x-tessara-authorization")
@@ -573,13 +695,17 @@ async fn authorize_product(
             now: chrono::Utc::now(),
         })
         .map_err(|_| ProductApiError::Forbidden)?;
-    let required =
-        SecurityCapabilityId::new(required_capability).map_err(|_| ProductApiError::Internal)?;
-    if !envelope
-        .payload
-        .capability_scope_bindings
+    let required = required_capabilities_any_of
         .iter()
-        .any(|binding| binding.capability == required)
+        .map(|capability| SecurityCapabilityId::new(*capability))
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(|_| ProductApiError::Internal)?;
+    if required.is_empty()
+        || !envelope
+            .payload
+            .capability_scope_bindings
+            .iter()
+            .any(|binding| required.contains(&binding.capability))
     {
         return Err(ProductApiError::Forbidden);
     }
@@ -587,20 +713,27 @@ async fn authorize_product(
 }
 
 fn response_access(grant: &AuthorizationGrantV3) -> Result<ResponseAccess, ProductApiError> {
+    let respond =
+        SecurityCapabilityId::new("submissions:respond").map_err(|_| ProductApiError::Internal)?;
     let manage =
         SecurityCapabilityId::new("submissions:manage").map_err(|_| ProductApiError::Internal)?;
+    let mut respond_node_ids = BTreeSet::new();
+    let mut respond_all = false;
     let mut managed_node_ids = BTreeSet::new();
     let mut manage_all = false;
-    for binding in grant
-        .capability_scope_bindings
-        .iter()
-        .filter(|binding| binding.capability == manage)
-    {
-        if binding.organization_root_id == grant.installation_id {
-            manage_all = true;
+    for binding in &grant.capability_scope_bindings {
+        let (all, nodes) = if binding.capability == respond {
+            (&mut respond_all, &mut respond_node_ids)
+        } else if binding.capability == manage {
+            (&mut manage_all, &mut managed_node_ids)
         } else {
-            managed_node_ids.insert(binding.organization_root_id);
-            managed_node_ids.extend(binding.authorized_organization_ids.iter().copied());
+            continue;
+        };
+        if binding.organization_root_id == grant.installation_id {
+            *all = true;
+        } else {
+            nodes.insert(binding.organization_root_id);
+            nodes.extend(binding.authorized_organization_ids.iter().copied());
         }
     }
     Ok(ResponseAccess {
@@ -609,8 +742,11 @@ fn response_access(grant: &AuthorizationGrantV3) -> Result<ResponseAccess, Produ
         delegated_account_ids: grant
             .delegation_basis
             .iter()
+            .filter(|basis| basis.capability == respond)
             .map(|basis| basis.delegated_by_actor_id)
             .collect(),
+        respond_node_ids,
+        respond_all,
         managed_node_ids,
         manage_all,
     })
@@ -626,12 +762,84 @@ fn idempotency_key_digest(headers: &HeaderMap) -> Result<String, ProductApiError
     canonical_digest(key).map_err(|_| ProductApiError::Internal)
 }
 
-fn request_digest<T: Serialize>(
-    action: &str,
-    response_id: Uuid,
-    request: &T,
+fn decode_public_mutation<T: DeserializeOwned>(
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Result<T, ProductApiError> {
+    if headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some("application/json")
+        || body.is_empty()
+        || body.len() > crate::RESPONSE_PUBLIC_MUTATION_BODY_LIMIT_BYTES
+    {
+        return Err(ProductApiError::BadRequest);
+    }
+    serde_json::from_slice(body).map_err(|_| ProductApiError::BadRequest)
+}
+
+fn public_mutation_request_digest(
+    grant: &AuthorizationGrantV3,
+    method: &str,
+    path: &str,
+    raw_body: &[u8],
+    idempotency_key_digest: &str,
 ) -> Result<String, ProductApiError> {
-    canonical_digest(&(action, response_id, request)).map_err(|_| ProductApiError::Internal)
+    let module_instance_id = match &grant.audience {
+        AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } if module_definition_id.as_str() == MODULE_DEFINITION_ID => *module_instance_id,
+        _ => return Err(ProductApiError::Forbidden),
+    };
+    let raw_body_digest = format!("sha256:{:x}", Sha256::digest(raw_body));
+    let mut capability_scope_bindings = grant
+        .capability_scope_bindings
+        .iter()
+        .map(|binding| {
+            let mut authorized_organization_ids = binding.authorized_organization_ids.clone();
+            authorized_organization_ids.sort_unstable();
+            serde_json::json!({
+                "capability": &binding.capability,
+                "organization_root_id": binding.organization_root_id,
+                "authorized_organization_ids": authorized_organization_ids,
+            })
+        })
+        .collect::<Vec<_>>();
+    capability_scope_bindings.sort_by_key(serde_json::Value::to_string);
+    let mut delegation_basis = grant
+        .delegation_basis
+        .iter()
+        .map(|basis| {
+            serde_json::json!({
+                "delegation_id": basis.delegation_id,
+                "delegated_by_actor_id": basis.delegated_by_actor_id,
+                "capability": &basis.capability,
+                "organization_root_id": basis.organization_root_id,
+            })
+        })
+        .collect::<Vec<_>>();
+    delegation_basis.sort_by_key(serde_json::Value::to_string);
+    canonical_digest(&serde_json::json!({
+        "schema_version": 2,
+        "installation_id": grant.installation_id,
+        "module_instance_id": module_instance_id,
+        "actor_account_id": grant.original_actor_id,
+        "presenting_service": &grant.presenting_service,
+        "audience": &grant.audience,
+        "grant_action": &grant.action,
+        "grant_operation": grant.operation,
+        "dependency_binding": &grant.dependency_binding,
+        "functional_contract": &grant.functional_contract,
+        "capability_scope_bindings": capability_scope_bindings,
+        "resource_assertion": &grant.resource_assertion,
+        "delegation_basis": delegation_basis,
+        "method": method,
+        "path": path,
+        "raw_body_digest": raw_body_digest,
+        "idempotency_key_digest": idempotency_key_digest,
+    }))
+    .map_err(|_| ProductApiError::Internal)
 }
 
 async fn product_response(
@@ -667,6 +875,7 @@ impl From<ResponseOwnerError> for ProductApiError {
             }
             ResponseOwnerError::CorruptReceipt
             | ResponseOwnerError::CorruptSnapshot
+            | ResponseOwnerError::BootstrapFaultInjected
             | ResponseOwnerError::InvariantViolation(_) => Self::Internal,
         }
     }
@@ -729,7 +938,43 @@ impl IntoResponse for ProductApiError {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
+    use tessara_module_contract::{
+        AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, CapabilityScopeBindingV1, DelegationBasisV1,
+    };
+
     use super::*;
+
+    fn mutation_grant() -> AuthorizationGrantV3 {
+        let now = chrono::Utc::now();
+        AuthorizationGrantV3 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
+            installation_id: Uuid::from_u128(1),
+            original_actor_id: Uuid::from_u128(2),
+            correlation_id: Uuid::from_u128(3),
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: Uuid::from_u128(4),
+                module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
+            },
+            dependency_binding: DependencyBindingKey::new(CORE_RESPONSE_BINDING).unwrap(),
+            functional_contract: FunctionalContractId::new(RESPONSE_LIFECYCLE_CONTRACT_ID).unwrap(),
+            action: "responses.save".into(),
+            operation: AuthorizationGrantOperationV1::Mutation,
+            capability_scope_bindings: vec![CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("submissions:respond").unwrap(),
+                organization_root_id: Uuid::from_u128(1),
+                authorized_organization_ids: Vec::new(),
+            }],
+            resource_assertion: None,
+            delegation_basis: Vec::new(),
+            authorization_revision: 7,
+            organization_revision: 8,
+            jti: Uuid::from_u128(5),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        }
+    }
 
     #[test]
     fn idempotency_header_is_bounded_and_required() {
@@ -750,6 +995,219 @@ mod tests {
         );
         assert!(matches!(
             idempotency_key_digest(&headers),
+            Err(ProductApiError::BadRequest)
+        ));
+    }
+
+    #[test]
+    fn mutation_identity_binds_exact_wire_route_and_grant_identity() {
+        let grant = mutation_grant();
+        let compact = br#"{"expected_revision":1}"#;
+        let spaced = br#"{ "expected_revision": 1 }"#;
+        let key_digest = canonical_digest("same-idempotency-key").unwrap();
+        let identity = public_mutation_request_digest(
+            &grant,
+            "PUT",
+            "/api/responses/00000000-0000-0000-0000-000000000009/values",
+            compact,
+            &key_digest,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(compact).unwrap(),
+            serde_json::from_slice::<serde_json::Value>(spaced).unwrap()
+        );
+        assert_ne!(
+            identity,
+            public_mutation_request_digest(
+                &grant,
+                "PUT",
+                "/api/responses/00000000-0000-0000-0000-000000000009/values",
+                spaced,
+                &key_digest,
+            )
+            .unwrap(),
+            "semantically equal but byte-distinct JSON must conflict"
+        );
+        for (method, path) in [
+            (
+                "POST",
+                "/api/responses/00000000-0000-0000-0000-000000000009/values",
+            ),
+            (
+                "PUT",
+                "/api/responses/00000000-0000-0000-0000-000000000010/values",
+            ),
+        ] {
+            assert_ne!(
+                identity,
+                public_mutation_request_digest(&grant, method, path, compact, &key_digest).unwrap()
+            );
+        }
+
+        let mut changed_audience = grant.clone();
+        changed_audience.audience = AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: Uuid::from_u128(7),
+            module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
+        };
+        assert_ne!(
+            identity,
+            public_mutation_request_digest(
+                &changed_audience,
+                "PUT",
+                "/api/responses/00000000-0000-0000-0000-000000000009/values",
+                compact,
+                &key_digest,
+            )
+            .unwrap()
+        );
+        let mut delegated = grant.clone();
+        delegated.delegation_basis = vec![
+            DelegationBasisV1 {
+                delegation_id: Uuid::from_u128(20),
+                delegated_by_actor_id: Uuid::from_u128(21),
+                capability: SecurityCapabilityId::new("submissions:respond").unwrap(),
+                organization_root_id: Uuid::from_u128(1),
+            },
+            DelegationBasisV1 {
+                delegation_id: Uuid::from_u128(22),
+                delegated_by_actor_id: Uuid::from_u128(23),
+                capability: SecurityCapabilityId::new("submissions:manage").unwrap(),
+                organization_root_id: Uuid::from_u128(1),
+            },
+        ];
+        assert_eq!(
+            response_access(&delegated).unwrap().delegated_account_ids,
+            BTreeSet::from([Uuid::from_u128(21)])
+        );
+        let mut changed_service = grant;
+        changed_service.presenting_service = ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id: Uuid::from_u128(8),
+            module_definition_id: ModuleDefinitionId::new("tessara.gateway.test").unwrap(),
+        };
+        assert_ne!(
+            identity,
+            public_mutation_request_digest(
+                &changed_service,
+                "PUT",
+                "/api/responses/00000000-0000-0000-0000-000000000009/values",
+                compact,
+                &key_digest,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn fresh_gateway_grants_share_stable_mutation_identity_and_authority_changes_conflict() {
+        let first_gateway_grant = mutation_grant();
+        let mut refreshed_gateway_grant = first_gateway_grant.clone();
+        refreshed_gateway_grant.jti = Uuid::from_u128(50);
+        refreshed_gateway_grant.correlation_id = Uuid::from_u128(51);
+        refreshed_gateway_grant.issued_at += Duration::seconds(1);
+        refreshed_gateway_grant.expires_at += Duration::seconds(1);
+        assert_ne!(first_gateway_grant.jti, refreshed_gateway_grant.jti);
+        assert_ne!(
+            first_gateway_grant.correlation_id,
+            refreshed_gateway_grant.correlation_id
+        );
+
+        let method = "PUT";
+        let path = "/api/responses/00000000-0000-0000-0000-000000000009/values";
+        let raw_body = br#"{"expected_revision":1,"values":{"name":"Grace"}}"#;
+        let key_digest = canonical_digest("fresh-gateway-grant-key").unwrap();
+        let stable_identity = public_mutation_request_digest(
+            &first_gateway_grant,
+            method,
+            path,
+            raw_body,
+            &key_digest,
+        )
+        .unwrap();
+        assert_eq!(
+            stable_identity,
+            public_mutation_request_digest(
+                &refreshed_gateway_grant,
+                method,
+                path,
+                raw_body,
+                &key_digest,
+            )
+            .unwrap(),
+            "fresh valid Gateway JTI/correlation/window values must replay the same stable request"
+        );
+
+        let mut changed_actor = refreshed_gateway_grant.clone();
+        changed_actor.original_actor_id = Uuid::from_u128(52);
+        let mut changed_action = refreshed_gateway_grant.clone();
+        changed_action.action = "responses.delete".into();
+        let mut changed_audience = refreshed_gateway_grant.clone();
+        changed_audience.audience = AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: Uuid::from_u128(53),
+            module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID).unwrap(),
+        };
+        let mut changed_bindings = refreshed_gateway_grant.clone();
+        changed_bindings.capability_scope_bindings[0].organization_root_id = Uuid::from_u128(54);
+        for changed in [
+            &changed_actor,
+            &changed_action,
+            &changed_audience,
+            &changed_bindings,
+        ] {
+            assert_ne!(
+                stable_identity,
+                public_mutation_request_digest(changed, method, path, raw_body, &key_digest)
+                    .unwrap()
+            );
+        }
+        assert_ne!(
+            stable_identity,
+            public_mutation_request_digest(
+                &refreshed_gateway_grant,
+                method,
+                path,
+                br#"{"expected_revision":1,"values":{"name":"Ada"}}"#,
+                &key_digest,
+            )
+            .unwrap(),
+            "exact raw body bytes remain part of stable replay identity"
+        );
+    }
+
+    #[test]
+    fn public_mutation_decode_is_strict_and_bounded() {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
+        assert!(
+            decode_public_mutation::<ResponseRevisionRequest>(
+                &headers,
+                br#"{"expected_revision":1}"#
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            decode_public_mutation::<ResponseRevisionRequest>(
+                &headers,
+                br#"{"expected_revision":1,"unexpected":true}"#
+            ),
+            Err(ProductApiError::BadRequest)
+        ));
+        assert!(matches!(
+            decode_public_mutation::<ResponseRevisionRequest>(
+                &headers,
+                &vec![b' '; crate::RESPONSE_PUBLIC_MUTATION_BODY_LIMIT_BYTES + 1]
+            ),
+            Err(ProductApiError::BadRequest)
+        ));
+        headers.insert(
+            header::CONTENT_TYPE,
+            "application/json; charset=utf-8".parse().unwrap(),
+        );
+        assert!(matches!(
+            decode_public_mutation::<ResponseRevisionRequest>(
+                &headers,
+                br#"{"expected_revision":1}"#
+            ),
             Err(ProductApiError::BadRequest)
         ));
     }

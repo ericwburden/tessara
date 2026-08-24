@@ -44,6 +44,8 @@ struct InstalledModule {
     installation_id: Uuid,
     manifest: ModuleManifest,
     serving: bool,
+    // Recovery jobs must remain able to repair readiness/health-derived lag.
+    system_job_reachable: bool,
 }
 
 const CORE_PRIVATE_PROVIDER_RESPONSE_LIMIT_BYTES: usize = 1024 * 1024;
@@ -72,6 +74,33 @@ pub(crate) struct CorePrivateProviderRequest<'a, T> {
     /// provider action (for example `operations:view` or `admin:all`).
     pub(crate) actor_capability: &'a str,
     pub(crate) body: &'a T,
+}
+
+/// One explicitly authorized Core-owned system job calling a manifest-declared
+/// private provider action. System jobs use the same signed CoreGateway wire
+/// boundary as actor-mediated calls, but their least-privilege authority is
+/// declared at the call site instead of being borrowed from a browser account.
+pub(crate) struct CoreSystemJobProviderRequest<'a, T> {
+    pub(crate) system_job_id: &'a str,
+    pub(crate) module_definition_id: &'a str,
+    pub(crate) expected_owner: Option<CorePrivateProviderOwner>,
+    pub(crate) dependency_binding: &'a str,
+    pub(crate) functional_contract: &'a str,
+    pub(crate) contract_version: &'a str,
+    pub(crate) authorization_action: &'a str,
+    pub(crate) path: &'a str,
+    pub(crate) media_type: &'a str,
+    pub(crate) correlation_id: Uuid,
+    pub(crate) body: &'a T,
+}
+
+#[derive(Clone, Copy)]
+struct PrivateProviderTarget<'a> {
+    dependency_binding: &'a str,
+    authorization_action: &'a str,
+    path: &'a str,
+    media_type: &'a str,
+    correlation_id: Uuid,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -329,7 +358,7 @@ where
             action: request.authorization_action,
             dependency_binding: &dependency_binding,
             operation: AuthorizationGrantOperationV1::Read,
-            required_capability: &declaration.required_capability,
+            required_capabilities_any_of: std::slice::from_ref(&declaration.required_capability),
             contract: &declaration.functional_contract,
         },
         bindings,
@@ -343,8 +372,198 @@ where
         }
         Err(error) => return Err(error),
     };
+    send_private_provider_request(
+        &module,
+        PrivateProviderTarget {
+            dependency_binding: request.dependency_binding,
+            authorization_action: request.authorization_action,
+            path: request.path,
+            media_type: request.media_type,
+            correlation_id,
+        },
+        &grant,
+        request.body,
+    )
+    .await
+}
+
+/// Calls one exact private provider action for a declared, non-browser Core
+/// system job. The job receives only the provider action's manifest-declared
+/// capability at installation scope; it does not inherit a manager account or
+/// browser session.
+pub(crate) async fn call_private_provider_for_system_job<TRequest, TResponse>(
+    state: &AppState,
+    request: CoreSystemJobProviderRequest<'_, TRequest>,
+) -> ApiResult<CorePrivateProviderResult<TResponse>>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+{
+    validate_system_job_id(request.system_job_id)?;
+    if request.correlation_id.is_nil() {
+        return Err(ApiError::Internal(anyhow::anyhow!(
+            "Core system-job provider correlation identity must not be nil"
+        )));
+    }
+    let installed = installed_modules(&state.pool).await?;
+    let mut candidates = installed.into_iter().filter(|module| {
+        module.manifest.definition_id.as_str() == request.module_definition_id
+            && request.expected_owner.is_none_or(|owner| {
+                module.installation_id == owner.installation_id
+                    && module.instance_id == owner.module_instance_id
+            })
+    });
+    let Some(module) = candidates.next() else {
+        return Ok(CorePrivateProviderResult::Unavailable);
+    };
+    let action_request = CorePrivateProviderRequest {
+        module_definition_id: request.module_definition_id,
+        expected_owner: request.expected_owner,
+        dependency_binding: request.dependency_binding,
+        functional_contract: request.functional_contract,
+        contract_version: request.contract_version,
+        authorization_action: request.authorization_action,
+        path: request.path,
+        media_type: request.media_type,
+        correlation_id: request.correlation_id,
+        actor_capability: "",
+        body: request.body,
+    };
+    if candidates.next().is_some()
+        || !module.system_job_reachable
+        || !private_action_matches(&module.manifest, &action_request)
+    {
+        return Ok(CorePrivateProviderResult::Unavailable);
+    }
+    let declaration = module
+        .manifest
+        .provided_service_actions
+        .iter()
+        .find(|declaration| {
+            declaration.functional_contract.as_str() == request.functional_contract
+                && declaration.authorization_action == request.authorization_action
+        })
+        .expect("private action was checked before system-job authorization");
+    let target = PrivateProviderTarget {
+        dependency_binding: request.dependency_binding,
+        authorization_action: request.authorization_action,
+        path: request.path,
+        media_type: request.media_type,
+        correlation_id: request.correlation_id,
+    };
+    let grant = match issue_system_job_authorization(
+        state,
+        &module,
+        declaration,
+        target,
+        request.system_job_id,
+    )
+    .await
+    {
+        Ok(grant) => grant,
+        Err(ApiError::Forbidden(_)) => return Ok(CorePrivateProviderResult::Undisclosed),
+        Err(ApiError::ServiceUnavailable(_)) => {
+            return Ok(CorePrivateProviderResult::Unavailable);
+        }
+        Err(error) => return Err(error),
+    };
+    send_private_provider_request(&module, target, &grant, request.body).await
+}
+
+async fn issue_system_job_authorization(
+    state: &AppState,
+    module: &InstalledModule,
+    declaration: &tessara_module_contract::ProvidedServiceActionDeclaration,
+    target: PrivateProviderTarget<'_>,
+    system_job_id: &str,
+) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
+    let revisions = sqlx::query(
+        "SELECT authorization_revision,organization_revision
+         FROM core_security_revisions WHERE singleton=true",
+    )
+    .fetch_one(&state.pool)
+    .await?;
+    let authorization_revision: i64 = revisions.try_get("authorization_revision")?;
+    let organization_revision: i64 = revisions.try_get("organization_revision")?;
+    sync_control_projections(
+        state,
+        module.installation_id,
+        module.instance_id,
+        &module.manifest,
+        authorization_revision,
+        organization_revision,
+    )
+    .await?;
+    let now = Utc::now();
+    protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
+        .sign(AuthorizationGrantV3 {
+            schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
+            installation_id: module.installation_id,
+            original_actor_id: core_system_job_principal_id(module.installation_id, system_job_id),
+            correlation_id: target.correlation_id,
+            presenting_service: ModuleServicePrincipalV1::CoreGateway,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: module.instance_id,
+                module_definition_id: module.manifest.definition_id.clone(),
+            },
+            dependency_binding: DependencyBindingKey::new(target.dependency_binding)
+                .map_err(|error| ApiError::Internal(error.into()))?,
+            functional_contract: declaration.functional_contract.clone(),
+            action: target.authorization_action.into(),
+            operation: declaration.operation,
+            capability_scope_bindings: vec![CapabilityScopeBindingV1 {
+                capability: declaration.required_capability.clone(),
+                organization_root_id: module.installation_id,
+                authorized_organization_ids: Vec::new(),
+            }],
+            resource_assertion: None,
+            delegation_basis: Vec::new(),
+            authorization_revision: authorization_revision as u64,
+            organization_revision: organization_revision as u64,
+            jti: Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(60),
+        })
+        .map_err(|error| ApiError::Internal(error.into()))
+}
+
+fn validate_system_job_id(system_job_id: &str) -> ApiResult<()> {
+    let valid = !system_job_id.is_empty()
+        && system_job_id.len() <= 128
+        && system_job_id.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+        });
+    valid.then_some(()).ok_or_else(|| {
+        ApiError::Internal(anyhow::anyhow!("Core system-job identity is not canonical"))
+    })
+}
+
+fn core_system_job_principal_id(installation_id: Uuid, system_job_id: &str) -> Uuid {
+    let mut digest = Sha256::new();
+    digest.update(b"tessara.core-system-job/v1\0");
+    digest.update(installation_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(system_job_id.as_bytes());
+    let digest = digest.finalize();
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
+}
+
+async fn send_private_provider_request<TRequest, TResponse>(
+    module: &InstalledModule,
+    target: PrivateProviderTarget<'_>,
+    grant: &tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>,
+    request_body: &TRequest,
+) -> ApiResult<CorePrivateProviderResult<TResponse>>
+where
+    TRequest: Serialize,
+    TResponse: DeserializeOwned,
+{
     let body =
-        serde_json::to_vec(request.body).map_err(|error| ApiError::Internal(error.into()))?;
+        serde_json::to_vec(request_body).map_err(|error| ApiError::Internal(error.into()))?;
     let encoded_grant = URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&grant).map_err(|error| ApiError::Internal(error.into()))?);
     let now = Utc::now();
@@ -353,10 +572,10 @@ where
             schema_version: 1,
             installation_id: module.installation_id,
             method: "POST".into(),
-            path: request.path.into(),
+            path: target.path.into(),
             canonical_body_digest: sha256_hex(&body),
             inbound_grant_digest: sha256_hex(encoded_grant.as_bytes()),
-            correlation_id: correlation_id.to_string(),
+            correlation_id: target.correlation_id.to_string(),
             nonce: Uuid::new_v4(),
             issued_at: now,
             expires_at: now + Duration::seconds(30),
@@ -377,12 +596,15 @@ where
         .build()
         .map_err(|error| ApiError::Internal(error.into()))?;
     let response = match client
-        .post(format!("{endpoint}{}", request.path))
-        .header(reqwest::header::CONTENT_TYPE, request.media_type)
-        .header(reqwest::header::ACCEPT, request.media_type)
+        .post(format!("{endpoint}{}", target.path))
+        .header(reqwest::header::CONTENT_TYPE, target.media_type)
+        .header(reqwest::header::ACCEPT, target.media_type)
         .header("x-tessara-authorization", encoded_grant)
         .header("x-tessara-core-service-request", encoded_core_request)
-        .header("x-tessara-correlation-id", correlation_id.to_string())
+        .header(
+            "x-tessara-correlation-id",
+            target.correlation_id.to_string(),
+        )
         .body(body)
         .send()
         .await
@@ -407,7 +629,7 @@ where
         Ok(None) | Err(_) => return Ok(CorePrivateProviderResult::Unavailable),
     };
     Ok(decode_private_provider_response(
-        request.media_type,
+        target.media_type,
         content_type.as_deref(),
         content_length,
         &bytes,
@@ -533,7 +755,7 @@ async fn dispatch_result(
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
                     operation: AuthorizationGrantOperationV1::Read,
-                    required_capability: &route.required_capability,
+                    required_capabilities_any_of: std::slice::from_ref(&route.required_capability),
                     contract: &route.functional_contract,
                 },
             )
@@ -588,7 +810,7 @@ async fn dispatch_result(
                     action: &route.authorization_action,
                     dependency_binding: &route.dependency_binding,
                     operation: route.operation,
-                    required_capability: &route.required_capability,
+                    required_capabilities_any_of: &route.required_capabilities_any_of,
                     contract: &route.functional_contract,
                 },
             )
@@ -663,14 +885,18 @@ async fn installed_modules(pool: &sqlx::PgPool) -> ApiResult<Vec<InstalledModule
     .await?;
     rows.into_iter()
         .map(|row| {
+            let deployed = row.try_get::<bool, _>("deployed")?;
+            let configured = row.try_get::<bool, _>("configured")?;
+            let enabled = row.try_get::<bool, _>("enabled")?;
             Ok(InstalledModule {
                 instance_id: row.try_get("id")?,
                 installation_id: row.try_get("installation_id")?,
-                serving: row.try_get::<bool, _>("deployed")?
-                    && row.try_get::<bool, _>("configured")?
-                    && row.try_get::<bool, _>("enabled")?
+                serving: deployed
+                    && configured
+                    && enabled
                     && row.try_get::<bool, _>("ready")?
                     && row.try_get::<bool, _>("healthy")?,
+                system_job_reachable: deployed && configured && enabled,
                 manifest: row
                     .try_get::<sqlx::types::Json<ModuleManifest>, _>("manifest")?
                     .0,
@@ -684,8 +910,30 @@ struct AuthorizationRequest<'a> {
     action: &'a str,
     dependency_binding: &'a DependencyBindingKey,
     operation: AuthorizationGrantOperationV1,
-    required_capability: &'a SecurityCapabilityId,
+    required_capabilities_any_of: &'a [SecurityCapabilityId],
     contract: &'a FunctionalContractId,
+}
+
+fn has_required_authorization_binding(
+    required_capabilities_any_of: &[SecurityCapabilityId],
+    bindings: &[CapabilityScopeBindingV1],
+) -> bool {
+    !required_capabilities_any_of.is_empty()
+        && bindings.iter().any(|binding| {
+            required_capabilities_any_of
+                .iter()
+                .any(|required| required == &binding.capability)
+        })
+}
+
+fn filter_required_authorization_bindings(
+    required_capabilities_any_of: &[SecurityCapabilityId],
+    bindings: Vec<CapabilityScopeBindingV1>,
+) -> Vec<CapabilityScopeBindingV1> {
+    bindings
+        .into_iter()
+        .filter(|binding| required_capabilities_any_of.contains(&binding.capability))
+        .collect()
 }
 
 async fn module_authorization(
@@ -730,6 +978,8 @@ async fn issue_module_authorization(
     request: AuthorizationRequest<'_>,
     bindings: Vec<CapabilityScopeBindingV1>,
 ) -> ApiResult<tessara_module_contract::SignedEnvelopeV1<AuthorizationGrantV3>> {
+    let bindings =
+        filter_required_authorization_bindings(request.required_capabilities_any_of, bindings);
     let revisions = sqlx::query(
         "SELECT authorization_revision,organization_revision
          FROM core_security_revisions WHERE singleton=true",
@@ -748,13 +998,14 @@ async fn issue_module_authorization(
     )
     .await?;
 
-    if !bindings
-        .iter()
-        .any(|binding| binding.capability == *request.required_capability)
-    {
+    if !has_required_authorization_binding(request.required_capabilities_any_of, &bindings) {
         tracing::warn!(
             actor_id = %actor.account.account_id,
-            required_capability = request.required_capability.as_str(),
+            required_capabilities = ?request
+                .required_capabilities_any_of
+                .iter()
+                .map(SecurityCapabilityId::as_str)
+                .collect::<Vec<_>>(),
             binding_count = bindings.len(),
             "Generic module action has no authorized capability binding"
         );
@@ -1195,6 +1446,109 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn public_api_capability_alternatives_authorize_either_declared_binding() {
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-response-module/manifest.json"))
+                .expect("Response manifest");
+        let route = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| {
+                route.method == PublicApiMethod::Delete
+                    && route.path_template == "/api/responses/{response_id}"
+            })
+            .expect("Response delete route");
+        assert_eq!(
+            route
+                .required_capabilities_any_of
+                .iter()
+                .map(SecurityCapabilityId::as_str)
+                .collect::<Vec<_>>(),
+            ["submissions:respond", "submissions:manage"]
+        );
+        let binding = |capability: &str| CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(capability).unwrap(),
+            organization_root_id: Uuid::from_u128(1),
+            authorized_organization_ids: Vec::new(),
+        };
+        assert!(has_required_authorization_binding(
+            &route.required_capabilities_any_of,
+            &[binding("submissions:respond")]
+        ));
+        assert!(has_required_authorization_binding(
+            &route.required_capabilities_any_of,
+            &[binding("submissions:manage")]
+        ));
+        assert!(!has_required_authorization_binding(
+            &route.required_capabilities_any_of,
+            &[binding("submissions:read_own")]
+        ));
+        assert!(!has_required_authorization_binding(
+            &[],
+            &[binding("submissions:manage")]
+        ));
+    }
+
+    #[test]
+    fn public_api_grants_exclude_undeclared_actor_bindings() {
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-response-module/manifest.json"))
+                .expect("Response manifest");
+        let binding = |capability: &str, organization_root_id: u128| CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(capability).unwrap(),
+            organization_root_id: Uuid::from_u128(organization_root_id),
+            authorized_organization_ids: vec![Uuid::from_u128(organization_root_id + 100)],
+        };
+        let delete = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| route.authorization_action == "responses.delete")
+            .expect("Response delete route");
+        let delete_bindings = filter_required_authorization_bindings(
+            &delete.required_capabilities_any_of,
+            vec![
+                binding("submissions:respond", 10),
+                binding("submissions:manage", 20),
+                binding("submissions:read_own", 30),
+            ],
+        );
+        assert_eq!(
+            delete_bindings
+                .iter()
+                .map(|binding| (binding.capability.as_str(), binding.organization_root_id))
+                .collect::<Vec<_>>(),
+            [
+                ("submissions:respond", Uuid::from_u128(10)),
+                ("submissions:manage", Uuid::from_u128(20)),
+            ]
+        );
+
+        let detail = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| route.authorization_action == "responses.get")
+            .expect("Response detail route");
+        let detail_bindings = filter_required_authorization_bindings(
+            &detail.required_capabilities_any_of,
+            vec![
+                binding("submissions:read_own", 40),
+                binding("submissions:manage", 50),
+            ],
+        );
+        assert_eq!(
+            detail_bindings
+                .iter()
+                .map(|binding| (binding.capability.as_str(), binding.organization_root_id))
+                .collect::<Vec<_>>(),
+            [("submissions:read_own", Uuid::from_u128(40))]
+        );
+        assert_eq!(
+            detail_bindings[0].authorized_organization_ids,
+            [Uuid::from_u128(140)]
+        );
+    }
+
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
     #[serde(deny_unknown_fields)]
     struct PrivateResponseFixture {
@@ -1247,6 +1601,7 @@ mod tests {
             installation_id,
             manifest,
             serving: true,
+            system_job_reachable: true,
         }];
         let reference = tessara_datasets_contract::DatasetRevisionReference::from_parts(
             installation_id,
@@ -1312,6 +1667,7 @@ mod tests {
             installation_id,
             manifest: manifest.clone(),
             serving: true,
+            system_job_reachable: true,
         }];
 
         let wrong_instance = tessara_datasets_contract::DatasetReference::from_parts(
@@ -1374,6 +1730,7 @@ mod tests {
             installation_id,
             manifest: incompatible_manifest,
             serving: true,
+            system_job_reachable: true,
         }];
         let canonical = tessara_datasets_contract::DatasetReference::from_parts(
             installation_id,

@@ -20,6 +20,7 @@ mod forms;
 mod hierarchy;
 mod module_authorization_exchange;
 mod module_gateway;
+mod module_provider_compatibility;
 mod module_service_requests;
 mod modules;
 mod operations;
@@ -41,6 +42,12 @@ use axum::{
 use db::AppState;
 use error::ApiError;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
+
+/// Starts the durable Core-owned Response event consumer.
+#[must_use]
+pub fn spawn_workflow_response_event_consumer(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(workflow_response_consumer::run(state))
+}
 
 fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<String> {
     #[cfg(feature = "ssr")]
@@ -320,6 +327,7 @@ fn api_routes() -> Router<AppState> {
         .merge(workflows::routes())
         .merge(composition::routes())
         .merge(module_authorization_exchange::routes())
+        .merge(module_provider_compatibility::routes())
         .merge(modules::routes())
         .merge(demo::routes())
 }

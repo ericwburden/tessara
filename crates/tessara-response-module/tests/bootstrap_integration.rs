@@ -11,33 +11,51 @@ use chrono::{Duration, Utc};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use tessara_composition::{
-    ActorEvidenceV1, OwnerBootstrapAuthorizationV1, OwnerBootstrapRequestV1,
-    OwnerBootstrapResponseV1,
+    ActorEvidenceV1, OwnerBootstrapAuthorizationV1, OwnerBootstrapProviderActionV1,
+    OwnerBootstrapRequestV1, OwnerBootstrapResponseV1,
 };
 use tessara_forms_contract::{
-    FORM_VERSION_SCHEMA_VERSION, FormVersionField, FormVersionSchemaResponse, FormVersionSection,
+    FORM_VERSION_SCHEMA_CONTRACT_ID, FORM_VERSION_SCHEMA_VERSION, FormVersionField,
+    FormVersionSchemaResponse, FormVersionSection, RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+    RESPONSE_FORM_VERSION_SCHEMA_PATH,
 };
 use tessara_module_contract::{
     ArtifactDigest, AuthorizationAudienceV1, MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
     ModuleDefinitionId, ModuleServiceIdentityRegistrationV1, ModuleServiceIdentityRegistryV1,
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, ResourceOwner,
+    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, ResourceOwner, ServiceActionMethod,
 };
 use tessara_module_runtime::CoreVerifiers;
 use tessara_response_module::{
     RESPONSE_BOOTSTRAP_SCHEMA_VERSION, RESPONSE_FORM_BINDING,
     RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING, RESPONSE_WORKFLOW_CONTEXT_BINDING,
     ResponseBootstrapDefinitionV1, ResponseBootstrapLifecycleStateV1, ResponseBootstrapReadBackV1,
-    ResponseBootstrapV1, ResponseRuntime, ResponseServiceEndpoints, router,
+    ResponseBootstrapV1, ResponseCoreVerifiers, ResponseRuntime, ResponseServiceEndpoints,
+    ResponseValidationFaultControl, router,
 };
 use tessara_responses_contract::{ResponseLifecycleState, ResponseReference};
 use tessara_workflows_contract::{
+    WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION, WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
+    WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH, WORKFLOW_RESPONSE_CONTEXT_ACTION,
+    WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID, WORKFLOW_RESPONSE_CONTEXT_PATH,
     WORKFLOW_RESPONSE_CONTEXT_SCHEMA_VERSION, WorkflowResponseStartContext,
 };
 use tower::ServiceExt;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "./migrations")]
-async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sqlx::PgPool) {
+struct BootstrapFixture {
+    app: Router,
+    request: OwnerBootstrapRequestV1<ResponseBootstrapV1>,
+    receipt_signer: Arc<PurposeBoundSigningKeyV1>,
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+}
+
+async fn bootstrap_fixture(
+    sql_pool: &sqlx::PgPool,
+    validation_fault_control: ResponseValidationFaultControl,
+    resource_key: &str,
+    idempotency_key: &str,
+) -> BootstrapFixture {
     let installation_id = Uuid::new_v4();
     let module_instance_id =
         tessara_composition::module_instance_id(installation_id, "tessara.responses");
@@ -49,7 +67,7 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     )
     .bind(installation_id)
     .bind(module_instance_id)
-    .execute(&sql_pool)
+    .execute(sql_pool)
     .await
     .expect("Response security state");
 
@@ -89,6 +107,12 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         [41; 32],
     );
+    let core_compatibility_signer = signer(
+        "tessara.core",
+        "response-bootstrap-core",
+        ProtocolSignaturePurposeV1::ProviderCompatibilityResponse,
+        [41; 32],
+    );
     let registry = ModuleServiceIdentityRegistryV1 {
         schema_version: MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
         identities: BTreeMap::from([(
@@ -117,16 +141,20 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     .expect("Response service endpoints");
     let app = router(Arc::new(ResponseRuntime::new(
         sql_pool.clone(),
-        CoreVerifiers {
-            authorization: authorization_signer.verifier(),
-            shell: shell_signer.verifier(),
+        ResponseCoreVerifiers {
+            runtime: CoreVerifiers {
+                authorization: authorization_signer.verifier(),
+                shell: shell_signer.verifier(),
+            },
+            service_request: core_service_signer.verifier(),
+            provider_compatibility: core_compatibility_signer.verifier(),
+            owner_bootstrap: owner_signer.verifier(),
         },
         service_signer,
-        core_service_signer.verifier(),
         registry,
         endpoints,
-        owner_signer.verifier(),
         receipt_signer.clone(),
+        validation_fault_control,
     )));
 
     let actor_id = Uuid::new_v4();
@@ -208,7 +236,7 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     let input = ResponseBootstrapV1 {
         schema_version: RESPONSE_BOOTSTRAP_SCHEMA_VERSION.into(),
         responses: vec![ResponseBootstrapDefinitionV1 {
-            resource_key: "response.submitted.owner".into(),
+            resource_key: resource_key.into(),
             form,
             workflow,
             values: BTreeMap::from([("answer".into(), json!("Complete"))]),
@@ -220,25 +248,49 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
         module_instance_id,
         actor_id,
         input,
+        idempotency_key,
         &owner_signer,
     );
 
-    let first: OwnerBootstrapResponseV1 = send(&app, &request).await;
+    BootstrapFixture {
+        app,
+        request,
+        receipt_signer,
+        installation_id,
+        module_instance_id,
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sqlx::PgPool) {
+    let fixture = bootstrap_fixture(
+        &sql_pool,
+        ResponseValidationFaultControl::disabled(),
+        "response.submitted.owner",
+        "response-bootstrap-integration",
+    )
+    .await;
+
+    let first: OwnerBootstrapResponseV1 = send(&fixture.app, &fixture.request).await;
     assert!(first.receipt.changed);
     assert!(first.has_exact_signed_receipt());
-    receipt_signer
+    fixture
+        .receipt_signer
         .verifier()
         .verify(&first.signed_receipt)
         .expect("Response receipt signature");
     let reference: ResponseReference =
         serde_json::from_str(first.receipt.resource_ids["response.submitted.owner"].as_str())
             .expect("Response logical reference");
-    assert_eq!(reference.reference().installation_id(), installation_id);
+    assert_eq!(
+        reference.reference().installation_id(),
+        fixture.installation_id
+    );
     assert_eq!(
         reference.reference().owner(),
         &ResourceOwner::ModuleInstance {
-            installation_id,
-            module_instance_id,
+            installation_id: fixture.installation_id,
+            module_instance_id: fixture.module_instance_id,
         }
     );
     let read_back: ResponseBootstrapReadBackV1 = serde_json::from_str(
@@ -249,7 +301,25 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     assert_eq!(read_back.revision, 2);
     assert_eq!(read_back.workflow_event_sequence, 2);
 
-    let replay: OwnerBootstrapResponseV1 = send(&app, &request).await;
+    let compatible_provider_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM response_provider_observations
+         WHERE compatibility_state='compatible' AND last_observed_at IS NOT NULL
+           AND last_compatible_at IS NOT NULL AND last_stable_finding IS NULL",
+    )
+    .fetch_one(&sql_pool)
+    .await
+    .expect("authenticated provider compatibility projection");
+    assert_eq!(compatible_provider_count, 3);
+    sqlx::query(
+        "UPDATE response_provider_observations
+         SET compatibility_state='unknown',last_observed_at=NULL,last_compatible_at=NULL,
+             last_stable_finding=NULL",
+    )
+    .execute(&sql_pool)
+    .await
+    .expect("simulate lost derived provider projection");
+
+    let replay: OwnerBootstrapResponseV1 = send(&fixture.app, &fixture.request).await;
     assert!(!replay.receipt.changed);
     assert_eq!(replay.receipt.resource_ids, first.receipt.resource_ids);
     let counts = sqlx::query_as::<_, (i64, i64, i64, i64, i64)>(
@@ -263,6 +333,63 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     .await
     .expect("Response bootstrap counts");
     assert_eq!(counts, (1, 1, 2, 2, 1));
+    let replay_compatible_provider_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM response_provider_observations
+         WHERE compatibility_state='compatible' AND last_observed_at IS NOT NULL
+           AND last_compatible_at IS NOT NULL AND last_stable_finding IS NULL",
+    )
+    .fetch_one(&sql_pool)
+    .await
+    .expect("replayed provider compatibility projection");
+    assert_eq!(replay_compatible_provider_count, 3);
+}
+
+#[cfg(feature = "sprint-8c-validation-faults")]
+#[sqlx::test(migrations = "./migrations")]
+async fn mid_apply_validation_fault_rolls_back_complete_bootstrap_transaction(
+    sql_pool: sqlx::PgPool,
+) {
+    let fixture = bootstrap_fixture(
+        &sql_pool,
+        ResponseValidationFaultControl::deterministic_mid_apply_for_test(Uuid::new_v4()),
+        "response.submitted.fault",
+        "response-bootstrap-mid-apply-fault",
+    )
+    .await;
+
+    let failed = send_response(&fixture.app, &fixture.request).await;
+    assert_eq!(failed.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        bootstrap_state_counts(&sql_pool).await,
+        (0, 0, 0, 0, 0, 0, 0, 0),
+        "the injected first attempt must roll back every Response-owned write"
+    );
+
+    let recovered: OwnerBootstrapResponseV1 = send(&fixture.app, &fixture.request).await;
+    assert!(recovered.receipt.changed);
+    assert_eq!(
+        bootstrap_state_counts(&sql_pool).await,
+        (1, 1, 2, 2, 1, 2, 1, 1),
+        "the disarmed successor attempt must commit the complete bootstrap graph"
+    );
+}
+
+#[cfg(feature = "sprint-8c-validation-faults")]
+async fn bootstrap_state_counts(pool: &sqlx::PgPool) -> (i64, i64, i64, i64, i64, i64, i64, i64) {
+    sqlx::query_as(
+        "SELECT
+           (SELECT COUNT(*) FROM responses),
+           (SELECT COUNT(*) FROM response_values),
+           (SELECT COUNT(*) FROM response_audit_events),
+           (SELECT COUNT(*) FROM response_workflow_events),
+           (SELECT COUNT(*) FROM response_start_claims),
+           (SELECT COUNT(*) FROM response_idempotency_receipts),
+           (SELECT COUNT(*) FROM response_export_changes),
+           (SELECT COUNT(*) FROM response_bootstrap_receipts)",
+    )
+    .fetch_one(pool)
+    .await
+    .expect("Response bootstrap state counts")
 }
 
 fn bootstrap_request(
@@ -270,11 +397,12 @@ fn bootstrap_request(
     module_instance_id: Uuid,
     actor_id: Uuid,
     input: ResponseBootstrapV1,
+    idempotency_key: &str,
     signer: &PurposeBoundSigningKeyV1,
 ) -> OwnerBootstrapRequestV1<ResponseBootstrapV1> {
     let input_digest = tessara_composition::canonical_digest(&input).expect("input digest");
     let now = Utc::now();
-    let idempotency_key = "response-bootstrap-integration".to_string();
+    let idempotency_key = idempotency_key.to_string();
     let authorization = signer
         .sign(OwnerBootstrapAuthorizationV1 {
             schema_version: tessara_composition::OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1,
@@ -292,7 +420,7 @@ fn bootstrap_request(
             },
             original_actor_id: actor_id,
             capability_scope_bindings: Vec::new(),
-            provider_actions: Vec::new(),
+            provider_actions: bootstrap_provider_actions(installation_id),
             authorization_revision: 7,
             organization_revision: 11,
             locked_input_digest: input_digest.clone(),
@@ -321,12 +449,55 @@ fn bootstrap_request(
     }
 }
 
+fn bootstrap_provider_actions(installation_id: Uuid) -> Vec<OwnerBootstrapProviderActionV1> {
+    [
+        (
+            RESPONSE_FORM_BINDING,
+            FORM_VERSION_SCHEMA_CONTRACT_ID,
+            RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+            RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        ),
+        (
+            RESPONSE_WORKFLOW_CONTEXT_BINDING,
+            WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID,
+            WORKFLOW_RESPONSE_CONTEXT_ACTION,
+            WORKFLOW_RESPONSE_CONTEXT_PATH,
+        ),
+        (
+            RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+            WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
+            WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
+            WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(binding, contract, action, path)| OwnerBootstrapProviderActionV1 {
+            dependency_binding: binding.into(),
+            functional_contract: contract.into(),
+            action: action.into(),
+            method: ServiceActionMethod::Post,
+            path: path.into(),
+            audience: AuthorizationAudienceV1::CoreInstallation { installation_id },
+        },
+    )
+    .collect()
+}
+
 async fn send(
     app: &Router,
     request: &OwnerBootstrapRequestV1<ResponseBootstrapV1>,
 ) -> OwnerBootstrapResponseV1 {
-    let response = app
-        .clone()
+    let response = send_response(app, request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    response_json(response).await
+}
+
+async fn send_response(
+    app: &Router,
+    request: &OwnerBootstrapRequestV1<ResponseBootstrapV1>,
+) -> Response {
+    app.clone()
         .oneshot(
             Request::builder()
                 .method("POST")
@@ -343,9 +514,7 @@ async fn send(
                 .expect("bootstrap request"),
         )
         .await
-        .expect("bootstrap response");
-    assert_eq!(response.status(), StatusCode::OK);
-    response_json(response).await
+        .expect("bootstrap response")
 }
 
 fn signer(

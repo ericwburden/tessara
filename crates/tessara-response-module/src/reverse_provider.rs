@@ -12,9 +12,9 @@ use semver::Version;
 use serde::Serialize;
 use sqlx::Row;
 use tessara_module_contract::{
-    AuthorizationGrantV3, ContractCompatibilityState, FunctionalContractId,
-    ModuleInstanceOwnerState, OwnerDataState, ProviderAvailabilityState, ProviderContractIdentity,
-    ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
+    AuthorizationGrantV3, CapabilityScopeBindingV1, ContractCompatibilityState,
+    FunctionalContractId, ModuleInstanceOwnerState, OwnerDataState, ProviderAvailabilityState,
+    ProviderContractIdentity, ResourceAccessState, ResourceIdentityState, ResourceLifecycleState,
     ResourceObservationStrategy, ResourceObservationV1, ResourceOwner, ResourceOwnerState,
     ResourceResolutionV1, ResourceRevision,
 };
@@ -84,7 +84,13 @@ async fn form_version_usage(
         .map_err(|_| ())?;
         let mut items = Vec::new();
         for row in rows {
-            if !authorized_row(&grant.payload, &row, security.installation_id)? {
+            if !authorized_row(
+                &grant.payload,
+                &row,
+                security.installation_id,
+                "submissions:manage",
+                RowAuthorizationMode::RequiredScopeOnly,
+            )? {
                 continue;
             }
             items.push(ResponseFormVersionUsageItem {
@@ -143,6 +149,7 @@ async fn summary(
             &grant.payload,
             &request.requested_scope_node_ids,
             security.installation_id,
+            "submissions:read_own",
         ) {
             return nondisclosing_summary();
         }
@@ -161,7 +168,13 @@ async fn summary(
             {
                 continue;
             }
-            if !authorized_row(&grant.payload, &row, security.installation_id)? {
+            if !authorized_row(
+                &grant.payload,
+                &row,
+                security.installation_id,
+                "submissions:read_own",
+                RowAuthorizationMode::OwnershipOrRequiredScope,
+            )? {
                 continue;
             }
             match row.try_get::<String, _>("status").map_err(|_| ())?.as_str() {
@@ -210,34 +223,18 @@ async fn operations_status(
         if request.schema_version != RESPONSE_REVERSE_SCHEMA_VERSION {
             return Err(());
         }
-        let pending_workflow_event_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM response_workflow_events")
-                .fetch_one(&runtime.pool)
-                .await
-                .map_err(|_| ())?;
-        let export_head_sequence: i64 = sqlx::query_scalar(
-            "SELECT COALESCE(MAX(change_sequence),0) FROM response_export_changes",
-        )
-        .fetch_one(&runtime.pool)
-        .await
-        .map_err(|_| ())?;
+        let projection =
+            crate::operational::ResponseOperationalProjection::load_cached(&runtime).await;
         let response = ResponseOperationsStatusResponse {
             schema_version: RESPONSE_REVERSE_SCHEMA_VERSION,
             state: ResponseProviderResultState::Available,
             status: Some(ResponseOperationsStatus {
-                ready: true,
-                forms_binding_compatible: runtime
-                    .service_endpoints
-                    .provider_url(crate::RESPONSE_FORM_BINDING)
-                    .is_some(),
-                workflow_binding_compatible: runtime
-                    .service_endpoints
-                    .provider_url(crate::RESPONSE_WORKFLOW_CONTEXT_BINDING)
-                    .is_some(),
-                pending_workflow_event_count: u64::try_from(pending_workflow_event_count)
-                    .map_err(|_| ())?,
-                export_head_sequence: u64::try_from(export_head_sequence).map_err(|_| ())?,
-                sanitized_findings: Vec::new(),
+                ready: projection.ready(),
+                forms_binding_compatible: projection.forms_binding_compatible,
+                workflow_binding_compatible: projection.workflow_binding_compatible,
+                pending_workflow_event_count: projection.pending_workflow_event_count,
+                export_head_sequence: projection.export_head_sequence,
+                sanitized_findings: projection.sanitized_findings,
             }),
         };
         response.validate().map_err(|_| ())?;
@@ -294,7 +291,13 @@ async fn resolve(
         let Some(row) = row else {
             return restricted_observation(ResourceAccessState::Unauthorized);
         };
-        if !authorized_row(&grant.payload, &row, security.installation_id)? {
+        if !authorized_row(
+            &grant.payload,
+            &row,
+            security.installation_id,
+            "submissions:read_own",
+            RowAuthorizationMode::OwnershipOrRequiredScope,
+        )? {
             return restricted_observation(ResourceAccessState::Unauthorized);
         }
         let lifecycle = row.try_get::<String, _>("status").map_err(|_| ())?;
@@ -345,39 +348,74 @@ fn authorized_row(
     grant: &AuthorizationGrantV3,
     row: &sqlx::postgres::PgRow,
     installation_id: Uuid,
+    required_capability: &str,
+    mode: RowAuthorizationMode,
 ) -> Result<bool, ()> {
     let actor = grant.original_actor_id;
     let started_by: Uuid = row.try_get("started_by_account_id").map_err(|_| ())?;
     let assignee: Uuid = row.try_get("assignee_account_id").map_err(|_| ())?;
-    if actor == started_by
-        || actor == assignee
-        || grant
-            .delegation_basis
-            .iter()
-            .any(|basis| basis.delegated_by_actor_id == assignee)
+    if mode == RowAuthorizationMode::OwnershipOrRequiredScope
+        && (actor == started_by
+            || actor == assignee
+            || grant
+                .delegation_basis
+                .iter()
+                .any(|basis| basis.delegated_by_actor_id == assignee))
     {
         return Ok(true);
     }
     let node_id: Uuid = row.try_get("node_id").map_err(|_| ())?;
-    Ok(scope_authorized(grant, node_id, installation_id))
+    Ok(scope_authorized(
+        grant,
+        required_capability,
+        node_id,
+        installation_id,
+    ))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RowAuthorizationMode {
+    OwnershipOrRequiredScope,
+    RequiredScopeOnly,
 }
 
 fn requested_scope_authorized(
     grant: &AuthorizationGrantV3,
     requested: &[Uuid],
     installation_id: Uuid,
+    required_capability: &str,
 ) -> bool {
     requested.is_empty()
         || requested
             .iter()
-            .all(|node_id| scope_authorized(grant, *node_id, installation_id))
+            .all(|node_id| scope_authorized(grant, required_capability, *node_id, installation_id))
 }
 
-fn scope_authorized(grant: &AuthorizationGrantV3, node_id: Uuid, installation_id: Uuid) -> bool {
-    grant.capability_scope_bindings.iter().any(|binding| {
-        binding.organization_root_id == installation_id
-            || binding.organization_root_id == node_id
-            || binding.authorized_organization_ids.contains(&node_id)
+fn scope_authorized(
+    grant: &AuthorizationGrantV3,
+    required_capability: &str,
+    node_id: Uuid,
+    installation_id: Uuid,
+) -> bool {
+    capability_scope_authorized(
+        &grant.capability_scope_bindings,
+        required_capability,
+        node_id,
+        installation_id,
+    )
+}
+
+fn capability_scope_authorized(
+    bindings: &[CapabilityScopeBindingV1],
+    required_capability: &str,
+    node_id: Uuid,
+    installation_id: Uuid,
+) -> bool {
+    bindings.iter().any(|binding| {
+        binding.capability.as_str() == required_capability
+            && (binding.organization_root_id == installation_id
+                || binding.organization_root_id == node_id
+                || binding.authorized_organization_ids.contains(&node_id))
     })
 }
 
@@ -437,4 +475,53 @@ async fn reverse_response(future: impl Future<Output = Result<Response, ()>>) ->
     future
         .await
         .unwrap_or_else(|()| StatusCode::NOT_FOUND.into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use tessara_module_contract::{CapabilityScopeBindingV1, SecurityCapabilityId};
+    use uuid::Uuid;
+
+    use super::capability_scope_authorized;
+    use crate::operational::EXPORT_HEAD_SEQUENCE_QUERY;
+
+    #[test]
+    fn operations_status_reads_the_owned_export_sequence_column() {
+        assert_eq!(
+            EXPORT_HEAD_SEQUENCE_QUERY,
+            "SELECT COALESCE(MAX(sequence),0) FROM response_export_changes"
+        );
+        assert!(!EXPORT_HEAD_SEQUENCE_QUERY.contains("change_sequence"));
+    }
+
+    #[test]
+    fn reverse_scope_uses_only_the_required_capability_binding() {
+        let installation_id = Uuid::from_u128(1);
+        let allowed_node = Uuid::from_u128(2);
+        let unrelated_node = Uuid::from_u128(3);
+        let bindings = vec![
+            CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("submissions:manage").unwrap(),
+                organization_root_id: allowed_node,
+                authorized_organization_ids: Vec::new(),
+            },
+            CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("datasets:manage").unwrap(),
+                organization_root_id: unrelated_node,
+                authorized_organization_ids: Vec::new(),
+            },
+        ];
+        assert!(capability_scope_authorized(
+            &bindings,
+            "submissions:manage",
+            allowed_node,
+            installation_id,
+        ));
+        assert!(!capability_scope_authorized(
+            &bindings,
+            "submissions:manage",
+            unrelated_node,
+            installation_id,
+        ));
+    }
 }

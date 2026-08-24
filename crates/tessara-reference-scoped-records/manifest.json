@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.reference.scoped-records",
   "release_version": "1.0.2",
   "publisher": "tessara.first_party",
@@ -182,14 +182,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -238,7 +238,7 @@
     {
       "path_template": "/reference/scoped-records/api/records",
       "method": "GET",
-      "required_capability": "tessara.reference.scoped-records:read",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:read"],
       "authorization_action": "records.list",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "read",
@@ -248,7 +248,7 @@
     {
       "path_template": "/reference/scoped-records/api/records/{record_id}",
       "method": "GET",
-      "required_capability": "tessara.reference.scoped-records:read",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:read"],
       "authorization_action": "records.get",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "read",
@@ -258,7 +258,7 @@
     {
       "path_template": "/reference/scoped-records/api/records",
       "method": "POST",
-      "required_capability": "tessara.reference.scoped-records:manage",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:manage"],
       "authorization_action": "records.create",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "mutation",
@@ -268,7 +268,7 @@
     {
       "path_template": "/reference/scoped-records/api/records/{record_id}",
       "method": "PUT",
-      "required_capability": "tessara.reference.scoped-records:manage",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:manage"],
       "authorization_action": "records.update",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "mutation",

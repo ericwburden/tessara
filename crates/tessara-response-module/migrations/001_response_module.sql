@@ -14,6 +14,27 @@ INSERT INTO response_module_configuration (
     provider_request_timeout_seconds, workflow_event_page_size
 ) VALUES (TRUE, 1, 'Responses', 5, 250);
 
+CREATE TABLE response_provider_observations (
+    binding_key TEXT PRIMARY KEY CHECK (binding_key IN (
+        'tessara.responses.form-version',
+        'tessara.responses.workflow-context',
+        'tessara.responses.workflow-assignments'
+    )),
+    compatibility_state TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (compatibility_state IN ('unknown', 'compatible', 'unavailable', 'incompatible')),
+    last_observed_at TIMESTAMPTZ,
+    last_compatible_at TIMESTAMPTZ,
+    last_stable_finding TEXT,
+    CHECK (compatibility_state = 'unknown' OR last_observed_at IS NOT NULL),
+    CHECK (compatibility_state <> 'compatible' OR last_compatible_at IS NOT NULL),
+    CHECK ((compatibility_state IN ('unavailable', 'incompatible')) =
+           (last_stable_finding IS NOT NULL))
+);
+INSERT INTO response_provider_observations (binding_key) VALUES
+    ('tessara.responses.form-version'),
+    ('tessara.responses.workflow-context'),
+    ('tessara.responses.workflow-assignments');
+
 CREATE TABLE response_module_security_state (
     singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
     schema_version SMALLINT NOT NULL CHECK (schema_version = 1),
@@ -83,12 +104,14 @@ CREATE TABLE response_start_claims (
     actor_account_id UUID NOT NULL,
     idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
     request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    initial_grant_jti UUID NOT NULL CHECK (initial_grant_jti <> '00000000-0000-0000-0000-000000000000'::uuid),
+    initial_correlation_id UUID NOT NULL CHECK (initial_correlation_id <> '00000000-0000-0000-0000-000000000000'::uuid),
     expires_at TIMESTAMPTZ NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('pending', 'committed', 'abandoned')),
     response_id UUID UNIQUE,
     claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     finalized_at TIMESTAMPTZ,
-    UNIQUE (actor_account_id, idempotency_key_digest),
+    UNIQUE (idempotency_key_digest),
     CHECK ((state = 'committed') = (response_id IS NOT NULL)),
     CHECK ((state = 'pending') = (finalized_at IS NULL))
 );
@@ -130,15 +153,20 @@ CREATE TABLE response_idempotency_receipts (
     action TEXT NOT NULL,
     idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
     request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    initial_grant_jti UUID NOT NULL CHECK (initial_grant_jti <> '00000000-0000-0000-0000-000000000000'::uuid),
+    initial_correlation_id UUID NOT NULL CHECK (initial_correlation_id <> '00000000-0000-0000-0000-000000000000'::uuid),
     response_status SMALLINT NOT NULL,
     response_body JSONB NOT NULL,
     committed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (actor_account_id, action, idempotency_key_digest)
+    PRIMARY KEY (idempotency_key_digest)
 );
 
 CREATE TABLE response_workflow_event_state (
     singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
-    provider_epoch UUID NOT NULL DEFAULT gen_random_uuid()
+    provider_epoch UUID NOT NULL DEFAULT gen_random_uuid(),
+    workflow_consumer_committed_sequence BIGINT NOT NULL DEFAULT 0
+        CHECK (workflow_consumer_committed_sequence >= 0),
+    workflow_consumer_acknowledged_at TIMESTAMPTZ
 );
 INSERT INTO response_workflow_event_state (singleton) VALUES (TRUE);
 

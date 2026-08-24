@@ -1,4 +1,53 @@
-import init, { hydrate_response } from "/_tessara/modules/tessara.responses/1.0.0/sha256:c966ec796b5ef1370fd101a9094d5392490a0eb698b1837e334479351c782090/response-bindings.js";
+// Response release 1.0.0 complete-document and lifecycle-v1 entrypoint.
+import init, {
+  can_deactivate_response,
+  hydrate_response,
+  mount_response,
+  navigate_response,
+  resume_response,
+  suspend_response,
+  unmount_response,
+} from "/_tessara/modules/tessara.responses/1.0.0/sha256:67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf/response-bindings.js";
 
-await init("/_tessara/modules/tessara.responses/1.0.0/sha256:1916393e4738588ad29e0f07f19ce8a052a8caf7089ef210bcaf27b5178f0f83/response.wasm");
-hydrate_response();
+await init("/_tessara/modules/tessara.responses/1.0.0/sha256:450bbaaeca98338044316f2662abf6a4563279d2da7fbcf25639550e4fe21ea7/response.wasm");
+
+if (document.getElementById("module-content")) {
+  hydrate_response();
+}
+
+export async function createModule(host) {
+  if (!host || host.lifecycleAbi !== "1.0.0") {
+    throw new Error("Responses requires Tessara browser lifecycle ABI 1.0.0");
+  }
+  let disposed = false;
+  globalThis.__tessaraModuleHostV1 = host;
+  const assertActive = () => {
+    if (disposed) throw new Error("Responses lifecycle instance is disposed");
+  };
+  return {
+    async mount(input) {
+      assertActive();
+      mount_response(input.outletId, JSON.stringify(input.bootstrap.payload));
+    },
+    async navigate(input) {
+      assertActive();
+      navigate_response(JSON.stringify(input.bootstrap.payload));
+    },
+    async canDeactivate() {
+      assertActive();
+      return can_deactivate_response()
+        ? { allowed: true }
+        : { allowed: false, prompt: "Discard unsaved Response changes?" };
+    },
+    async suspend() { assertActive(); suspend_response(); },
+    async resume() { assertActive(); resume_response(); },
+    async unmount() { if (!disposed) unmount_response(); },
+    async dispose() {
+      if (!disposed) {
+        unmount_response();
+        if (globalThis.__tessaraModuleHostV1 === host) delete globalThis.__tessaraModuleHostV1;
+        disposed = true;
+      }
+    },
+  };
+}

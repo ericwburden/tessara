@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.responses",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -12,14 +12,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -126,21 +126,33 @@
     { "destination": "responses.edit", "path_template": "/responses/{response_id}/edit", "methods": ["GET", "HEAD"], "required_capability": "submissions:respond", "authorization_action": "responses.edit", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null },
     { "destination": "responses.detail", "path_template": "/responses/{response_id}", "methods": ["GET", "HEAD"], "required_capability": "submissions:read_own", "authorization_action": "responses.get", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null }
   ],
+  "browser_lifecycle": {
+    "lifecycle_abi": "1.0.0",
+    "entry_asset": "/response.js",
+    "stylesheet_assets": [
+      "/response.css"
+    ],
+    "complete_document_fallback": true,
+    "capabilities": {
+      "navigation_guard": true,
+      "suspend_resume": true
+    }
+  },
   "public_api_routes": [
-    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
-    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
-    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
-    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.response", "idempotency": "none" },
-    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
-    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
-    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
+    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
+    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
+    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own"], "functional_contract": "tessara.responses.response", "idempotency": "none" },
+    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
   ],
   "assets": [
     { "path": "/module-ui.css", "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc", "content_type": "text/css; charset=utf-8" },
     { "path": "/response.css", "digest": "sha256:c2e598461f162e4dd73b091788f09890e234287fc0e54e71dcc2b38d7d10a87b", "content_type": "text/css; charset=utf-8" },
-    { "path": "/response.js", "digest": "sha256:eaecb5e8c2eb344d5b6e1011447fb50973246266c79247bb53af2bd1bd000d67", "content_type": "text/javascript; charset=utf-8" },
-    { "path": "/response-bindings.js", "digest": "sha256:c966ec796b5ef1370fd101a9094d5392490a0eb698b1837e334479351c782090", "content_type": "text/javascript; charset=utf-8" },
-    { "path": "/response.wasm", "digest": "sha256:1916393e4738588ad29e0f07f19ce8a052a8caf7089ef210bcaf27b5178f0f83", "content_type": "application/wasm" }
+    { "path": "/response.js", "digest": "sha256:258731e47c22e8b3d301669e400c62d24588782c09e0ed47e61df6e6fba7c5a8", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response-bindings.js", "digest": "sha256:67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response.wasm", "digest": "sha256:450bbaaeca98338044316f2662abf6a4563279d2da7fbcf25639550e4fe21ea7", "content_type": "application/wasm" }
   ],
   "provided_service_actions": [
     { "path": "/api/private/responses/submitted-export/checkpoint", "method": "POST", "authorization_action": "responses.export_checkpoint", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },

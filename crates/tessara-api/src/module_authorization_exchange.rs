@@ -191,7 +191,7 @@ async fn validate_inbound_grant(
     audience: &LiveModule,
 ) -> ApiResult<()> {
     require_applied_module(lockfile, audience)?;
-    let (operation, required_capability) = match &grant.presenting_service {
+    let (operation, required_capabilities_any_of) = match &grant.presenting_service {
         ModuleServicePrincipalV1::CoreGateway => resolve_manifest_entry_action(
             &audience.manifest,
             grant.dependency_binding.as_str(),
@@ -224,14 +224,14 @@ async fn validate_inbound_grant(
                 &grant.action,
                 &action.contract_version,
             )?;
-            (action.operation, action.required_capability)
+            (action.operation, vec![action.required_capability])
         }
     };
-    if !grant
-        .capability_scope_bindings
-        .iter()
-        .any(|binding| binding.capability.as_str() == required_capability)
-    {
+    if !grant.capability_scope_bindings.iter().any(|binding| {
+        required_capabilities_any_of
+            .iter()
+            .any(|capability| binding.capability.as_str() == capability)
+    }) {
         return Err(restricted());
     }
     let revisions = security_revisions(state).await?;
@@ -259,14 +259,21 @@ fn resolve_manifest_entry_action(
     functional_contract: &str,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> ApiResult<(AuthorizationGrantOperationV1, String)> {
+) -> ApiResult<(AuthorizationGrantOperationV1, Vec<String>)> {
     if let Some(route) = manifest.public_api_routes.iter().find(|route| {
         route.dependency_binding.as_str() == dependency_binding
             && route.functional_contract.as_str() == functional_contract
             && route.authorization_action == action
             && route.operation == operation
     }) {
-        return Ok((route.operation, route.required_capability.to_string()));
+        return Ok((
+            route.operation,
+            route
+                .required_capabilities_any_of
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        ));
     }
     if operation == AuthorizationGrantOperationV1::Read
         && let Some(route) = manifest.browser_routes.iter().find(|route| {
@@ -277,7 +284,7 @@ fn resolve_manifest_entry_action(
     {
         return Ok((
             AuthorizationGrantOperationV1::Read,
-            route.required_capability.to_string(),
+            vec![route.required_capability.to_string()],
         ));
     }
     Err(restricted())

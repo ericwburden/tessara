@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8c.response-provider-faults",
+  "isolation": "one-binding-per-proxy",
+  "product_bypass_forbidden": true,
+  "database_bypass_forbidden": true,
+  "runtime_configuration": {
+    "bindings": [
+      { "binding": "tessara.responses.form-version", "service": "core-form-version", "endpoint": "http://provider-proxy:9101" },
+      { "binding": "tessara.responses.workflow-context", "service": "core-workflow-context", "endpoint": "http://provider-proxy:9102" },
+      { "binding": "tessara.responses.workflow-assignments", "service": "core-workflow-assignments", "endpoint": "http://provider-proxy:9103" },
+      { "binding": "tessara.datasets.response-export", "service": "response-export", "endpoint": "http://provider-proxy:9104" },
+      { "binding": "core.response-reverse-providers", "service": "response-reverse", "endpoint": "http://provider-proxy:9105" }
+    ]
+  },
+  "faults": [
+    { "key": "response.bootstrap.mid-apply", "binding": "tessara.responses.bootstrap", "expected": "owner-transaction-rolled-back-and-topology-torn-down" },
+    { "key": "response.incompatible", "binding": "tessara.datasets.response-export", "expected": "rejected-before-dataset-write" },
+    { "key": "dataset.derived-rebuild", "binding": "tessara.datasets.response-export", "expected": "downstream-rebuild-transaction-rolled-back" },
+    { "key": "forms.timeout", "binding": "tessara.responses.form-version", "expected": "new-start-blocked-existing-draft-snapshot-retained" },
+    { "key": "forms.malformed", "binding": "tessara.responses.form-version", "expected": "incompatible-without-write" },
+    { "key": "workflow.timeout", "binding": "tessara.responses.workflow-context", "expected": "new-start-blocked-without-draft" },
+    { "key": "workflow.stale-context", "binding": "tessara.responses.workflow-context", "expected": "nondisclosing-rejection-without-draft" },
+    { "key": "workflow.event-interruption", "binding": "tessara.responses.workflow-assignments", "expected": "replay-from-last-cursor-once" },
+    { "key": "response-export.timeout", "binding": "tessara.datasets.response-export", "expected": "dataset-last-good-publication-retained" },
+    { "key": "response-export.malformed", "binding": "tessara.datasets.response-export", "expected": "dataset-refresh-rejected-without-promotion" },
+    { "key": "response-export.expired-cursor", "binding": "tessara.datasets.response-export", "expected": "authorized-rebase" },
+    { "key": "response-export.epoch-change", "binding": "tessara.datasets.response-export", "expected": "authorized-rebase" },
+    { "key": "response-reverse.unavailable", "binding": "core.response-reverse-providers", "expected": "sanitized-degraded-projection-and-recovery" }
+  ]
+}

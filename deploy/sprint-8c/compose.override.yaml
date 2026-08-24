@@ -17,7 +17,7 @@ services:
       TESSARA_SUPERVISOR_OPERATOR_ISSUER: ${TESSARA_SUPERVISOR_OPERATOR_ISSUER:-tessara.local.sprint-8c}
       TESSARA_MODULE_SERVICE_IDENTITIES: *sprint-8c-module-service-identities
       TESSARA_MODULE_CONTROL_ENDPOINTS: *sprint-8c-control-endpoints
-      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8b-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8b-scoped-records","tessara.responses":["tessara-sprint-8c-responses"],"tessara.datasets":["tessara-sprint-8b-datasets","tessara-sprint-8b-datasets-upgrade-baseline:latest"],"tessara.components":"tessara-sprint-8b-components","tessara.dashboards":"tessara-sprint-8b-dashboards"}'
+      TESSARA_ARTIFACT_IMAGE_REFERENCES: '{"database":"postgres:17","core":"tessara-sprint-8b-core","gateway":"traefik:v3.6","tessara.reference.scoped-records":"tessara-sprint-8b-scoped-records","tessara.responses":["tessara-sprint-8c-responses","tessara-sprint-8c-responses-upgrade-baseline:latest"],"tessara.datasets":["tessara-sprint-8b-datasets","tessara-sprint-8b-datasets-upgrade-baseline:latest"],"tessara.components":"tessara-sprint-8b-components","tessara.dashboards":"tessara-sprint-8b-dashboards"}'
       TESSARA_DEPLOYMENT_COMPOSE_FILE: /workspace/deploy/sprint-8c/compose.yaml
       TESSARA_DEPLOYMENT_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-tessara-sprint-8c}
       TESSARA_DEPLOYMENT_TARGETS: '{"core":{"image_environment":"TESSARA_CORE_IMAGE","migration_service":"core-migrate","runtime_service":"core"},"tessara.responses":{"image_environment":"TESSARA_RESPONSE_IMAGE","migration_service":"responses-migrate","runtime_service":"responses"},"tessara.datasets":{"image_environment":"TESSARA_DATASET_IMAGE","migration_service":"datasets-migrate","runtime_service":"datasets"},"tessara.components":{"image_environment":"TESSARA_COMPONENT_IMAGE","migration_service":"components-migrate","runtime_service":"components"},"tessara.dashboards":{"image_environment":"TESSARA_DASHBOARD_IMAGE","migration_service":"dashboards-migrate","runtime_service":"dashboards"},"tessara.reference.scoped-records":{"image_environment":"TESSARA_REFERENCE_MODULE_IMAGE","migration_service":"scoped-records-migrate","runtime_service":"scoped-records"}}'
@@ -74,6 +74,11 @@ services:
       TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY: ${TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY:-C1E62bSSQBXKCQLtB5BE06xdvsIwbwaUjBDajrbjny0}
       TESSARA_CORE_AUTHORIZATION_KEY_ID: ${TESSARA_CORE_AUTHORIZATION_KEY_ID:-core-development-v1}
       TESSARA_MODULE_CONTROL_SHARED_KEY: ${TESSARA_MODULE_CONTROL_SHARED_KEY:-development-module-control-only}
+      TESSARA_SPRINT_8C_FAULT_CONTRACT: tessara.sprint-8c.failure-control/v1
+      TESSARA_SPRINT_8C_FAULT_SCOPE: disposable-sprint-8c-only
+      TESSARA_SPRINT_8C_FAULT_KEY: ${TESSARA_SPRINT_8C_RESPONSE_OWNER_FAULT_KEY:-none}
+      TESSARA_SPRINT_8C_FAULT_CORRELATION_ID: ${TESSARA_SPRINT_8C_FAULT_CORRELATION_ID:-00000000-0000-0000-0000-000000000000}
+      TESSARA_SPRINT_8C_FAULT_ATTEMPT_LIMIT: ${TESSARA_SPRINT_8C_FAULT_ATTEMPT_LIMIT:-0}
     depends_on:
       responses-migrate: { condition: service_completed_successfully }
     labels:

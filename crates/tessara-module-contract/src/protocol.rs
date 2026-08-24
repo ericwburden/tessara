@@ -4,11 +4,12 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
     CONTRACT_SCHEMA_VERSION_V1, DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
-    NavigationContributionId, ResourceTypeId, SecurityCapabilityId,
+    NavigationContributionId, ResourceTypeId, SecurityCapabilityId, ServiceActionMethod,
 };
 
 pub const SHELL_CONTEXT_MAX_LIFETIME_SECONDS: i64 = 60;
@@ -18,6 +19,14 @@ pub const AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS: i64 = 30;
 pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V2: u16 = 2;
 pub const AUTHORIZATION_GRANT_SCHEMA_VERSION_V3: u16 = 3;
 pub const MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS: i64 = 30;
+pub const MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1: u16 = 1;
+pub const MODULE_PROVIDER_COMPATIBILITY_PATH: &str = "/api/private/module-provider-compatibility";
+pub const MODULE_PROVIDER_COMPATIBILITY_MEDIA_TYPE: &str =
+    "application/vnd.tessara.module-provider-compatibility+json;version=1";
+pub const MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT: &str =
+    "tessara.module-provider-compatibility/v1";
+pub const MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS: i64 = 30;
+pub const MODULE_PROVIDER_COMPATIBILITY_MAX_EXPECTATIONS: usize = 16;
 pub const AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V1: u16 = 1;
 pub const AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2: u16 = 2;
 
@@ -27,6 +36,7 @@ pub enum ProtocolSignaturePurposeV1 {
     ShellContext,
     AuthorizationGrant,
     ModuleServiceRequest,
+    ProviderCompatibilityResponse,
     EnrollmentEligibility,
     EnrollmentRedemption,
     RecoveryOperatorAuthorization,
@@ -36,7 +46,6 @@ pub enum ProtocolSignaturePurposeV1 {
     ApplyAuthorization,
     OwnerBootstrapAuthorization,
     OwnerBootstrapReceipt,
-    ResponseOwnerActionReceipt,
     BootstrapValidationAuthorization,
     SupervisorRequest,
     SupervisorResponse,
@@ -836,6 +845,137 @@ pub struct ModuleServiceRequestValidationContextV1 {
     pub inbound_grant_digest: String,
     pub correlation_id: String,
     pub now: DateTime<Utc>,
+}
+
+/// One exact Core-owned action a module expects to consume through a declared
+/// dependency binding. The canonical order prevents omitted, duplicated, or
+/// broadened expectation sets from being signed accidentally.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleProviderCompatibilityExpectationV1 {
+    pub dependency_binding: String,
+    pub functional_contract: String,
+    pub contract_version: String,
+    pub authorization_action: String,
+    pub method: ServiceActionMethod,
+    pub path: String,
+}
+
+impl ModuleProviderCompatibilityExpectationV1 {
+    fn validate(&self) -> Result<(), ModuleProviderCompatibilityError> {
+        for value in [
+            self.dependency_binding.as_str(),
+            self.functional_contract.as_str(),
+            self.authorization_action.as_str(),
+        ] {
+            if value.is_empty()
+                || value.len() > 256
+                || value.trim() != value
+                || value.chars().any(char::is_whitespace)
+            {
+                return Err(ModuleProviderCompatibilityError::InvalidExpectation);
+            }
+        }
+        if semver::Version::parse(&self.contract_version).is_err()
+            || !self.path.starts_with('/')
+            || self.path.len() > 512
+            || self.path.contains(['?', '#'])
+            || self.path.split('/').any(|segment| segment == "..")
+        {
+            return Err(ModuleProviderCompatibilityError::InvalidExpectation);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleProviderCompatibilityRequestV1 {
+    pub schema_version: u16,
+    pub expectations: Vec<ModuleProviderCompatibilityExpectationV1>,
+}
+
+impl ModuleProviderCompatibilityRequestV1 {
+    pub fn validate(&self) -> Result<(), ModuleProviderCompatibilityError> {
+        if self.schema_version != MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1
+            || self.expectations.is_empty()
+            || self.expectations.len() > MODULE_PROVIDER_COMPATIBILITY_MAX_EXPECTATIONS
+        {
+            return Err(ModuleProviderCompatibilityError::InvalidExpectationSet);
+        }
+        let mut previous = None;
+        for expectation in &self.expectations {
+            expectation.validate()?;
+            if previous.is_some_and(|previous| previous >= expectation) {
+                return Err(ModuleProviderCompatibilityError::InvalidExpectationSet);
+            }
+            previous = Some(expectation);
+        }
+        Ok(())
+    }
+
+    pub fn canonical_digest(&self) -> Result<String, ModuleProviderCompatibilityError> {
+        self.validate()?;
+        let bytes = serde_jcs::to_vec(self)
+            .map_err(|_| ModuleProviderCompatibilityError::Canonicalization)?;
+        Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleProviderCompatibilityResponseV1 {
+    pub schema_version: u16,
+    pub provider: AuthorizationAudienceV1,
+    pub consumer: ModuleServicePrincipalV1,
+    pub request_digest: String,
+    pub expectations: Vec<ModuleProviderCompatibilityExpectationV1>,
+    pub correlation_id: Uuid,
+    pub issued_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+impl ModuleProviderCompatibilityResponseV1 {
+    pub fn validate_for(
+        &self,
+        request: &ModuleProviderCompatibilityRequestV1,
+        provider: &AuthorizationAudienceV1,
+        consumer: &ModuleServicePrincipalV1,
+        correlation_id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<(), ModuleProviderCompatibilityError> {
+        request.validate()?;
+        if self.schema_version != MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1
+            || &self.provider != provider
+            || &self.consumer != consumer
+            || self.expectations != request.expectations
+            || self.request_digest != request.canonical_digest()?
+            || correlation_id.is_nil()
+            || self.correlation_id != correlation_id
+            || self.expires_at <= self.issued_at
+            || self.expires_at - self.issued_at
+                > Duration::seconds(MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS)
+            || now < self.issued_at
+            || now > self.expires_at
+        {
+            return Err(ModuleProviderCompatibilityError::ResponseMismatch);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ModuleProviderCompatibilityError {
+    #[error("module provider compatibility expectation is invalid")]
+    InvalidExpectation,
+    #[error(
+        "module provider compatibility expectations must be non-empty, bounded, unique, and canonical"
+    )]
+    InvalidExpectationSet,
+    #[error("module provider compatibility identity could not be canonicalized")]
+    Canonicalization,
+    #[error("module provider compatibility response does not match the authenticated request")]
+    ResponseMismatch,
 }
 
 /// One-use request proof emitted by Core when it calls a module-owned private
@@ -1650,6 +1790,100 @@ mod tests {
             Err(CoreServiceRequestValidationError::Window(
                 SignedWindowError::LifetimeTooLong
             ))
+        );
+    }
+
+    #[test]
+    fn provider_compatibility_identity_is_canonical_exact_and_purpose_bound() {
+        let first = ModuleProviderCompatibilityExpectationV1 {
+            dependency_binding: "example.consumer.forms".into(),
+            functional_contract: "example.forms.schema".into(),
+            contract_version: "1.0.0".into(),
+            authorization_action: "forms.resolve_schema".into(),
+            method: ServiceActionMethod::Post,
+            path: "/api/private/forms/schema".into(),
+        };
+        let second = ModuleProviderCompatibilityExpectationV1 {
+            dependency_binding: "example.consumer.workflows".into(),
+            functional_contract: "example.workflows.context".into(),
+            contract_version: "1.0.0".into(),
+            authorization_action: "workflows.issue_context".into(),
+            method: ServiceActionMethod::Post,
+            path: "/api/private/workflows/context".into(),
+        };
+        let request = ModuleProviderCompatibilityRequestV1 {
+            schema_version: MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1,
+            expectations: vec![first.clone(), second.clone()],
+        };
+        request.validate().unwrap();
+        assert!(request.canonical_digest().unwrap().starts_with("sha256:"));
+
+        let provider = AuthorizationAudienceV1::CoreInstallation {
+            installation_id: id(1),
+        };
+        let consumer = ModuleServicePrincipalV1::ModuleInstance {
+            module_instance_id: id(2),
+            module_definition_id: module("example.consumer"),
+        };
+        let correlation_id = id(3);
+        let issued_at = now();
+        let response = ModuleProviderCompatibilityResponseV1 {
+            schema_version: MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1,
+            provider: provider.clone(),
+            consumer: consumer.clone(),
+            request_digest: request.canonical_digest().unwrap(),
+            expectations: request.expectations.clone(),
+            correlation_id,
+            issued_at,
+            expires_at: issued_at
+                + Duration::seconds(MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS),
+        };
+        response
+            .validate_for(
+                &request,
+                &provider,
+                &consumer,
+                correlation_id,
+                issued_at + Duration::seconds(1),
+            )
+            .unwrap();
+
+        let signer = PurposeBoundSigningKeyV1::from_secret_bytes(
+            "tessara.core",
+            "provider-compatibility-dev-1",
+            ProtocolSignaturePurposeV1::ProviderCompatibilityResponse,
+            [9; 32],
+        )
+        .unwrap();
+        let envelope = signer.sign(response).unwrap();
+        signer.verifier().verify(&envelope).unwrap();
+        let wrong_purpose = PurposeBoundVerifyingKeyV1::from_public_bytes(
+            "tessara.core",
+            "provider-compatibility-dev-1",
+            ProtocolSignaturePurposeV1::ModuleServiceRequest,
+            signer.verifier().public_key_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            wrong_purpose.verify(&envelope),
+            Err(ProtocolEnvelopeError::WrongPurpose)
+        );
+
+        let duplicate = ModuleProviderCompatibilityRequestV1 {
+            schema_version: MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1,
+            expectations: vec![first.clone(), first],
+        };
+        assert_eq!(
+            duplicate.validate(),
+            Err(ModuleProviderCompatibilityError::InvalidExpectationSet)
+        );
+        let reversed = ModuleProviderCompatibilityRequestV1 {
+            schema_version: MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1,
+            expectations: vec![second, request.expectations[0].clone()],
+        };
+        assert_eq!(
+            reversed.validate(),
+            Err(ModuleProviderCompatibilityError::InvalidExpectationSet)
         );
     }
 }

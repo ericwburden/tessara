@@ -74,7 +74,6 @@ pub async fn list_workflows(
     request: AuthenticatedRequest,
 ) -> ApiResult<Json<Vec<WorkflowSummary>>> {
     auth::ensure_capability(&request.account, "workflows:read")?;
-    synchronize_response_events(&state, &request).await;
     Ok(Json(
         list_workflows_inner(&state.pool, Some(&request.account)).await?,
     ))
@@ -404,7 +403,6 @@ pub async fn list_workflow_assignments(
     Query(query): Query<WorkflowAssignmentQuery>,
 ) -> ApiResult<Json<Vec<WorkflowAssignmentSummary>>> {
     auth::ensure_capability(&request.account, "workflows:read")?;
-    synchronize_response_events(&state, &request).await;
     Ok(Json(
         list_workflow_assignments_inner(&state.pool, &request.account, &query).await?,
     ))
@@ -937,12 +935,6 @@ pub(crate) async fn ensure_workflow_assignment_for_form_version_tx(
     let workflow_assignment_id =
         ensure_workflow_assignment_tx(tx, workflow_version_id, node_id, account_id).await?;
     Ok(workflow_assignment_id)
-}
-
-async fn synchronize_response_events(state: &AppState, request: &AuthenticatedRequest) {
-    if let Err(error) = crate::workflow_response_consumer::synchronize(state, request).await {
-        tracing::warn!(error = %error, "Workflow Response consumer will retry after synchronization failure");
-    }
 }
 
 async fn list_workflows_inner(

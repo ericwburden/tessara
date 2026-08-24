@@ -1103,6 +1103,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     expect(independentEntries.map((entry) => entry.definition.id)).toEqual(
       expect.arrayContaining([
+        RESPONSES_DEFINITION,
         DATASETS_DEFINITION,
         COMPONENTS_DEFINITION,
         DASHBOARDS_DEFINITION,
@@ -1668,15 +1669,47 @@ test.describe.serial("Sprint 6A Module Management", () => {
 
     await gotoHydrated(page, `/administration/modules/${RESPONSES_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Responses" })).toBeVisible();
+    const responseDetail = await independentModuleDetail(
+      fixtures.reader.context,
+      RESPONSES_DEFINITION,
+    );
+    expect(responseDetail.entry.release.version).toBe("1.0.0");
+    expect(responseDetail.entry.instance).toMatchObject({
+      ready: true,
+      enabled: true,
+      healthy: true,
+    });
+    expect(responseDetail.entry.configuration).toEqual({
+      declared: true,
+      valid: true,
+      values: {
+        schema_version: 1,
+        display_label: "Responses",
+        provider_request_timeout_seconds: 5,
+        workflow_event_page_size: 250,
+      },
+    });
+    expect(responseDetail.entry.manifest).not.toBeNull();
+    expect(responseDetail.entry.manifest?.browser_lifecycle).toEqual({
+      lifecycle_abi: "1.0.0",
+      entry_asset: "/response.js",
+      stylesheet_assets: ["/response.css"],
+      complete_document_fallback: true,
+      capabilities: {
+        navigation_guard: true,
+        suspend_resume: true,
+      },
+    });
+    expect(responseDetail.entry.findings).toEqual([]);
     await page.getByRole("tab", { name: "Dependencies" }).click();
     const responseDependencies = page.locator(".module-detail-dependencies");
-    await expect(
-      responseDependencies.getByText("Transition-internal only", { exact: true }),
-    ).toBeVisible();
+    await expect(responseDependencies).toContainText("tessara.forms.form-version-schema");
+    await expect(responseDependencies).toContainText("tessara.workflows.response-context");
     await expect(responseDependencies).toContainText(
-      "2 declared relationships describe current in-process coupling and cannot be satisfied by a transition contribution provider.",
+      "tessara.workflows.response-assignment-catalog",
     );
-    await expect(page.getByText("transition_internal_only", { exact: true }).first()).toBeVisible();
+    await expect(responseDependencies).not.toContainText("Transition-internal only");
+    await expect(page.getByText("transition_internal_only", { exact: true })).toHaveCount(0);
 
     await gotoHydrated(page, `/administration/modules/${MIGRATION_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Migration" })).toBeVisible();

@@ -17,7 +17,7 @@ try {
     if ($manifests.Count -eq 0) { throw "No first-party manifests were found" }
     $expectedTuple = [ordered]@{
         shell_context_schema = "2.0.0";
-        module_contract = "0.3.0"; module_runtime = "0.3.0"; module_ui = "0.3.0";
+        module_contract = "0.4.0"; module_runtime = "0.3.0"; module_ui = "0.3.0";
         design_system_asset_abi = "2.0.0"; conformance_suite = "1.2.0"
     }
     foreach ($file in $manifests) {

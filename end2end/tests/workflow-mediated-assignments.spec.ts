@@ -90,7 +90,7 @@ type PendingWorkflowWork = {
   account_display_name: string;
 };
 
-type SubmissionDetail = {
+type ResponseDetail = {
   id: string;
   form_id: string;
   form_version_id: string;
@@ -104,7 +104,7 @@ type SubmissionDetail = {
   } | null;
 };
 
-type AssignmentResponseStartOptions = {
+type ResponseStartOptions = {
   assignments: Array<{
     workflow_assignment_id: string;
     workflow_name: string;
@@ -116,6 +116,8 @@ type AssignmentResponseStartOptions = {
     account_display_name: string;
   }>;
 };
+
+let responseMutationSequence = 0;
 
 async function expectJson<T>(response: APIResponse): Promise<T> {
   const text = await response.text();
@@ -135,7 +137,13 @@ async function apiPost<T>(
   url: string,
   data?: Record<string, unknown>,
 ): Promise<T> {
-  return expectJson<T>(await page.request.post(url, { data }));
+  const headers = url === "/api/responses"
+    ? {
+        "x-idempotency-key":
+          `workflow-response-start-${Date.now()}-${responseMutationSequence++}`,
+      }
+    : undefined;
+  return expectJson<T>(await page.request.post(url, { data, headers }));
 }
 
 async function signIn(page: Page, email: string, password: string) {
@@ -362,7 +370,7 @@ test.describe("workflow-mediated form shortcuts", () => {
     ).toBeVisible();
   });
 
-  test("Assign Form uses workflow assignments and delegates start assigned work", async ({
+  test("Assign Form uses workflow assignments and the Response-owned start contract", async ({
     page,
   }) => {
     const assertNativeRouteGuard = attachNativeRouteGuard(page);
@@ -410,17 +418,18 @@ test.describe("workflow-mediated form shortcuts", () => {
     ).toBe(true);
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Assigned to Me" })).toBeVisible();
-    await expect(page.getByRole("link", { name: setup.formName })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Assigned to Me" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Responses", exact: true })).toBeVisible();
 
     const submission = await apiPost<IdResponse>(
       page,
-      `/api/workflow-assignments/${assignment.assignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: assignment.assignmentId },
     );
-    const detail = await apiGet<SubmissionDetail>(
+    const detail = await apiGet<ResponseDetail>(
       page,
-      `/api/submissions/${submission.id}`,
+      `/api/responses/${submission.id}`,
     );
     expect(detail.status).toBe("draft");
     expect(detail.form_id).toBe(setup.formId);
@@ -465,9 +474,9 @@ test.describe("workflow-mediated form shortcuts", () => {
     );
 
     await signInAsDelegate(page);
-    const options = await apiGet<AssignmentResponseStartOptions>(
+    const options = await apiGet<ResponseStartOptions>(
       page,
-      "/api/responses/options",
+      "/api/responses/start-options",
     );
     const option = options.assignments.find(
       (item) => item.workflow_assignment_id === assignment.assignmentId,
@@ -493,6 +502,25 @@ test.describe("workflow-mediated form shortcuts", () => {
         await expect(routePage.getByRole("button", { name: "Start Draft" })).toBeDisabled();
       },
     });
+
+    const assignedWork = page.getByLabel("Assigned Work");
+    const assignmentValue = await assignedWork.locator("option").nth(1).getAttribute("value");
+    expect(assignmentValue).not.toBeNull();
+    await assignedWork.selectOption(assignmentValue!);
+    const startButton = page.getByRole("button", { name: "Start Draft" });
+    await expect(startButton).toBeEnabled();
+    const startedResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/responses",
+    );
+    await startButton.click();
+    const startResult = await startedResponse;
+    expect(startResult.status()).toBe(201);
+    expect(await startResult.request().headerValue("x-idempotency-key")).toMatch(
+      /^[0-9a-f-]{36}$/i,
+    );
+    const started = (await startResult.json()) as IdResponse;
+    await expect(page).toHaveURL(new RegExp(`/responses/${started.id}/edit$`));
 
     const removedStart = await page.request.post("/api/responses/start", {
       data: {

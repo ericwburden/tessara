@@ -667,7 +667,6 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::ApplyAuthorization => "apply_authorization",
         ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization => "owner_bootstrap_authorization",
         ProtocolSignaturePurposeV1::OwnerBootstrapReceipt => "owner_bootstrap_receipt",
-        ProtocolSignaturePurposeV1::ResponseOwnerActionReceipt => "response_owner_action_receipt",
         ProtocolSignaturePurposeV1::BootstrapValidationAuthorization => {
             "bootstrap_validation_authorization"
         }
@@ -683,6 +682,9 @@ pub fn signature_purpose_name(purpose: ProtocolSignaturePurposeV1) -> &'static s
         ProtocolSignaturePurposeV1::ShellContext => "shell_context",
         ProtocolSignaturePurposeV1::AuthorizationGrant => "authorization_grant",
         ProtocolSignaturePurposeV1::ModuleServiceRequest => "module_service_request",
+        ProtocolSignaturePurposeV1::ProviderCompatibilityResponse => {
+            "provider_compatibility_response"
+        }
     }
 }
 

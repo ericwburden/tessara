@@ -10,7 +10,9 @@ use crate::types::{
     SaveResponseValuesRequest,
 };
 #[cfg(feature = "hydrate")]
-use tessara_responses_contract::{ResponseMutationResult, StartResponseRequest};
+use tessara_responses_contract::{
+    RESPONSE_IDEMPOTENCY_HEADER, ResponseMutationResult, StartResponseRequest,
+};
 #[cfg(feature = "hydrate")]
 use uuid::Uuid;
 
@@ -74,7 +76,7 @@ pub(super) async fn start_assignment_response(
     })
     .map_err(|error| ResponseApiError::message(error.to_string()))?;
     let response = send_json_request::<ResponseMutationResult>(
-        gloo_net::http::Request::post("/api/responses"),
+        mutation_request(gloo_net::http::Request::post("/api/responses")),
         Some(body),
         "Start assigned response",
     )
@@ -94,7 +96,9 @@ pub(super) async fn save_response_values_api(
     })?;
 
     send_json_request::<ResponseMutationResult>(
-        gloo_net::http::Request::put(&format!("/api/responses/{response_id}/values")),
+        mutation_request(gloo_net::http::Request::put(&format!(
+            "/api/responses/{response_id}/values"
+        ))),
         Some(body),
         "Save response draft",
     )
@@ -110,10 +114,17 @@ pub(super) async fn submit_response_api(
     let body = serde_json::to_string(&ResponseRevisionRequest { expected_revision })
         .map_err(|error| ResponseApiError::message(error.to_string()))?;
     send_json_request::<ResponseMutationResult>(
-        gloo_net::http::Request::post(&format!("/api/responses/{response_id}/submit")),
+        mutation_request(gloo_net::http::Request::post(&format!(
+            "/api/responses/{response_id}/submit"
+        ))),
         Some(body),
         "Submit response",
     )
     .await
     .map_err(ResponseApiError::from_transport_error)
+}
+
+#[cfg(feature = "hydrate")]
+fn mutation_request(builder: gloo_net::http::RequestBuilder) -> gloo_net::http::RequestBuilder {
+    builder.header(RESPONSE_IDEMPOTENCY_HEADER, &Uuid::new_v4().to_string())
 }

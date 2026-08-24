@@ -208,61 +208,6 @@ pub async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState
     db::AppState { pool, config }
 }
 
-pub fn value_for_field_type(field_type: &str) -> Value {
-    match field_type {
-        "number" => json!(7),
-        "boolean" => json!(false),
-        "date" => json!("2026-05-04"),
-        "multi_choice" => json!(["Sprint 2D"]),
-        "single_choice" => json!("Sprint 2D"),
-        _ => json!("Sprint 2D response value"),
-    }
-}
-
-pub async fn save_required_values(app: axum::Router, token: &str, submission_id: &str) {
-    let detail = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            token,
-            None,
-        ),
-    )
-    .await;
-    let mut values = serde_json::Map::new();
-    for field in detail["values"]
-        .as_array()
-        .expect("submission detail should include values")
-        .iter()
-        .filter(|field| field["required"] == true)
-    {
-        values.insert(
-            field["key"]
-                .as_str()
-                .expect("field should include key")
-                .to_string(),
-            value_for_field_type(
-                field["field_type"]
-                    .as_str()
-                    .expect("field should include field type"),
-            ),
-        );
-    }
-    if !values.is_empty() {
-        request_json(
-            app,
-            authorized_request(
-                "PUT",
-                &format!("/api/submissions/{submission_id}/values"),
-                token,
-                Some(json!({ "values": values })),
-            ),
-        )
-        .await;
-    }
-}
-
 pub async fn login_token(app: axum::Router) -> String {
     login_token_for(app, "admin@tessara.local", "tessara-dev-admin").await
 }

@@ -487,12 +487,17 @@ mod tests {
                 .iter()
                 .map(|source| source.definition_id.as_str())
                 .collect::<Vec<_>>(),
-            [
-                "tessara.forms",
-                "tessara.workflows",
-                "tessara.responses",
-                "tessara.migration",
-            ]
+            ["tessara.forms", "tessara.workflows", "tessara.migration",]
+        );
+        assert!(
+            prepared
+                .iter()
+                .all(|source| source.definition_id != "tessara.responses")
+        );
+        assert!(
+            prepared
+                .iter()
+                .all(|source| source.definition_id != "tessara.datasets")
         );
         assert!(prepared.iter().all(|source| {
             source.source_digest.starts_with("sha256:") && source.source_bytes.ends_with(b"\n")
@@ -511,35 +516,7 @@ mod tests {
             .flat_map(|source| &source.findings)
             .filter(|finding| finding.code == "transition_internal_only")
             .count();
-        assert_eq!(dependency_finding_count, 3);
-
-        let response_findings = &prepared
-            .iter()
-            .find(|source| source.definition_id == "tessara.responses")
-            .expect("Responses source")
-            .findings;
-        assert_eq!(
-            response_findings
-                .iter()
-                .map(|finding| (
-                    finding.code.as_str(),
-                    finding.path.as_str(),
-                    finding.message.as_str()
-                ))
-                .collect::<Vec<_>>(),
-            [
-                (
-                    "transition_internal_only",
-                    "dependencies[0]",
-                    "Dependency binding 'tessara.responses.workflow-version' describes current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                ),
-                (
-                    "transition_internal_only",
-                    "dependencies[1]",
-                    "Dependency binding 'tessara.responses.form-version' describes current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                ),
-            ]
-        );
+        assert_eq!(dependency_finding_count, 1);
         assert_eq!(
             (
                 migration.findings[0].path.as_str(),

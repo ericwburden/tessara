@@ -343,19 +343,18 @@ The original Rust crates, Core Axum service, Core database, and root-owned
 feature routes remain the transition baseline only for areas not yet
 extracted. Sprint 6C established Dashboard's process and database boundary,
 and Sprint 6E completed its canonical SDK/runtime adoption and source/build
-independence. Sprint 8A applies that completed pathway to Components, which now
-has its own independently built and deployed Module Release/Instance,
-database, product routes, and assets. Existing in-process feature-crate
-boundaries remain useful extraction seams, but compile-time separation inside
-Core is not the target.
+independence. Sprint 8A applied that completed pathway to Components, Sprint 8B
+to Datasets, and Sprint 8C to Responses. Each now has an independently built
+and deployed Module Release/Instance and owner database; full-stack modules own
+their product routes and assets. Existing in-process feature-crate boundaries
+remain useful extraction seams, but compile-time separation inside Core is not
+the target.
 
-Neither Components nor Dashboard appears in Core's frozen transition catalog.
-That catalog contains exactly `tessara.forms`, `tessara.workflows`,
-`tessara.responses`, `tessara.datasets`, and `tessara.migration`. Components
-and Dashboard appear only through their enrolled Module Releases/Instances and
-manifest contributions. The reference navigation order is Scoped Records `7`,
-Components `8`, and Dashboard `9`; Core must not add duplicate inventory or
-navigation entries for either extracted product module.
+Core's frozen transition catalog contains exactly `tessara.forms`,
+`tessara.workflows`, and `tessara.migration`. Responses, Datasets, Components,
+Dashboard, and Scoped Records appear only through enrolled Module
+Releases/Instances and manifest contributions. Core must not add duplicate
+inventory, provider, capability, or navigation entries for an extracted module.
 
 During Sprint 6A, current areas could publish explicitly non-installable
 `transitional_in_process` contribution descriptors for discovery, contracts,

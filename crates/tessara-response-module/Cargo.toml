@@ -7,7 +7,7 @@ publish = false
 
 [features]
 default = []
-sprint-8c-upgrade-baseline = []
+sprint-8c-validation-faults = []
 
 [dependencies]
 anyhow = { workspace = true }
@@ -33,6 +33,7 @@ tessara-forms-contract = { path = "../tessara-forms-contract" }
 tessara-workflows-contract = { path = "../tessara-workflows-contract" }
 tokio = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

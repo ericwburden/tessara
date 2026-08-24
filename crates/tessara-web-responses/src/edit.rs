@@ -22,6 +22,7 @@ pub fn ResponseEditContent(response_id: String) -> impl IntoView {
     let is_saving = RwSignal::new(false);
     let load_error = RwSignal::new(None::<String>);
     let message = RwSignal::new(None::<String>);
+    on_cleanup(|| crate::set_lifecycle_dirty(false));
 
     Effect::new(move |_| {
         load_response_edit_context(

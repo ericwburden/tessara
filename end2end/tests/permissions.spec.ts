@@ -23,6 +23,7 @@ const DASHBOARD_DOCUMENT_ROOT = "#module-content";
 const DATASET_DOCUMENT_ROOT = "#module-content";
 
 type IdResponse = { id: string };
+type ResponseMutationResult = { id: string; revision: number; status: string };
 type CapabilitySummary = { id: string; key: string };
 type RoleSummary = { id: string; name: string };
 type UserSummary = { id: string; email: string };
@@ -194,14 +195,15 @@ type WorkflowAssignmentSummary = {
   has_submitted: boolean;
 };
 type PendingWorkflowWork = { workflow_assignment_id: string; account_id: string };
-type SubmissionSummary = {
+type PermissionResponseSummary = {
   id: string;
   node_id: string;
 };
-type SubmissionDetail = {
+type PermissionResponseDetail = {
   id: string;
   node_id: string;
   status: string;
+  revision: number;
   form_name?: string;
   values?: Array<{
     key: string;
@@ -669,14 +671,14 @@ async function submitPermissionResponse(
   context: APIRequestContext,
   assignmentId: string,
 ) {
-  const submission = await postJson<IdResponse>(
+  const submission = await postJson<ResponseMutationResult>(
     context,
-    `/api/workflow-assignments/${assignmentId}/start`,
-    {},
+    "/api/responses",
+    { workflow_assignment_id: assignmentId },
   );
-  const detail = await getJson<SubmissionDetail>(
+  const detail = await getJson<PermissionResponseDetail>(
     context,
-    `/api/submissions/${submission.id}`,
+    `/api/responses/${submission.id}`,
   );
   const requiredValues = Object.fromEntries(
     (detail.values ?? [])
@@ -684,10 +686,19 @@ async function submitPermissionResponse(
       .map((field) => [field.key, `Evidence for ${RUN_ID}`]),
   );
   expect(Object.keys(requiredValues).length).toBeGreaterThan(0);
-  await putJson<IdResponse>(context, `/api/submissions/${submission.id}/values`, {
-    values: requiredValues,
-  });
-  await postJson<IdResponse>(context, `/api/submissions/${submission.id}/submit`, {});
+  const saved = await putJson<ResponseMutationResult>(
+    context,
+    `/api/responses/${submission.id}/values`,
+    {
+      expected_revision: detail.revision,
+      values: requiredValues,
+    },
+  );
+  await postJson<ResponseMutationResult>(
+    context,
+    `/api/responses/${submission.id}/submit`,
+    { expected_revision: saved.revision },
+  );
 }
 
 async function createPermissionDataset(
@@ -1392,7 +1403,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/workflow-assignment-candidates",
       "/api/workflow-assignments",
       "/api/workflow-assignments/pending",
-      "/api/submissions",
+      "/api/responses",
       "/api/operations/status",
       "/api/datasets",
       `/api/datasets/${fixtures.inScopeDataset.id}/table`,
@@ -1739,10 +1750,10 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       editor.id,
       fixtures.workflowVersionId,
     );
-    const draft = await postJson<IdResponse>(
+    const draft = await postJson<ResponseMutationResult>(
       editorContext,
-      `/api/workflow-assignments/${assignment.id}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: assignment.id },
     );
 
     await signInPage(page, editorEmail);
@@ -1755,7 +1766,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
 
     await signInPage(page, `${RUN_ID}-delegate@tessara.local`);
     await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: `/api/submissions/${draft.id}`, count: 2 },
+      { path: `/api/responses/${draft.id}`, count: 2, status: 404 },
     ], async () => {
       await expectHydratedRoute(page, {
         path: `/responses/${draft.id}/edit`,
@@ -2519,17 +2530,17 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(visibleAssignments.some((item) => item.id === fixtures.inScopeAssignmentId)).toBe(true);
     expect(visibleAssignments.some((item) => item.id === fixtures.outOfScopeAssignmentId)).toBe(false);
 
-    await postJson<IdResponse>(
+    await postJson<ResponseMutationResult>(
       fixtures.scopedManager,
-      `/api/workflow-assignments/${fixtures.inScopeAssignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: fixtures.inScopeAssignmentId },
     );
     await expectStatus(
       fixtures.scopedManager,
       "post",
-      `/api/workflow-assignments/${fixtures.outOfScopeAssignmentId}/start`,
-      [403],
-      {},
+      "/api/responses",
+      [404],
+      { workflow_assignment_id: fixtures.outOfScopeAssignmentId },
     );
     await expectStatus(
       fixtures.scopedManager,
@@ -2545,33 +2556,36 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("submission management combines scope with response ownership", async () => {
-    const ownOutOfScope = await postJson<IdResponse>(
+    const ownOutOfScope = await expectStatus(
       fixtures.scopedManager,
-      `/api/workflow-assignments/${fixtures.outOfScopeOwnerAssignmentId}/start`,
-      {},
+      "post",
+      "/api/responses",
+      [404],
+      { workflow_assignment_id: fixtures.outOfScopeOwnerAssignmentId },
     );
-    const ownOutDetail = await getJson<SubmissionDetail>(
-      fixtures.scopedManager,
-      `/api/submissions/${ownOutOfScope.id}`,
-    );
-    expect(ownOutDetail.id).toBe(ownOutOfScope.id);
-    expect(ownOutDetail.node_id).toBe(fixtures.outOfScopeNode.id);
+    expect(await ownOutOfScope.json()).toEqual({
+      error: "not_found",
+      message: "Response was not found",
+    });
 
-    const unrelatedOutOfScope = await postJson<IdResponse>(
+    const unrelatedOutOfScope = await postJson<ResponseMutationResult>(
       fixtures.outOfScopeOwner,
-      `/api/workflow-assignments/${fixtures.outOfScopeAssignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: fixtures.outOfScopeAssignmentId },
     );
     await expectStatus(
       fixtures.scopedManager,
       "get",
-      `/api/submissions/${unrelatedOutOfScope.id}`,
-      [403],
+      `/api/responses/${unrelatedOutOfScope.id}`,
+      [404],
     );
 
-    const submissions = await getJson<SubmissionSummary[]>(fixtures.scopedManager, "/api/submissions");
-    expect(submissions.some((item) => item.id === ownOutOfScope.id)).toBe(false);
-    expect(submissions.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
+    const responses = await getJson<PermissionResponseSummary[]>(
+      fixtures.scopedManager,
+      "/api/responses",
+    );
+    expect(responses.some((item) => item.id === unrelatedOutOfScope.id)).toBe(false);
+    expect(responses.every((item) => fixtures.inScopeNodeIds.has(item.node_id))).toBe(true);
   });
 
   test("owners and delegators can access owned or delegated work only", async () => {
@@ -2586,19 +2600,19 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       false,
     );
 
-    const ownerSubmission = await postJson<IdResponse>(
+    const ownerSubmission = await postJson<ResponseMutationResult>(
       fixtures.owner,
-      `/api/workflow-assignments/${fixtures.ownerAssignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: fixtures.ownerAssignmentId },
     );
-    await getJson(fixtures.owner, `/api/submissions/${ownerSubmission.id}`);
+    await getJson(fixtures.owner, `/api/responses/${ownerSubmission.id}`);
 
     await expectStatus(
       fixtures.owner,
       "post",
-      `/api/workflow-assignments/${fixtures.delegateAssignmentId}/start`,
-      [403],
-      {},
+      "/api/responses",
+      [404],
+      { workflow_assignment_id: fixtures.delegateAssignmentId },
     );
 
     const delegatePending = await getJson<PendingWorkflowWork[]>(
@@ -2616,12 +2630,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     expect(delegatedPending.map((item) => item.workflow_assignment_id)).toContain(
       fixtures.delegateAssignmentId,
     );
-    const delegatedSubmission = await postJson<IdResponse>(
+    const delegatedSubmission = await postJson<ResponseMutationResult>(
       fixtures.delegator,
-      `/api/workflow-assignments/${fixtures.delegateAssignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: fixtures.delegateAssignmentId },
     );
-    await getJson(fixtures.delegator, `/api/submissions/${delegatedSubmission.id}`);
+    await getJson(fixtures.delegator, `/api/responses/${delegatedSubmission.id}`);
   });
 
   test("session metadata exposes capabilities, scopes, and delegations without legacy access switches", async () => {
@@ -2751,10 +2765,10 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       editor.id,
       fixtures.workflowVersionId,
     );
-    const responseDraft = await postJson<IdResponse>(
+    const responseDraft = await postJson<ResponseMutationResult>(
       editorContext,
-      `/api/workflow-assignments/${assignment.id}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: assignment.id },
     );
 
     const dataset = await getJson<DatasetDefinition>(

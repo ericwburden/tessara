@@ -144,6 +144,14 @@ pub fn resume_response() {
 }
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
+pub(crate) fn set_lifecycle_dirty(dirty: bool) {
+    LIFECYCLE.with(|lifecycle| lifecycle.borrow_mut().set_dirty(dirty));
+}
+
+#[cfg(not(all(feature = "hydrate", target_arch = "wasm32")))]
+pub(crate) fn set_lifecycle_dirty(_: bool) {}
+
+#[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn unmount_response() {
     LIFECYCLE.with(|lifecycle| lifecycle.borrow_mut().unmount());

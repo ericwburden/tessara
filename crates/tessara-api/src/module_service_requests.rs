@@ -3,7 +3,7 @@
 
 use axum::http::HeaderMap;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 use sqlx::{Postgres, Row, Transaction};
 use tessara_composition::{
@@ -12,9 +12,10 @@ use tessara_composition::{
 };
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantV3, AuthorizationValidationContextV3,
-    CapabilityScopeBindingV1, MODULE_SERVICE_IDENTITIES_ENVIRONMENT, ModuleManifest,
-    ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1, ModuleServiceRequestV1,
-    ModuleServiceRequestValidationContextV1, ProtocolSignaturePurposeV1,
+    CapabilityScopeBindingV1, MODULE_PROVIDER_COMPATIBILITY_PATH,
+    MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT, MODULE_SERVICE_IDENTITIES_ENVIRONMENT,
+    ModuleManifest, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
+    ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1, ProtocolSignaturePurposeV1,
     PurposeBoundVerifyingKeyV1, ServiceActionMethod, SignedEnvelopeV1,
 };
 
@@ -42,6 +43,43 @@ pub(crate) struct CoreProviderAuthorizationPayloadV1 {
     pub(crate) capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
     pub(crate) delegation_basis: Vec<tessara_module_contract::DelegationBasisV1>,
 }
+
+#[derive(Clone, Debug)]
+pub(crate) struct VerifiedModuleProviderCompatibilityInvocationV1 {
+    pub(crate) installation_id: uuid::Uuid,
+    pub(crate) consumer: ModuleServicePrincipalV1,
+    pub(crate) correlation_id: uuid::Uuid,
+    pub(crate) manifest: ModuleManifest,
+}
+
+const MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY: &str =
+    "SELECT identity.key_id,identity.public_key,identity.public_key_fingerprint,release.manifest
+     FROM module_service_identities identity
+     JOIN module_instances instance ON instance.id=identity.module_instance_id
+     JOIN module_releases release ON release.id=instance.release_id
+     WHERE identity.module_instance_id=$1
+       AND identity.module_definition_id=$2
+       AND instance.installation_id=$3
+       AND instance.definition_id=identity.module_definition_id
+       AND release.definition_id=instance.definition_id
+       AND instance.identity_state='live' AND instance.installed=true
+       AND instance.deployed=true AND instance.configured=true AND instance.enabled=true
+     FOR SHARE OF identity,instance,release";
+
+const CONSUME_MODULE_SERVICE_NONCE_QUERY: &str = "INSERT INTO consumed_module_service_nonces
+       (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
+     VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING";
+
+// Ten minutes is deliberately longer than every signed request or grant
+// accepted by this boundary (currently at most one minute). Expired no-grant
+// replay keys can therefore be retired without reopening a valid replay
+// window. Cleanup is invoked only by the compatibility-probe transaction.
+const MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS: i64 = 600;
+const PRUNE_MODULE_PROVIDER_COMPATIBILITY_NONCES_QUERY: &str =
+    "DELETE FROM consumed_module_service_nonces
+     WHERE module_instance_id=$1
+       AND authorization_jti IS NULL
+       AND consumed_at<$2";
 
 impl AuthorizationGrantConsumption {
     fn authorization_jti(self) -> Option<uuid::Uuid> {
@@ -330,21 +368,15 @@ async fn authorize_bootstrap_core_provider(
             now: Utc::now(),
         })
         .map_err(|_| restricted())?;
-    let consumed = sqlx::query(
-        "INSERT INTO consumed_module_service_nonces
-           (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-    )
-    .bind(service_request.payload.module_instance_id)
-    .bind(service_request.payload.nonce)
-    .bind(Option::<uuid::Uuid>::None)
-    .bind(&service_request.payload.correlation_id)
-    .bind(service_request.payload.issued_at)
-    .execute(&state.pool)
-    .await?;
-    if consumed.rows_affected() != 1 {
-        return Err(restricted());
-    }
+    let consumed = sqlx::query(CONSUME_MODULE_SERVICE_NONCE_QUERY)
+        .bind(service_request.payload.module_instance_id)
+        .bind(service_request.payload.nonce)
+        .bind(Option::<uuid::Uuid>::None)
+        .bind(&service_request.payload.correlation_id)
+        .bind(service_request.payload.issued_at)
+        .execute(&state.pool)
+        .await?;
+    require_fresh_nonce(consumed.rows_affected()).map_err(|_| restricted())?;
     Ok(CoreProviderAuthorizationV1 {
         payload: CoreProviderAuthorizationPayloadV1 {
             installation_id: authorization.payload.installation_id,
@@ -394,6 +426,101 @@ pub(crate) fn require_json_content_type(headers: &HeaderMap) -> ApiResult<()> {
         return Err(restricted_authorization());
     }
     Ok(())
+}
+
+/// Verifies the provider-neutral operational probe used by a module to learn
+/// whether its exact Core-owned dependency actions remain compatible. This
+/// path intentionally has no actor grant and does not require the consumer to
+/// be ready or healthy: the signed probe is itself part of readiness recovery.
+pub(crate) async fn verify_module_provider_compatibility_invocation(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> ApiResult<VerifiedModuleProviderCompatibilityInvocationV1> {
+    if headers.contains_key("x-tessara-authorization")
+        || headers.contains_key("x-tessara-owner-bootstrap-authorization")
+    {
+        return Err(restricted_authorization());
+    }
+    let encoded = headers
+        .get("x-tessara-module-service-request")
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(restricted_authorization)?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(encoded)
+        .map_err(|_| restricted_authorization())?;
+    let envelope: SignedEnvelopeV1<ModuleServiceRequestV1> =
+        serde_json::from_slice(&bytes).map_err(|_| restricted_authorization())?;
+    let correlation_id = verified_correlation_header(headers, parse_correlation(&envelope)?)?;
+    let consumer = ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id: envelope.payload.module_instance_id,
+        module_definition_id: envelope.payload.module_definition_id.clone(),
+    };
+
+    let mut transaction = state.pool.begin().await?;
+    let identity = sqlx::query(MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY)
+        .bind(envelope.payload.module_instance_id)
+        .bind(envelope.payload.module_definition_id.as_str())
+        .bind(envelope.payload.installation_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or_else(restricted_authorization)?;
+    let verifier = source_exact_module_service_verifier(
+        &envelope.payload.module_definition_id,
+        identity.try_get("key_id")?,
+        identity.try_get("public_key")?,
+        identity.try_get("public_key_fingerprint")?,
+    )?;
+    verifier
+        .verify(&envelope)
+        .map_err(|_| restricted_authorization())?;
+    envelope
+        .payload
+        .validate_for(&ModuleServiceRequestValidationContextV1 {
+            installation_id: envelope.payload.installation_id,
+            module_instance_id: envelope.payload.module_instance_id,
+            module_definition_id: envelope.payload.module_definition_id.clone(),
+            method: "POST".into(),
+            path: MODULE_PROVIDER_COMPATIBILITY_PATH.into(),
+            canonical_body_digest: sha256_hex(body),
+            inbound_grant_digest: sha256_hex(
+                MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT.as_bytes(),
+            ),
+            correlation_id: correlation_id.to_string(),
+            now: Utc::now(),
+        })
+        .map_err(|_| restricted_authorization())?;
+
+    let manifest_value: Option<serde_json::Value> = identity.try_get("manifest")?;
+    let manifest: ModuleManifest = manifest_value
+        .and_then(|value| serde_json::from_value(value).ok())
+        .filter(|manifest: &ModuleManifest| {
+            manifest.definition_id == envelope.payload.module_definition_id
+        })
+        .ok_or_else(restricted_authorization)?;
+    let consumed = sqlx::query(CONSUME_MODULE_SERVICE_NONCE_QUERY)
+        .bind(envelope.payload.module_instance_id)
+        .bind(envelope.payload.nonce)
+        .bind(Option::<uuid::Uuid>::None)
+        .bind(&envelope.payload.correlation_id)
+        .bind(envelope.payload.issued_at)
+        .execute(&mut *transaction)
+        .await?;
+    require_fresh_nonce(consumed.rows_affected())?;
+    prune_expired_module_provider_compatibility_nonces(
+        &mut transaction,
+        envelope.payload.module_instance_id,
+        Utc::now(),
+    )
+    .await?;
+    transaction.commit().await?;
+
+    Ok(VerifiedModuleProviderCompatibilityInvocationV1 {
+        installation_id: envelope.payload.installation_id,
+        consumer,
+        correlation_id,
+        manifest,
+    })
 }
 
 /// Projects the source-exact key for one selected Module Instance. A module
@@ -519,24 +646,12 @@ pub(crate) async fn validate_for_principal_with_authorization(
     .fetch_optional(&state.pool)
     .await?
     .ok_or_else(restricted_authorization)?;
-    let key_id: String = identity.try_get("key_id")?;
-    let public_key_encoded: String = identity.try_get("public_key")?;
-    let recorded_fingerprint: String = identity.try_get("public_key_fingerprint")?;
-    let public_key: [u8; 32] = URL_SAFE_NO_PAD
-        .decode(&public_key_encoded)
-        .map_err(|_| restricted_authorization())?
-        .try_into()
-        .map_err(|_| restricted_authorization())?;
-    if recorded_fingerprint != format!("sha256:{}", sha256_hex(&public_key)) {
-        return Err(restricted_authorization());
-    }
-    let verifier = PurposeBoundVerifyingKeyV1::from_public_bytes(
-        module_definition_id.as_str(),
-        key_id,
-        ProtocolSignaturePurposeV1::ModuleServiceRequest,
-        public_key,
-    )
-    .map_err(|_| restricted_authorization())?;
+    let verifier = source_exact_module_service_verifier(
+        module_definition_id,
+        identity.try_get("key_id")?,
+        identity.try_get("public_key")?,
+        identity.try_get("public_key_fingerprint")?,
+    )?;
     verifier
         .verify(&envelope)
         .map_err(|_| restricted_authorization())?;
@@ -557,21 +672,15 @@ pub(crate) async fn validate_for_principal_with_authorization(
         .map_err(|_| restricted_authorization())?;
 
     let mut transaction = state.pool.begin().await?;
-    let consumed = sqlx::query(
-        "INSERT INTO consumed_module_service_nonces
-           (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-    )
-    .bind(envelope.payload.module_instance_id)
-    .bind(envelope.payload.nonce)
-    .bind(expectation.grant_consumption.authorization_jti())
-    .bind(&envelope.payload.correlation_id)
-    .bind(envelope.payload.issued_at)
-    .execute(&mut *transaction)
-    .await?;
-    if consumed.rows_affected() != 1 {
-        return Err(restricted_authorization());
-    }
+    let consumed = sqlx::query(CONSUME_MODULE_SERVICE_NONCE_QUERY)
+        .bind(envelope.payload.module_instance_id)
+        .bind(envelope.payload.nonce)
+        .bind(expectation.grant_consumption.authorization_jti())
+        .bind(&envelope.payload.correlation_id)
+        .bind(envelope.payload.issued_at)
+        .execute(&mut *transaction)
+        .await?;
+    require_fresh_nonce(consumed.rows_affected())?;
     transaction.commit().await?;
     Ok(())
 }
@@ -599,6 +708,58 @@ fn verified_correlation_header(
     Ok(correlation_id)
 }
 
+fn parse_correlation(envelope: &SignedEnvelopeV1<ModuleServiceRequestV1>) -> ApiResult<uuid::Uuid> {
+    uuid::Uuid::parse_str(&envelope.payload.correlation_id)
+        .ok()
+        .filter(|correlation_id| !correlation_id.is_nil())
+        .ok_or_else(restricted_authorization)
+}
+
+fn source_exact_module_service_verifier(
+    module_definition_id: &tessara_module_contract::ModuleDefinitionId,
+    key_id: String,
+    public_key_encoded: String,
+    recorded_fingerprint: String,
+) -> ApiResult<PurposeBoundVerifyingKeyV1> {
+    let public_key: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(&public_key_encoded)
+        .map_err(|_| restricted_authorization())?
+        .try_into()
+        .map_err(|_| restricted_authorization())?;
+    if recorded_fingerprint != format!("sha256:{}", sha256_hex(&public_key)) {
+        return Err(restricted_authorization());
+    }
+    PurposeBoundVerifyingKeyV1::from_public_bytes(
+        module_definition_id.as_str(),
+        key_id,
+        ProtocolSignaturePurposeV1::ModuleServiceRequest,
+        public_key,
+    )
+    .map_err(|_| restricted_authorization())
+}
+
+fn require_fresh_nonce(rows_affected: u64) -> ApiResult<()> {
+    if rows_affected == 1 {
+        Ok(())
+    } else {
+        Err(restricted_authorization())
+    }
+}
+
+async fn prune_expired_module_provider_compatibility_nonces(
+    transaction: &mut Transaction<'_, Postgres>,
+    module_instance_id: uuid::Uuid,
+    now: chrono::DateTime<Utc>,
+) -> ApiResult<()> {
+    let cutoff = now - Duration::seconds(MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS);
+    sqlx::query(PRUNE_MODULE_PROVIDER_COMPATIBILITY_NONCES_QUERY)
+        .bind(module_instance_id)
+        .bind(cutoff)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
+}
+
 fn authorization_header(headers: &HeaderMap) -> ApiResult<&str> {
     headers
         .get("x-tessara-authorization")
@@ -622,10 +783,27 @@ mod tests {
     use std::collections::HashSet;
 
     use axum::http::{HeaderMap, HeaderValue};
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use chrono::Duration;
+    use tessara_composition::{
+        BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_MAX_LIFETIME_SECONDS,
+        OWNER_BOOTSTRAP_AUTHORIZATION_MAX_LIFETIME_SECONDS,
+    };
+    use tessara_module_contract::{
+        AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS, AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
+        CONTRACT_SCHEMA_VERSION_V1, MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS,
+        MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS, ModuleDefinitionId, ModuleServiceRequestV1,
+        ModuleServiceRequestValidationContextV1, ProtocolSignaturePurposeV1,
+        PurposeBoundSigningKeyV1,
+    };
 
     use super::{
-        AuthorizationGrantConsumption, materializing_instance_is_selected,
-        require_json_content_type, verified_correlation_header,
+        AuthorizationGrantConsumption, CONSUME_MODULE_SERVICE_NONCE_QUERY,
+        MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY,
+        MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS,
+        PRUNE_MODULE_PROVIDER_COMPATIBILITY_NONCES_QUERY, materializing_instance_is_selected,
+        require_fresh_nonce, require_json_content_type, sha256_hex,
+        source_exact_module_service_verifier, verified_correlation_header,
     };
 
     #[test]
@@ -734,5 +912,191 @@ mod tests {
             &definition,
             uuid::Uuid::new_v4()
         ));
+    }
+
+    #[test]
+    fn compatibility_probe_recovery_gate_requires_operable_identity_but_not_readiness() {
+        for required in [
+            "instance.identity_state='live'",
+            "instance.installed=true",
+            "instance.deployed=true",
+            "instance.configured=true",
+            "instance.enabled=true",
+            "release.definition_id=instance.definition_id",
+        ] {
+            assert!(
+                MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY.contains(required),
+                "compatibility identity query omitted {required}"
+            );
+        }
+        assert!(!MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY.contains("instance.ready=true"));
+        assert!(!MODULE_PROVIDER_COMPATIBILITY_IDENTITY_QUERY.contains("instance.healthy=true"));
+    }
+
+    #[test]
+    fn compatibility_probe_uses_only_the_enrolled_source_exact_key() {
+        let definition = ModuleDefinitionId::new("example.consumer").unwrap();
+        let enrolled = PurposeBoundSigningKeyV1::from_secret_bytes(
+            definition.as_str(),
+            "consumer-key-1",
+            ProtocolSignaturePurposeV1::ModuleServiceRequest,
+            [3; 32],
+        )
+        .unwrap();
+        let other = PurposeBoundSigningKeyV1::from_secret_bytes(
+            definition.as_str(),
+            "consumer-key-1",
+            ProtocolSignaturePurposeV1::ModuleServiceRequest,
+            [4; 32],
+        )
+        .unwrap();
+        let encoded = URL_SAFE_NO_PAD.encode(enrolled.verifier().public_key_bytes());
+        let fingerprint = format!(
+            "sha256:{}",
+            sha256_hex(&enrolled.verifier().public_key_bytes())
+        );
+        let verifier = source_exact_module_service_verifier(
+            &definition,
+            "consumer-key-1".into(),
+            encoded,
+            fingerprint,
+        )
+        .unwrap();
+        let now = chrono::Utc::now();
+        let payload = ModuleServiceRequestV1 {
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+            installation_id: uuid::Uuid::new_v4(),
+            module_instance_id: uuid::Uuid::new_v4(),
+            module_definition_id: definition,
+            method: "POST".into(),
+            path: tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_PATH.into(),
+            canonical_body_digest: sha256_hex(b"{}"),
+            inbound_grant_digest: sha256_hex(
+                tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT.as_bytes(),
+            ),
+            correlation_id: uuid::Uuid::new_v4().to_string(),
+            nonce: uuid::Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        };
+        verifier
+            .verify(&enrolled.sign(payload.clone()).unwrap())
+            .unwrap();
+        assert!(verifier.verify(&other.sign(payload).unwrap()).is_err());
+        assert!(
+            source_exact_module_service_verifier(
+                &ModuleDefinitionId::new("example.consumer").unwrap(),
+                "consumer-key-1".into(),
+                URL_SAFE_NO_PAD.encode(enrolled.verifier().public_key_bytes()),
+                format!("sha256:{}", "0".repeat(64)),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn compatibility_probe_binds_fixed_context_body_path_correlation_window_and_nonce() {
+        let now = chrono::Utc::now();
+        let installation_id = uuid::Uuid::new_v4();
+        let module_instance_id = uuid::Uuid::new_v4();
+        let definition = ModuleDefinitionId::new("example.consumer").unwrap();
+        let correlation_id = uuid::Uuid::new_v4();
+        let request = ModuleServiceRequestV1 {
+            schema_version: CONTRACT_SCHEMA_VERSION_V1,
+            installation_id,
+            module_instance_id,
+            module_definition_id: definition.clone(),
+            method: "POST".into(),
+            path: tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_PATH.into(),
+            canonical_body_digest: sha256_hex(b"request-body"),
+            inbound_grant_digest: sha256_hex(
+                tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT.as_bytes(),
+            ),
+            correlation_id: correlation_id.to_string(),
+            nonce: uuid::Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        };
+        let expected = ModuleServiceRequestValidationContextV1 {
+            installation_id,
+            module_instance_id,
+            module_definition_id: definition,
+            method: "POST".into(),
+            path: tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_PATH.into(),
+            canonical_body_digest: sha256_hex(b"request-body"),
+            inbound_grant_digest: sha256_hex(
+                tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT.as_bytes(),
+            ),
+            correlation_id: correlation_id.to_string(),
+            now: now + Duration::seconds(1),
+        };
+        request.validate_for(&expected).unwrap();
+
+        let mut wrong = expected.clone();
+        wrong.path = "/api/private/another-path".into();
+        assert!(request.validate_for(&wrong).is_err());
+        wrong = expected.clone();
+        wrong.canonical_body_digest = sha256_hex(b"changed-body");
+        assert!(request.validate_for(&wrong).is_err());
+        wrong = expected.clone();
+        wrong.correlation_id = uuid::Uuid::new_v4().to_string();
+        assert!(request.validate_for(&wrong).is_err());
+        wrong = expected.clone();
+        wrong.inbound_grant_digest = sha256_hex(b"actor-grant");
+        assert!(request.validate_for(&wrong).is_err());
+
+        let mut invalid = request;
+        invalid.nonce = uuid::Uuid::nil();
+        assert!(invalid.validate_for(&expected).is_err());
+        invalid.nonce = uuid::Uuid::new_v4();
+        invalid.expires_at = invalid.issued_at + Duration::seconds(31);
+        assert!(invalid.validate_for(&expected).is_err());
+    }
+
+    #[test]
+    fn compatibility_probe_replay_requires_one_fresh_nonce_insert() {
+        assert!(CONSUME_MODULE_SERVICE_NONCE_QUERY.contains("ON CONFLICT DO NOTHING"));
+        assert!(require_fresh_nonce(1).is_ok());
+        assert!(require_fresh_nonce(0).is_err());
+        assert!(require_fresh_nonce(2).is_err());
+    }
+
+    #[test]
+    fn compatibility_probe_nonce_pruning_is_scoped_and_outlives_every_signed_window() {
+        for required in [
+            "DELETE FROM consumed_module_service_nonces",
+            "module_instance_id=$1",
+            "authorization_jti IS NULL",
+            "consumed_at<$2",
+        ] {
+            assert!(
+                PRUNE_MODULE_PROVIDER_COMPATIBILITY_NONCES_QUERY.contains(required),
+                "compatibility nonce pruning omitted {required}"
+            );
+        }
+        assert!(
+            !PRUNE_MODULE_PROVIDER_COMPATIBILITY_NONCES_QUERY
+                .contains("authorization_jti IS NOT NULL")
+        );
+        let longest_signed_window = [
+            MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+            MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS,
+            AUTHORIZATION_READ_MAX_LIFETIME_SECONDS,
+            AUTHORIZATION_MUTATION_MAX_LIFETIME_SECONDS,
+            BOOTSTRAP_DEPENDENCY_VALIDATION_AUTHORIZATION_MAX_LIFETIME_SECONDS,
+            OWNER_BOOTSTRAP_AUTHORIZATION_MAX_LIFETIME_SECONDS,
+        ]
+        .into_iter()
+        .max()
+        .unwrap();
+        assert!(MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS > longest_signed_window);
+
+        let now = chrono::Utc::now();
+        let cutoff = now - Duration::seconds(MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS);
+        assert!(now - Duration::seconds(longest_signed_window) > cutoff);
+        assert!(
+            now - Duration::seconds(MODULE_PROVIDER_COMPATIBILITY_NONCE_RETENTION_SECONDS + 1)
+                < cutoff
+        );
     }
 }

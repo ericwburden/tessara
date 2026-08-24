@@ -26,7 +26,12 @@ pub(crate) fn ResponseEditForm(
     let revision = RwSignal::new(detail.revision);
 
     view! {
-        <form class="native-form response-edit-form" on:submit=move |event| event.prevent_default()>
+        <form
+            class="native-form response-edit-form"
+            on:input=move |_| crate::set_lifecycle_dirty(true)
+            on:change=move |_| crate::set_lifecycle_dirty(true)
+            on:submit=move |event| event.prevent_default()
+        >
             <section class="organization-detail-card">
                 <h3>{detail.form_name}</h3>
                 <InfoListTable>

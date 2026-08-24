@@ -121,6 +121,7 @@ pub(crate) fn save_response_values(
             {
                 Ok(saved) => {
                     revision.set(saved.revision);
+                    crate::set_lifecycle_dirty(false);
                     message.set(Some("Draft saved.".into()));
                     is_saving.set(false);
                 }
@@ -167,10 +168,13 @@ pub(crate) fn submit_response_values(
             )
             .await
             {
-                Ok(saved) => match submit_response_api(response_id, saved.revision).await {
-                    Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
-                    Err(error) => handle_response_action_error(error, is_saving, message),
-                },
+                Ok(saved) => {
+                    crate::set_lifecycle_dirty(false);
+                    match submit_response_api(response_id, saved.revision).await {
+                        Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
+                        Err(error) => handle_response_action_error(error, is_saving, message),
+                    }
+                }
                 Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });

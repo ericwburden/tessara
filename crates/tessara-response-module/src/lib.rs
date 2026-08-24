@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use axum::{
     Router,
     body::Body,
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::get,
@@ -43,6 +43,7 @@ pub use bootstrap::{
 };
 mod event_provider;
 mod export_provider;
+mod operational;
 mod owner;
 mod private_provider_auth;
 mod product_api;
@@ -50,6 +51,7 @@ mod product_store;
 mod provider_client;
 mod reconciliation_provider;
 mod reverse_provider;
+mod validation_fault;
 pub use owner::{
     CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
     ResponseValueInput, StartResponseClaimCommand, canonical_digest,
@@ -57,20 +59,19 @@ pub use owner::{
 pub use product_store::{
     ResponseAccess, ResponseListFilter, ResponseMutationCommand, SaveResponseCommand,
 };
+pub use validation_fault::{
+    ResponseValidationFaultConfigurationError, ResponseValidationFaultControl,
+};
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.responses";
-pub const CURRENT_MODULE_RELEASE_VERSION: &str = "1.0.0";
-pub const PRIOR_COMPATIBLE_MODULE_RELEASE_VERSION: &str = "0.9.0";
-#[cfg(feature = "sprint-8c-upgrade-baseline")]
-pub const MODULE_RELEASE_VERSION: &str = PRIOR_COMPATIBLE_MODULE_RELEASE_VERSION;
-#[cfg(not(feature = "sprint-8c-upgrade-baseline"))]
-pub const MODULE_RELEASE_VERSION: &str = CURRENT_MODULE_RELEASE_VERSION;
+pub const MODULE_RELEASE_VERSION: &str = "1.0.0";
 pub const RUNTIME_IDENTITY: &str = "responses-runtime";
 pub const MIGRATION_IDENTITY: &str = "responses-migration";
 pub const RESPONSE_PROVIDER_ENDPOINTS_ENVIRONMENT: &str = "TESSARA_RESPONSE_PROVIDER_ENDPOINTS";
 pub const RESPONSE_FORM_BINDING: &str = "tessara.responses.form-version";
 pub const RESPONSE_WORKFLOW_CONTEXT_BINDING: &str = "tessara.responses.workflow-context";
 pub const RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING: &str = "tessara.responses.workflow-assignments";
+pub const RESPONSE_PUBLIC_MUTATION_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
 const REQUIRED_RESPONSE_PROVIDER_BINDINGS: [&str; 3] = [
     RESPONSE_FORM_BINDING,
     RESPONSE_WORKFLOW_CONTEXT_BINDING,
@@ -180,15 +181,8 @@ pub enum ResponseServiceEndpointError {
 }
 
 pub fn manifest() -> tessara_module_contract::ModuleManifest {
-    let mut manifest: tessara_module_contract::ModuleManifest =
-        serde_json::from_str(include_str!("../manifest.json"))
-            .expect("Response manifest is valid current JSON");
-    if cfg!(feature = "sprint-8c-upgrade-baseline") {
-        manifest.release_version = PRIOR_COMPATIBLE_MODULE_RELEASE_VERSION
-            .parse()
-            .expect("valid prior release");
-    }
-    manifest
+    serde_json::from_str(include_str!("../manifest.json"))
+        .expect("Response manifest is valid current JSON")
 }
 
 #[derive(Clone)]
@@ -198,32 +192,56 @@ pub struct ResponseRuntime {
     provider_client: reqwest::Client,
     service_request_signer: Arc<PurposeBoundSigningKeyV1>,
     core_service_request_verifier: PurposeBoundVerifyingKeyV1,
+    core_provider_compatibility_verifier: PurposeBoundVerifyingKeyV1,
     service_identity_registry: ModuleServiceIdentityRegistryV1,
     service_endpoints: ResponseServiceEndpoints,
     core_owner_bootstrap_verifier: PurposeBoundVerifyingKeyV1,
     bootstrap_receipt_signer: Arc<PurposeBoundSigningKeyV1>,
+    validation_fault_control: ResponseValidationFaultControl,
+    operational_projection_cache: Arc<
+        tokio::sync::Mutex<
+            Option<(
+                tokio::time::Instant,
+                operational::ResponseOperationalProjection,
+            )>,
+        >,
+    >,
 }
+
+#[derive(Clone)]
+pub struct ResponseCoreVerifiers {
+    pub runtime: CoreVerifiers,
+    pub service_request: PurposeBoundVerifyingKeyV1,
+    pub provider_compatibility: PurposeBoundVerifyingKeyV1,
+    pub owner_bootstrap: PurposeBoundVerifyingKeyV1,
+}
+
 impl ResponseRuntime {
     pub fn new(
         pool: PgPool,
-        verifiers: CoreVerifiers,
+        core_verifiers: ResponseCoreVerifiers,
         service_request_signer: Arc<PurposeBoundSigningKeyV1>,
-        core_service_request_verifier: PurposeBoundVerifyingKeyV1,
         service_identity_registry: ModuleServiceIdentityRegistryV1,
         service_endpoints: ResponseServiceEndpoints,
-        core_owner_bootstrap_verifier: PurposeBoundVerifyingKeyV1,
         bootstrap_receipt_signer: Arc<PurposeBoundSigningKeyV1>,
+        validation_fault_control: ResponseValidationFaultControl,
     ) -> Self {
         Self {
             pool,
-            verifiers,
-            provider_client: reqwest::Client::new(),
+            verifiers: core_verifiers.runtime,
+            provider_client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("Response provider client configuration is valid"),
             service_request_signer,
-            core_service_request_verifier,
+            core_service_request_verifier: core_verifiers.service_request,
+            core_provider_compatibility_verifier: core_verifiers.provider_compatibility,
             service_identity_registry,
             service_endpoints,
-            core_owner_bootstrap_verifier,
+            core_owner_bootstrap_verifier: core_verifiers.owner_bootstrap,
             bootstrap_receipt_signer,
+            validation_fault_control,
+            operational_projection_cache: Arc::new(tokio::sync::Mutex::new(None)),
         }
     }
 }
@@ -395,8 +413,17 @@ impl ConfigurationProvider for ResponseRuntime {
             .map_err(|_| RuntimeProviderError::Invalid)?
             .normalize()
             .map_err(|_| RuntimeProviderError::Invalid)?;
+        let mut transaction = self
+            .pool
+            .begin()
+            .await
+            .map_err(|_| RuntimeProviderError::Persistence)?;
         sqlx::query("UPDATE response_module_configuration SET schema_version=$1,display_label=$2,provider_request_timeout_seconds=$3,workflow_event_page_size=$4,updated_at=now() WHERE singleton=TRUE")
-            .bind(value.schema_version).bind(&value.display_label).bind(value.provider_request_timeout_seconds).bind(value.workflow_event_page_size).execute(&self.pool).await.map_err(|_| RuntimeProviderError::Persistence)?;
+            .bind(value.schema_version).bind(&value.display_label).bind(value.provider_request_timeout_seconds).bind(value.workflow_event_page_size).execute(&mut *transaction).await.map_err(|_| RuntimeProviderError::Persistence)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| RuntimeProviderError::Persistence)?;
         serde_json::to_value(value).map_err(|_| RuntimeProviderError::Invalid)
     }
 }
@@ -448,40 +475,17 @@ impl SecurityStateProvider for ResponseRuntime {
 #[async_trait]
 impl ReadinessProvider for ResponseRuntime {
     async fn readiness_checks(&self) -> Vec<RuntimeCheck> {
-        let database = sqlx::query_scalar::<_, i32>("SELECT 1")
-            .fetch_one(&self.pool)
+        operational::ResponseOperationalProjection::load_cached(self)
             .await
-            .is_ok();
-        let configuration = self.current().await.is_ok();
-        let enabled = self
-            .current_security_state()
-            .await
-            .ok()
-            .is_some_and(|state| state.enabled);
-        vec![
-            RuntimeCheck {
-                code: "response.database".into(),
-                passing: database,
-                message: "Response database must be available".into(),
-            },
-            RuntimeCheck {
-                code: "response.configuration".into(),
-                passing: configuration,
-                message: "Response configuration must be available".into(),
-            },
-            RuntimeCheck {
-                code: "response.security_state".into(),
-                passing: enabled,
-                message: "Response security projection must be enabled".into(),
-            },
-        ]
+            .checks
     }
 }
 
 #[async_trait]
 impl DiagnosticsProvider for ResponseRuntime {
     async fn diagnostic_facts(&self) -> BTreeMap<String, String> {
-        BTreeMap::from([
+        let projection = operational::ResponseOperationalProjection::load_cached(self).await;
+        let mut facts = BTreeMap::from([
             ("definition".into(), MODULE_DEFINITION_ID.into()),
             ("release".into(), MODULE_RELEASE_VERSION.into()),
             ("database_owner".into(), RUNTIME_IDENTITY.into()),
@@ -489,11 +493,14 @@ impl DiagnosticsProvider for ResponseRuntime {
                 "resource_contract".into(),
                 tessara_responses_contract::RESPONSE_CONTRACT_VERSION.into(),
             ),
-        ])
+        ]);
+        facts.extend(projection.facts);
+        facts
     }
     async fn diagnostic_findings(&self) -> Vec<RuntimeCheck> {
-        self.readiness_checks()
+        operational::ResponseOperationalProjection::load_cached(self)
             .await
+            .diagnostic_checks
             .into_iter()
             .filter(|check| !check.passing)
             .collect()
@@ -501,7 +508,7 @@ impl DiagnosticsProvider for ResponseRuntime {
 }
 
 pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
-    Router::new()
+    let public_api = Router::new()
         .route(
             "/api/responses",
             get(product_api::list_responses).post(product_api::start_response),
@@ -522,6 +529,11 @@ pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
             "/api/responses/{response_id}/submit",
             axum::routing::post(product_api::submit_response),
         )
+        .layer(DefaultBodyLimit::max(
+            RESPONSE_PUBLIC_MUTATION_BODY_LIMIT_BYTES,
+        ));
+    Router::new()
+        .merge(public_api)
         .merge(event_provider::routes())
         .merge(export_provider::routes())
         .merge(reconciliation_provider::routes())
@@ -551,13 +563,21 @@ async fn directory_document(
     State(runtime): State<Arc<ResponseRuntime>>,
     headers: HeaderMap,
 ) -> Response {
+    let title = sqlx::query_scalar::<_, String>(
+        "SELECT display_label FROM response_module_configuration WHERE singleton=true",
+    )
+    .fetch_optional(&runtime.pool)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| "Responses".into());
     document(
         &runtime,
         &headers,
         "responses.list",
         "submissions:read_own",
         "/responses",
-        "Responses",
+        &title,
         ResponseRouteBootstrap::Directory,
     )
     .await
@@ -826,6 +846,22 @@ mod tests {
                 && contract.version.to_string()
                     == tessara_responses_contract::RESPONSE_CONTRACT_VERSION
         }));
+        let delete = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| {
+                route.method == tessara_module_contract::PublicApiMethod::Delete
+                    && route.path_template == "/api/responses/{response_id}"
+            })
+            .expect("Response delete route");
+        assert_eq!(
+            delete
+                .required_capabilities_any_of
+                .iter()
+                .map(tessara_module_contract::SecurityCapabilityId::as_str)
+                .collect::<Vec<_>>(),
+            ["submissions:respond", "submissions:manage"]
+        );
     }
 
     #[test]
@@ -836,8 +872,12 @@ mod tests {
             "CREATE TABLE response_values",
             "CREATE TABLE response_audit_events",
             "CREATE TABLE response_idempotency_receipts",
+            "CREATE TABLE response_provider_observations",
             "CREATE TABLE response_workflow_events",
             "CREATE TABLE response_export_changes",
+            "workflow_consumer_committed_sequence BIGINT NOT NULL",
+            "initial_grant_jti UUID NOT NULL",
+            "initial_correlation_id UUID NOT NULL",
             "form_snapshot JSONB NOT NULL",
             "workflow_context JSONB NOT NULL",
         ] {
@@ -851,7 +891,7 @@ mod tests {
         assert!(!sql.contains("submission_value_multi"));
         assert_eq!(
             format!("{:x}", Sha256::digest(BASELINE)),
-            "b6c550168df05e933f1f19327b9ce0ccb0c498561ac9fa461a334ae9b93058f7"
+            "958c7928d90950f588fa943992430e81fabcfbe23ac52c1ec453291b3b811dbd"
         );
     }
 }

@@ -273,9 +273,9 @@ const SPRINT_5A_SEED_VERSION: &str = "sprint-5a-role-capabilities-v1+sha256.7725
 const SPRINT_5A_SEED_SHA256: &str =
     "7725e889996a73a5655c57106aca6e12d9a5f95e9103f14d7b0fd50fbac96988";
 
-const CURRENT_SEED_VERSION: &str = "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6";
+const CURRENT_SEED_VERSION: &str = "sprint-8c-role-capabilities-v1+sha256.7158b2205008";
 const CURRENT_SEED_SHA256: &str =
-    "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621";
+    "7158b22050089e456e88501181adb21fdeb6b342a8ee4ad7cabcd9b74ec702b0";
 
 const FIXTURE_ACCOUNT_ID: &str = "60000000-0000-0000-0000-000000000002";
 const FIXTURE_SESSION_TOKEN: &str = "60000000-0000-0000-0000-000000000301";

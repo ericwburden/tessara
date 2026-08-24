@@ -97,7 +97,6 @@ SELECT
   + (SELECT COUNT(*) FROM nodes)
   + (SELECT COUNT(*) FROM forms)
   + (SELECT COUNT(*) FROM form_versions)
-  + (SELECT COUNT(*) FROM submissions)
   + (SELECT COUNT(*) FROM workflows)
   + (SELECT COUNT(*) FROM workflow_versions)
   + (SELECT COUNT(*) FROM datasets)

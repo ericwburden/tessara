@@ -4,10 +4,6 @@
 use semver::Version;
 use tessara_module_contract::{AuthorizationGrantOperationV1, ServiceActionMethod};
 
-pub(crate) const RESPONSE_EXPORT_CONTRACT: &str =
-    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID;
-pub(crate) const RESPONSE_EXPORT_CONTRACT_VERSION: &str =
-    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_VERSION;
 pub(crate) const FORM_VERSION_SCHEMA_CONTRACT: &str =
     tessara_forms_contract::FORM_VERSION_SCHEMA_CONTRACT_ID;
 pub(crate) const FORM_VERSION_SCHEMA_CONTRACT_VERSION: &str =
@@ -34,33 +30,6 @@ pub(crate) struct CoreServiceAction {
     pub(crate) required_capability: &'static str,
     pub(crate) functional_contract: &'static str,
 }
-
-const RESPONSE_EXPORT_ACTIONS: [CoreServiceAction; 3] = [
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_START_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_START_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_PAGE_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_PAGE_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-];
 
 const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
     CoreServiceAction {
@@ -132,9 +101,8 @@ pub(crate) fn resolve_service_action(
     functional_contract: &str,
     authorization_action: &str,
 ) -> Option<CoreServiceAction> {
-    RESPONSE_EXPORT_ACTIONS
+    FORM_VERSION_SCHEMA_ACTIONS
         .iter()
-        .chain(FORM_VERSION_SCHEMA_ACTIONS.iter())
         .chain(CONTROL_PLANE_ACTIONS.iter())
         .chain(WORKFLOW_RESPONSE_ACTIONS.iter())
         .copied()
@@ -146,9 +114,6 @@ pub(crate) fn resolve_service_action(
 
 pub(crate) fn contract_version(functional_contract: &str) -> Option<Version> {
     match functional_contract {
-        RESPONSE_EXPORT_CONTRACT => {
-            Some(Version::parse(RESPONSE_EXPORT_CONTRACT_VERSION).expect("static version"))
-        }
         FORM_VERSION_SCHEMA_CONTRACT => {
             Some(Version::parse(FORM_VERSION_SCHEMA_CONTRACT_VERSION).expect("static version"))
         }
@@ -201,6 +166,26 @@ mod tests {
             assert_eq!(declaration.required_capability, "datasets:manage");
             assert_eq!(contract_version(contract).unwrap(), Version::new(1, 0, 0));
         }
+    }
+
+    #[test]
+    fn response_export_is_not_a_core_service_provider() {
+        for action in [
+            tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_ACTION,
+            tessara_responses_contract::RESPONSE_EXPORT_START_ACTION,
+            tessara_responses_contract::RESPONSE_EXPORT_PAGE_ACTION,
+        ] {
+            assert!(
+                resolve_service_action(
+                    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID,
+                    action,
+                )
+                .is_none()
+            );
+        }
+        assert!(
+            contract_version(tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID).is_none()
+        );
     }
 
     #[test]

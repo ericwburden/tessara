@@ -326,8 +326,16 @@ CREATE TABLE workflow_response_event_consumer_state (
     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
     provider_epoch uuid,
     committed_sequence bigint NOT NULL DEFAULT 0 CHECK (committed_sequence >= 0),
+    observed_head_sequence bigint NOT NULL DEFAULT 0 CHECK (observed_head_sequence >= 0),
+    last_attempt_at timestamptz,
     synchronized_at timestamptz,
-    last_error_at timestamptz
+    last_error_at timestamptz,
+    last_error_code text CHECK (last_error_code IN (
+        'response_provider_unavailable',
+        'response_provider_undisclosed',
+        'consumer_failure'
+    )),
+    CHECK ((last_error_at IS NULL) = (last_error_code IS NULL))
 );
 INSERT INTO workflow_response_event_consumer_state (singleton) VALUES (true);
 
@@ -942,7 +950,9 @@ CREATE TABLE core_module_action_declarations (
     functional_contract TEXT NOT NULL,
     action TEXT NOT NULL,
     operation TEXT NOT NULL CHECK (operation IN ('read', 'mutation')),
-    required_capability TEXT NOT NULL,
+    required_capabilities_any_of JSONB NOT NULL
+        CHECK (jsonb_typeof(required_capabilities_any_of) = 'array'
+               AND jsonb_array_length(required_capabilities_any_of) > 0),
     PRIMARY KEY (target_definition_id, dependency_binding, functional_contract, action)
 );
 

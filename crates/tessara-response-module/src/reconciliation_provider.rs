@@ -204,7 +204,7 @@ mod tests {
         nonce: uuid::Uuid,
         expires_at: chrono::DateTime<Utc>,
     ) {
-        sqlx::query("INSERT INTO response_start_claims(one_use_nonce,workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,actor_account_id,idempotency_key_digest,request_digest,expires_at,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'pending')")
+        sqlx::query("INSERT INTO response_start_claims(one_use_nonce,workflow_assignment_id,workflow_instance_id,workflow_step_instance_id,actor_account_id,idempotency_key_digest,request_digest,initial_grant_jti,initial_correlation_id,expires_at,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending')")
             .bind(nonce)
             .bind(uuid::Uuid::from_u128(1))
             .bind(uuid::Uuid::from_u128(2))
@@ -215,6 +215,8 @@ mod tests {
                 "sha256:{:064x}",
                 nonce.as_u128() ^ u128::MAX
             ))
+            .bind(uuid::Uuid::new_v4())
+            .bind(uuid::Uuid::new_v4())
             .bind(expires_at)
             .execute(pool)
             .await

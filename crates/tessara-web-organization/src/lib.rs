@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 //! Public boundary for the Organization feature.
 //!
 //! Re-export only route content components; keep Organization-specific

@@ -52,6 +52,25 @@ function Find-SourcePattern {
     }
 }
 
+function Find-ExactFilePattern {
+    param(
+        [string]$Code,
+        [string[]]$Paths,
+        [string]$Pattern
+    )
+    foreach ($path in $Paths) {
+        $fullPath = Join-Path $repoRoot $path
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
+        $lineNumber = 0
+        foreach ($line in @(Get-Content -LiteralPath $fullPath)) {
+            $lineNumber++
+            if ($line -match $Pattern) {
+                Add-Finding -Code $Code -Path $path -Line $lineNumber -Text $line
+            }
+        }
+    }
+}
+
 foreach ($relative in @(
     "crates/tessara-api/src/submissions",
     "crates/tessara-api/src/response_owner_actions.rs",
@@ -73,7 +92,7 @@ if (Test-Path -LiteralPath (Join-Path $repoRoot $transitionFixture)) {
 
 Find-SourcePattern -Code "core_response_storage_access" `
     -Roots @("crates/tessara-api/src") `
-    -Pattern '\b(FROM|JOIN|INTO|UPDATE|DELETE FROM)\s+(submissions|submission_values|submission_value_multi|submission_audit_events|response_export_state|response_export_changes|response_owner_action_receipts)\b'
+    -Pattern '\b(FROM|JOIN|INTO|UPDATE|DELETE FROM)\s+(submissions|submission_values|submission_value_multi|submission_audit_events|response_export_state|response_export_consumer_checkpoints|response_export_changes|response_owner_action_receipts)\b'
 
 Find-SourcePattern -Code "core_response_route_residue" `
     -Roots @("crates/tessara-api/src", "crates/tessara-web/src") `
@@ -83,6 +102,22 @@ Find-SourcePattern -Code "core_transition_reference_residue" `
     -Roots @("crates/tessara-api/src", "crates/tessara-web/src", "crates/tessara-dataset-module/src") `
     -Pattern 'tessara\.transition\.response'
 
+Find-SourcePattern -Code "core_response_provider_fallback" `
+    -Roots @("crates/tessara-api/src/core_service_providers.rs") `
+    -Pattern 'RESPONSE_EXPORT_(CONTRACT|CHECKPOINT|START|PAGE)|tessara_responses_contract::RESPONSE_EXPORT'
+
+Find-SourcePattern -Code "core_static_response_capability" `
+    -Roots @("crates/tessara-api/src/db.rs") `
+    -Pattern '["'']submissions:(read_own|respond|manage)["'']'
+
+Find-SourcePattern -Code "retired_response_owner_action_contract" `
+    -Roots @(
+        "crates/tessara-responses-contract/src",
+        "crates/tessara-module-contract/src/protocol.rs",
+        "crates/tessara-supervisor/src/lib.rs"
+    ) `
+    -Pattern 'ResponseOwnerAction|/api/admin/responses/owner-actions'
+
 Find-SourcePattern -Code "workflow_direct_response_storage" `
     -Roots @("crates/tessara-api/src/workflows") `
     -Pattern '\b(submissions|submission_values|submission_value_multi|submission_audit_events)\b'
@@ -90,6 +125,20 @@ Find-SourcePattern -Code "workflow_direct_response_storage" `
 Find-SourcePattern -Code "response_definition_branch" `
     -Roots @("crates/tessara-api/src/modules", "crates/tessara-api/src/module_gateway.rs") `
     -Pattern 'tessara\.responses'
+
+Find-ExactFilePattern -Code "active_core_response_test_residue" -Paths @(
+    "crates/tessara-api/tests/workflow_runtime.rs",
+    "crates/tessara-api/tests/modules.rs",
+    "crates/tessara-module-contract/tests/fixtures.rs",
+    "crates/tessara-web/src/features/modules/models.rs",
+    "crates/tessara-web/src/features/modules/detail.rs"
+) -Pattern '(/api/(admin/)?submissions|transition-responses-v1\.json)'
+
+Find-ExactFilePattern -Code "active_script_response_residue" -Paths @(
+    "scripts/smoke.ps1",
+    "scripts/local-refresh-api.ps1",
+    "scripts/local-launch.ps1"
+) -Pattern '(/api/(admin/)?submissions|\bFROM\s+submissions\b)'
 
 $manifestPath = Join-Path $repoRoot "crates/tessara-response-module/manifest.json"
 if (-not (Test-Path -LiteralPath $manifestPath)) {

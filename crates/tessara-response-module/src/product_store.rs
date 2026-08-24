@@ -21,6 +21,8 @@ pub struct ResponseAccess {
     pub installation_id: Uuid,
     pub actor_account_id: Uuid,
     pub delegated_account_ids: BTreeSet<Uuid>,
+    pub respond_node_ids: BTreeSet<Uuid>,
+    pub respond_all: bool,
     pub managed_node_ids: BTreeSet<Uuid>,
     pub manage_all: bool,
 }
@@ -31,6 +33,14 @@ impl ResponseAccess {
             || self.managed_node_ids.contains(&node_id)
             || self.actor_account_id == assignee_account_id
             || self.delegated_account_ids.contains(&assignee_account_id)
+    }
+
+    fn permits_delete(&self, node_id: Uuid, assignee_account_id: Uuid) -> bool {
+        let owner_or_delegate = self.actor_account_id == assignee_account_id
+            || self.delegated_account_ids.contains(&assignee_account_id);
+        let respond_in_scope = self.respond_all || self.respond_node_ids.contains(&node_id);
+        let manage_in_scope = self.manage_all || self.managed_node_ids.contains(&node_id);
+        (owner_or_delegate && respond_in_scope) || manage_in_scope
     }
 }
 
@@ -51,6 +61,8 @@ pub struct SaveResponseCommand {
     pub actor_account_id: Uuid,
     pub idempotency_key_digest: String,
     pub request_digest: String,
+    pub authorization_grant_jti: Uuid,
+    pub authorization_correlation_id: Uuid,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +72,8 @@ pub struct ResponseMutationCommand {
     pub actor_account_id: Uuid,
     pub idempotency_key_digest: String,
     pub request_digest: String,
+    pub authorization_grant_jti: Uuid,
+    pub authorization_correlation_id: Uuid,
 }
 
 impl super::ResponseOwnerRepository {
@@ -174,19 +188,26 @@ impl super::ResponseOwnerRepository {
             command.expected_revision,
             &command.idempotency_key_digest,
             &command.request_digest,
+            (
+                command.authorization_grant_jti,
+                command.authorization_correlation_id,
+            ),
         )?;
-        if let Some(replay) = self
-            .existing_mutation_receipt(
-                command.actor_account_id,
-                "responses.save",
-                &command.idempotency_key_digest,
-                &command.request_digest,
-            )
-            .await?
+        let mut transaction = self.pool.begin().await?;
+        crate::owner::lock_idempotency_key(&mut transaction, &command.idempotency_key_digest)
+            .await?;
+        if let Some(replay) = existing_mutation_receipt_in_transaction(
+            &mut transaction,
+            command.actor_account_id,
+            "responses.save",
+            &command.idempotency_key_digest,
+            &command.request_digest,
+        )
+        .await?
         {
+            transaction.commit().await?;
             return Ok(super::IdempotentCommit::Replayed(replay));
         }
-        let mut transaction = self.pool.begin().await?;
         let locked = lock_response(&mut transaction, command.response_id).await?;
         ensure_mutation_access(access, &locked)?;
         ensure_draft_revision(&locked, command.expected_revision)?;
@@ -252,6 +273,10 @@ impl super::ResponseOwnerRepository {
             "responses.save",
             &command.idempotency_key_digest,
             &command.request_digest,
+            (
+                command.authorization_grant_jti,
+                command.authorization_correlation_id,
+            ),
             &result,
         )
         .await?;
@@ -283,6 +308,27 @@ impl super::ResponseOwnerRepository {
         command: &ResponseMutationCommand,
         kind: FinishKind,
     ) -> Result<super::IdempotentCommit<ResponseMutationResult>, ResponseOwnerError> {
+        let mut transaction = self.pool.begin().await?;
+        let result =
+            Self::finish_mutation_in_transaction(&mut transaction, access, command, kind).await?;
+        transaction.commit().await?;
+        Ok(result)
+    }
+
+    pub(crate) async fn submit_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        access: &ResponseAccess,
+        command: &ResponseMutationCommand,
+    ) -> Result<super::IdempotentCommit<ResponseMutationResult>, ResponseOwnerError> {
+        Self::finish_mutation_in_transaction(transaction, access, command, FinishKind::Submit).await
+    }
+
+    async fn finish_mutation_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        access: &ResponseAccess,
+        command: &ResponseMutationCommand,
+        kind: FinishKind,
+    ) -> Result<super::IdempotentCommit<ResponseMutationResult>, ResponseOwnerError> {
         validate_mutation_envelope(
             access,
             command.actor_account_id,
@@ -290,22 +336,30 @@ impl super::ResponseOwnerRepository {
             command.expected_revision,
             &command.idempotency_key_digest,
             &command.request_digest,
+            (
+                command.authorization_grant_jti,
+                command.authorization_correlation_id,
+            ),
         )?;
         let action = kind.action();
-        if let Some(replay) = self
-            .existing_mutation_receipt(
-                command.actor_account_id,
-                action,
-                &command.idempotency_key_digest,
-                &command.request_digest,
-            )
-            .await?
+        crate::owner::lock_idempotency_key(transaction, &command.idempotency_key_digest).await?;
+        if let Some(replay) = existing_mutation_receipt_in_transaction(
+            transaction,
+            command.actor_account_id,
+            action,
+            &command.idempotency_key_digest,
+            &command.request_digest,
+        )
+        .await?
         {
             return Ok(super::IdempotentCommit::Replayed(replay));
         }
-        let mut transaction = self.pool.begin().await?;
-        let locked = lock_response(&mut transaction, command.response_id).await?;
-        ensure_mutation_access(access, &locked)?;
+        let locked = lock_response(transaction, command.response_id).await?;
+        if kind == FinishKind::Delete {
+            ensure_delete_access(access, &locked)?;
+        } else {
+            ensure_mutation_access(access, &locked)?;
+        }
         ensure_draft_revision(&locked, command.expected_revision)?;
         let schema: FormVersionSchemaResponse =
             serde_json::from_value(locked.form_snapshot.clone())
@@ -314,23 +368,23 @@ impl super::ResponseOwnerRepository {
             .validate_for(schema.form_version_id)
             .map_err(|_| ResponseOwnerError::CorruptSnapshot)?;
         if kind == FinishKind::Submit {
-            ensure_required_values(&mut transaction, command.response_id, &schema).await?;
+            ensure_required_values(transaction, command.response_id, &schema).await?;
         }
         let revision = command.expected_revision + 1;
         let occurred_at: DateTime<Utc> = match kind {
             FinishKind::Submit => sqlx::query_scalar("UPDATE responses SET status='submitted',revision=$2,updated_at=now(),submitted_at=now() WHERE id=$1 RETURNING updated_at")
                 .bind(command.response_id)
                 .bind(i64::try_from(revision).map_err(|_| ResponseOwnerError::InvalidCommand)?)
-                .fetch_one(&mut *transaction)
+                .fetch_one(&mut **transaction)
                 .await?,
             FinishKind::Delete => sqlx::query_scalar("UPDATE responses SET status='deleted',revision=$2,updated_at=now(),deleted_at=now() WHERE id=$1 RETURNING updated_at")
                 .bind(command.response_id)
                 .bind(i64::try_from(revision).map_err(|_| ResponseOwnerError::InvalidCommand)?)
-                .fetch_one(&mut *transaction)
+                .fetch_one(&mut **transaction)
                 .await?,
         };
         append_audit(
-            &mut transaction,
+            transaction,
             command.response_id,
             revision,
             kind.event_name(),
@@ -339,7 +393,7 @@ impl super::ResponseOwnerRepository {
         )
         .await?;
         append_workflow_event(
-            &mut transaction,
+            transaction,
             &locked,
             revision,
             kind.event_kind(),
@@ -348,7 +402,7 @@ impl super::ResponseOwnerRepository {
         .await?;
         if kind == FinishKind::Submit {
             append_export(
-                &mut transaction,
+                transaction,
                 &locked,
                 &schema,
                 command.actor_account_id,
@@ -362,43 +416,47 @@ impl super::ResponseOwnerRepository {
             status: kind.status().into(),
         };
         store_mutation_receipt(
-            &mut transaction,
+            transaction,
             command.actor_account_id,
             action,
             &command.idempotency_key_digest,
             &command.request_digest,
+            (
+                command.authorization_grant_jti,
+                command.authorization_correlation_id,
+            ),
             &result,
         )
         .await?;
-        transaction.commit().await?;
         Ok(super::IdempotentCommit::Applied(result))
     }
+}
 
-    async fn existing_mutation_receipt(
-        &self,
-        actor_account_id: Uuid,
-        action: &str,
-        idempotency_key_digest: &str,
-        request_digest: &str,
-    ) -> Result<Option<ResponseMutationResult>, ResponseOwnerError> {
-        let row = sqlx::query_as::<_, (String, Value)>(
-            "SELECT request_digest,response_body FROM response_idempotency_receipts WHERE actor_account_id=$1 AND action=$2 AND idempotency_key_digest=$3",
-        )
-        .bind(actor_account_id)
-        .bind(action)
-        .bind(idempotency_key_digest)
-        .fetch_optional(&self.pool)
-        .await?;
-        let Some((stored_digest, body)) = row else {
-            return Ok(None);
-        };
-        if stored_digest != request_digest {
-            return Err(ResponseOwnerError::IdempotencyConflict);
-        }
-        serde_json::from_value(body)
-            .map(Some)
-            .map_err(|_| ResponseOwnerError::CorruptReceipt)
+async fn existing_mutation_receipt_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    actor_account_id: Uuid,
+    action: &str,
+    idempotency_key_digest: &str,
+    request_digest: &str,
+) -> Result<Option<ResponseMutationResult>, ResponseOwnerError> {
+    let row = sqlx::query_as::<_, (Uuid, String, String, Value)>(
+        "SELECT actor_account_id,action,request_digest,response_body FROM response_idempotency_receipts WHERE idempotency_key_digest=$1",
+    )
+    .bind(idempotency_key_digest)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    let Some((stored_actor, stored_action, stored_digest, body)) = row else {
+        return Ok(None);
+    };
+    if stored_actor != actor_account_id
+        || stored_action != action
+        || stored_digest != request_digest
+    {
+        return Err(ResponseOwnerError::IdempotencyConflict);
     }
+    serde_json::from_value(body)
+        .map(Some)
+        .map_err(|_| ResponseOwnerError::CorruptReceipt)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -492,13 +550,17 @@ fn validate_mutation_envelope(
     expected_revision: u64,
     idempotency_key_digest: &str,
     request_digest: &str,
+    authorization_identity: (Uuid, Uuid),
 ) -> Result<(), ResponseOwnerError> {
+    let (authorization_grant_jti, authorization_correlation_id) = authorization_identity;
     validate_access(access)?;
     if access.actor_account_id != actor_account_id
         || response_id.is_nil()
         || expected_revision == 0
         || !crate::owner::is_digest(idempotency_key_digest)
         || !crate::owner::is_digest(request_digest)
+        || authorization_grant_jti.is_nil()
+        || authorization_correlation_id.is_nil()
     {
         return Err(ResponseOwnerError::InvalidCommand);
     }
@@ -510,6 +572,17 @@ fn ensure_mutation_access(
     response: &LockedResponse,
 ) -> Result<(), ResponseOwnerError> {
     if access.permits(response.node_id, response.assignee_account_id) {
+        Ok(())
+    } else {
+        Err(ResponseOwnerError::NotFound)
+    }
+}
+
+fn ensure_delete_access(
+    access: &ResponseAccess,
+    response: &LockedResponse,
+) -> Result<(), ResponseOwnerError> {
+    if access.permits_delete(response.node_id, response.assignee_account_id) {
         Ok(())
     } else {
         Err(ResponseOwnerError::NotFound)
@@ -884,13 +957,17 @@ async fn store_mutation_receipt(
     action: &str,
     idempotency_key_digest: &str,
     request_digest: &str,
+    authorization_identity: (Uuid, Uuid),
     result: &ResponseMutationResult,
 ) -> Result<(), ResponseOwnerError> {
-    sqlx::query("INSERT INTO response_idempotency_receipts(actor_account_id,action,idempotency_key_digest,request_digest,response_status,response_body) VALUES($1,$2,$3,$4,200,$5)")
+    let (authorization_grant_jti, authorization_correlation_id) = authorization_identity;
+    sqlx::query("INSERT INTO response_idempotency_receipts(actor_account_id,action,idempotency_key_digest,request_digest,initial_grant_jti,initial_correlation_id,response_status,response_body) VALUES($1,$2,$3,$4,$5,$6,200,$7)")
         .bind(actor_account_id)
         .bind(action)
         .bind(idempotency_key_digest)
         .bind(request_digest)
+        .bind(authorization_grant_jti)
+        .bind(authorization_correlation_id)
         .bind(serde_json::to_value(result).map_err(|_| ResponseOwnerError::InvalidCommand)?)
         .execute(&mut **transaction)
         .await?;
@@ -990,6 +1067,8 @@ mod tests {
             installation_id: Uuid::from_u128(1),
             actor_account_id: Uuid::from_u128(2),
             delegated_account_ids: BTreeSet::new(),
+            respond_node_ids: BTreeSet::new(),
+            respond_all: false,
             managed_node_ids: BTreeSet::new(),
             manage_all: false,
         };

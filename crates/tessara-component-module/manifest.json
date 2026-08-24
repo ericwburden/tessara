@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.components",
   "release_version": "1.1.0",
   "publisher": "tessara.first_party",
@@ -294,14 +294,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -401,7 +401,7 @@
     {
       "path_template": "/api/components",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.list",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -411,7 +411,7 @@
     {
       "path_template": "/api/components/{component_ref}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.get",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -421,7 +421,7 @@
     {
       "path_template": "/api/components/{component_ref}/{kind}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.execute",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -431,7 +431,7 @@
     {
       "path_template": "/api/components/{component_ref}/versions/{version_id}/{kind}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.execute",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -441,7 +441,7 @@
     {
       "path_template": "/api/admin/components",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.create",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -451,7 +451,7 @@
     {
       "path_template": "/api/admin/components",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.list_manageable",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -461,7 +461,7 @@
     {
       "path_template": "/api/admin/components/save",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -471,7 +471,7 @@
     {
       "path_template": "/api/admin/components/{component_id}",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.edit",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -481,7 +481,7 @@
     {
       "path_template": "/api/admin/components/{component_id}",
       "method": "PUT",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.update",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -491,7 +491,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -501,7 +501,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
       "method": "PUT",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -511,7 +511,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
       "method": "DELETE",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.delete_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -521,7 +521,7 @@
     {
       "path_template": "/api/admin/components/validate",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.validate",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -531,7 +531,7 @@
     {
       "path_template": "/api/admin/components/preview",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.preview",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -541,7 +541,7 @@
     {
       "path_template": "/api/admin/components/datasets",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.list_manageable",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -551,7 +551,7 @@
     {
       "path_template": "/api/admin/components/datasets/distinct-values",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.validate",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -561,7 +561,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}/publish",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.publish_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -571,7 +571,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}/lifecycle",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.change_lifecycle",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",

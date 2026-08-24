@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.datasets",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -443,14 +443,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -576,7 +576,7 @@
     {
       "path_template": "/api/datasets",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.list",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -586,7 +586,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.get",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -596,7 +596,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/revisions",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.list_revisions",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -606,7 +606,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/revisions/{revision_id}",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.get_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -616,7 +616,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/table",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.preview_table",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -626,7 +626,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/distinct-values",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.distinct_values",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -636,7 +636,7 @@
     {
       "path_template": "/api/admin/datasets",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.create",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -646,7 +646,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}",
       "method": "DELETE",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.delete",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -656,7 +656,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/tags",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_tags",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -666,7 +666,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/draft-revision",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.save_draft_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -676,7 +676,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.publish_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -686,7 +686,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/label",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_revision_label",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -696,7 +696,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/options",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_revision_options",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -706,7 +706,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
       "method": "DELETE",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.delete_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -716,7 +716,7 @@
     {
       "path_template": "/api/admin/datasets/sql-preview",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.preview_sql",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -726,7 +726,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/sql-preview",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.preview_existing_sql",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -736,7 +736,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/refresh",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.refresh",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -746,7 +746,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/forms",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_forms",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -756,7 +756,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/forms/{form_version_id}",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_form_schema",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -766,7 +766,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/scopes",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_scopes",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -776,7 +776,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/principals",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_principals",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",

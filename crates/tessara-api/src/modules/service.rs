@@ -48,12 +48,12 @@ pub(crate) async fn project_manifest_actions(
     manifest: &ModuleManifest,
 ) -> Result<(), sqlx::Error> {
     for route in &manifest.browser_routes {
-        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,'read',$5) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capabilities_any_of) VALUES($1,$2,$3,$4,'read',$5) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capabilities_any_of=EXCLUDED.required_capabilities_any_of")
             .bind(target_definition_id)
             .bind(route.dependency_binding.as_str())
             .bind(route.functional_contract.as_str())
             .bind(&route.authorization_action)
-            .bind(route.required_capability.as_str())
+            .bind(serde_json::json!([route.required_capability.as_str()]))
             .execute(&mut **tx)
             .await?;
     }
@@ -62,13 +62,13 @@ pub(crate) async fn project_manifest_actions(
             tessara_module_contract::AuthorizationGrantOperationV1::Read => "read",
             tessara_module_contract::AuthorizationGrantOperationV1::Mutation => "mutation",
         };
-        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capability) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capability=EXCLUDED.required_capability")
+        sqlx::query("INSERT INTO core_module_action_declarations(target_definition_id,dependency_binding,functional_contract,action,operation,required_capabilities_any_of) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(target_definition_id,dependency_binding,functional_contract,action) DO UPDATE SET operation=EXCLUDED.operation,required_capabilities_any_of=EXCLUDED.required_capabilities_any_of")
             .bind(target_definition_id)
             .bind(route.dependency_binding.as_str())
             .bind(route.functional_contract.as_str())
             .bind(&route.authorization_action)
             .bind(operation)
-            .bind(route.required_capability.as_str())
+            .bind(serde_json::to_value(&route.required_capabilities_any_of).expect("manifest capability identifiers serialize"))
             .execute(&mut **tx)
             .await?;
     }
@@ -2713,29 +2713,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn inventory_accepts_the_exact_sprint_8b_topology_and_rejects_overlap() {
-        let current_transitions = [
-            "tessara.forms",
-            "tessara.workflows",
-            "tessara.responses",
-            "tessara.migration",
-        ];
+    fn inventory_accepts_the_exact_sprint_8c_topology_and_rejects_overlap() {
+        let current_transitions = ["tessara.forms", "tessara.workflows", "tessara.migration"];
         ensure_no_inventory_definition_overlap(
             current_transitions,
             [
+                "tessara.responses",
                 "tessara.datasets",
                 "tessara.reference.scoped-records",
                 "tessara.components",
                 "tessara.dashboards",
             ],
         )
-        .expect("the four real modules do not overlap the four Core transitions");
+        .expect("the five real modules do not overlap the three Core transitions");
 
         let error = ensure_no_inventory_definition_overlap(
-            current_transitions.into_iter().chain(["tessara.datasets"]),
-            ["tessara.datasets"],
+            current_transitions.into_iter().chain(["tessara.responses"]),
+            ["tessara.responses"],
         )
-        .expect_err("the real Dataset release must never overlap a Dataset transition entry");
+        .expect_err("the real Response release must never overlap a Response transition entry");
         assert_eq!(error.stable_code(), "module_inventory_definition_overlap");
     }
 
@@ -3450,6 +3446,30 @@ mod tests {
         .expect("prior action projection reads");
         assert!(prior_action_exists);
 
+        let response_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-response-module/manifest.json"
+        ))
+        .expect("Response manifest fixture is valid JSON");
+        project_manifest_actions(
+            &mut projection_tx,
+            response_manifest.definition_id.as_str(),
+            &response_manifest,
+        )
+        .await
+        .expect("Response action alternatives project");
+        let delete_capabilities: sqlx::types::Json<Vec<String>> = sqlx::query_scalar(
+            "SELECT required_capabilities_any_of FROM core_module_action_declarations
+             WHERE target_definition_id=$1 AND action='responses.delete'",
+        )
+        .bind(response_manifest.definition_id.as_str())
+        .fetch_one(&mut *projection_tx)
+        .await
+        .expect("Response delete action projection reads");
+        assert_eq!(
+            delete_capabilities.0,
+            ["submissions:respond", "submissions:manage"]
+        );
+
         clear_projected_module_actions(&mut projection_tx)
             .await
             .expect("replacement action projection clears");
@@ -3485,13 +3505,14 @@ mod tests {
                 .iter()
                 .map(|transition| transition.definition_id.as_str())
                 .collect::<BTreeSet<_>>(),
-            BTreeSet::from([
-                "tessara.forms",
-                "tessara.migration",
-                "tessara.responses",
-                "tessara.workflows",
-            ]),
-            "Core must retain exactly the four canonical transition entries; independently deployed modules are excluded"
+            BTreeSet::from(["tessara.forms", "tessara.migration", "tessara.workflows",]),
+            "Core must retain exactly the three canonical transition entries; independently deployed modules are excluded"
+        );
+        assert!(
+            before
+                .transitions
+                .iter()
+                .all(|transition| transition.definition_id != "tessara.responses")
         );
         let canonical_forms_digest = before
             .transitions
@@ -3801,7 +3822,6 @@ mod tests {
         for (contribution_id, order, visible) in [
             ("tessara.forms.navigation", 1, true),
             ("tessara.workflows.navigation", 0, true),
-            ("tessara.responses.navigation", 2, false),
         ] {
             let entry = changed_policy_request
                 .iter_mut()

@@ -12,16 +12,20 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tessara_composition::{BootstrapReceiptV1, OwnerBootstrapRequestV1, OwnerBootstrapResponseV1};
+use tessara_composition::{
+    BootstrapReceiptV1, OwnerBootstrapProviderActionV1, OwnerBootstrapRequestV1,
+    OwnerBootstrapResponseV1,
+};
 use tessara_forms_contract::FormVersionSchemaResponse;
-use tessara_module_contract::{AuthorizationAudienceV1, ModuleDefinitionId};
+use tessara_module_contract::{AuthorizationAudienceV1, ModuleDefinitionId, ServiceActionMethod};
 use tessara_module_runtime::SecurityStateProvider;
 use tessara_responses_contract::{ResponseLifecycleState, ResponseReference};
 use tessara_workflows_contract::WorkflowResponseStartContext;
 use uuid::Uuid;
 
 use crate::{
-    CreateResponseCommand, IdempotentCommit, MODULE_DEFINITION_ID, ResponseAccess,
+    CreateResponseCommand, IdempotentCommit, MODULE_DEFINITION_ID, RESPONSE_FORM_BINDING,
+    RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING, RESPONSE_WORKFLOW_CONTEXT_BINDING, ResponseAccess,
     ResponseMutationCommand, ResponseOwnerError, ResponseOwnerRepository, ResponseRuntime,
     ResponseValueInput, StartResponseClaimCommand, canonical_digest,
 };
@@ -118,15 +122,25 @@ async fn apply(
             Utc::now(),
         )
         .map_err(|_| BootstrapError::Forbidden)?;
+    validate_provider_compatibility_authority(
+        &request.authorization.payload.provider_actions,
+        security.installation_id,
+    )?;
     validate_input(&request.input)?;
+
+    let mut transaction = runtime.pool.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(&request.idempotency_key)
+        .execute(&mut *transaction)
+        .await?;
 
     if let Some((locked, input, revision, sequence, stored)) =
         sqlx::query_as::<_, (String, String, i64, i64, Value)>(
             "SELECT locked_input_digest,input_digest,desired_revision,apply_sequence,receipt
-             FROM response_bootstrap_receipts WHERE idempotency_key=$1",
+             FROM response_bootstrap_receipts WHERE idempotency_key=$1 FOR UPDATE",
         )
         .bind(&request.idempotency_key)
-        .fetch_optional(&runtime.pool)
+        .fetch_optional(&mut *transaction)
         .await?
     {
         if locked != request.locked_input_digest.to_string()
@@ -143,12 +157,13 @@ async fn apply(
             .bootstrap_receipt_signer
             .sign(response.receipt.clone())
             .map_err(|_| BootstrapError::Internal)?;
+        record_provider_compatibility(&mut transaction).await?;
+        transaction.commit().await?;
         return Ok(Json(response));
     }
 
-    let repository = ResponseOwnerRepository::new(runtime.pool.clone());
     let mut resources = BTreeMap::new();
-    for definition in &request.input.responses {
+    for (index, definition) in request.input.responses.iter().enumerate() {
         let mut response = ResponseReference::from_parts(
             security.installation_id,
             security.module_instance_id,
@@ -163,60 +178,53 @@ async fn apply(
             request.input_digest.to_string(),
             definition.resource_key.as_str(),
         ))?;
-        let snapshot = if let Some(snapshot) = repository
-            .replay_create(
-                definition.workflow.started_by_account_id,
-                &identity_digest,
-                &identity_digest,
-            )
-            .await?
-        {
-            snapshot
-        } else {
-            let expires_at = DateTime::parse_from_rfc3339(&definition.workflow.expires_at)
-                .map_err(|_| BootstrapError::Validation)?
-                .with_timezone(&Utc);
-            repository
-                .claim_start(&StartResponseClaimCommand {
-                    workflow_assignment_id: definition.workflow.workflow_assignment_id,
-                    workflow_instance_id: definition.workflow.workflow_instance_id,
-                    workflow_step_instance_id: definition.workflow.workflow_step_instance_id,
-                    one_use_nonce: definition.workflow.one_use_nonce,
-                    actor_account_id: definition.workflow.started_by_account_id,
-                    idempotency_key_digest: identity_digest.clone(),
-                    request_digest: identity_digest.clone(),
-                    expires_at,
-                })
-                .await?;
-            let created = repository
-                .create(&CreateResponseCommand {
-                    response: response.clone(),
-                    form_id: definition.workflow.form_id,
-                    form_version_id: definition.workflow.form_version_id,
-                    node_id: definition.workflow.node_id,
-                    workflow_assignment_id: definition.workflow.workflow_assignment_id,
-                    workflow_version_id: definition.workflow.workflow_version_id,
-                    workflow_step_id: definition.workflow.workflow_step_id,
-                    workflow_instance_id: definition.workflow.workflow_instance_id,
-                    workflow_step_instance_id: definition.workflow.workflow_step_instance_id,
-                    workflow_start_nonce: definition.workflow.one_use_nonce,
-                    assignee_account_id: definition.workflow.assignee_account_id,
-                    started_by_account_id: definition.workflow.started_by_account_id,
-                    delegation_basis: definition.workflow.delegation_basis.clone(),
-                    form_snapshot_digest: canonical_digest(&form_snapshot)?,
-                    form_snapshot,
-                    workflow_context_digest: canonical_digest(&workflow_context)?,
-                    workflow_context,
-                    values: bootstrap_values(definition)?,
-                    idempotency_key_digest: identity_digest.clone(),
-                    request_digest: identity_digest.clone(),
-                })
-                .await?;
-            match created {
-                IdempotentCommit::Applied(snapshot) | IdempotentCommit::Replayed(snapshot) => {
-                    snapshot
-                }
-            }
+        let expires_at = DateTime::parse_from_rfc3339(&definition.workflow.expires_at)
+            .map_err(|_| BootstrapError::Validation)?
+            .with_timezone(&Utc);
+        ResponseOwnerRepository::claim_start_in_transaction(
+            &mut transaction,
+            &StartResponseClaimCommand {
+                workflow_assignment_id: definition.workflow.workflow_assignment_id,
+                workflow_instance_id: definition.workflow.workflow_instance_id,
+                workflow_step_instance_id: definition.workflow.workflow_step_instance_id,
+                one_use_nonce: definition.workflow.one_use_nonce,
+                actor_account_id: definition.workflow.started_by_account_id,
+                idempotency_key_digest: identity_digest.clone(),
+                request_digest: identity_digest.clone(),
+                authorization_grant_jti: request.authorization.payload.jti,
+                authorization_correlation_id: request.authorization.payload.correlation_id,
+                expires_at,
+            },
+        )
+        .await?;
+        let created = ResponseOwnerRepository::create_in_transaction(
+            &mut transaction,
+            &CreateResponseCommand {
+                response: response.clone(),
+                form_id: definition.workflow.form_id,
+                form_version_id: definition.workflow.form_version_id,
+                node_id: definition.workflow.node_id,
+                workflow_assignment_id: definition.workflow.workflow_assignment_id,
+                workflow_version_id: definition.workflow.workflow_version_id,
+                workflow_step_id: definition.workflow.workflow_step_id,
+                workflow_instance_id: definition.workflow.workflow_instance_id,
+                workflow_step_instance_id: definition.workflow.workflow_step_instance_id,
+                workflow_start_nonce: definition.workflow.one_use_nonce,
+                assignee_account_id: definition.workflow.assignee_account_id,
+                started_by_account_id: definition.workflow.started_by_account_id,
+                delegation_basis: definition.workflow.delegation_basis.clone(),
+                form_snapshot_digest: canonical_digest(&form_snapshot)?,
+                form_snapshot,
+                workflow_context_digest: canonical_digest(&workflow_context)?,
+                workflow_context,
+                values: bootstrap_values(definition)?,
+                idempotency_key_digest: identity_digest.clone(),
+                request_digest: identity_digest.clone(),
+            },
+        )
+        .await?;
+        let snapshot = match created {
+            IdempotentCommit::Applied(snapshot) | IdempotentCommit::Replayed(snapshot) => snapshot,
         };
         response = snapshot.response.clone();
         let mut lifecycle_state = snapshot.state;
@@ -228,22 +236,26 @@ async fn apply(
                 installation_id: security.installation_id,
                 actor_account_id: definition.workflow.started_by_account_id,
                 delegated_account_ids: BTreeSet::new(),
+                respond_node_ids: BTreeSet::new(),
+                respond_all: true,
                 managed_node_ids: BTreeSet::new(),
                 manage_all: false,
             };
             let submit_digest = canonical_digest(&(identity_digest.as_str(), "submit"))?;
-            let submitted = match repository
-                .submit(
-                    &access,
-                    &ResponseMutationCommand {
-                        response_id: response.response_id(),
-                        expected_revision: revision,
-                        actor_account_id: definition.workflow.started_by_account_id,
-                        idempotency_key_digest: submit_digest.clone(),
-                        request_digest: submit_digest,
-                    },
-                )
-                .await?
+            let submitted = match ResponseOwnerRepository::submit_in_transaction(
+                &mut transaction,
+                &access,
+                &ResponseMutationCommand {
+                    response_id: response.response_id(),
+                    expected_revision: revision,
+                    actor_account_id: definition.workflow.started_by_account_id,
+                    idempotency_key_digest: submit_digest.clone(),
+                    request_digest: submit_digest,
+                    authorization_grant_jti: request.authorization.payload.jti,
+                    authorization_correlation_id: request.authorization.payload.correlation_id,
+                },
+            )
+            .await?
             {
                 IdempotentCommit::Applied(result) | IdempotentCommit::Replayed(result) => result,
             };
@@ -254,7 +266,7 @@ async fn apply(
             "SELECT COALESCE(MAX(sequence),0) FROM response_workflow_events WHERE response_id=$1",
         )
         .bind(response.response_id())
-        .fetch_one(&runtime.pool)
+        .fetch_one(&mut *transaction)
         .await?;
         let read_back = ResponseBootstrapReadBackV1 {
             schema_version: 1,
@@ -275,9 +287,13 @@ async fn apply(
             format!("{}.read_back", definition.resource_key),
             serde_json::to_string(&read_back).map_err(|_| BootstrapError::Internal)?,
         );
+        runtime
+            .validation_fault_control
+            .fail_after_first_owner_write(index + 1)?;
     }
     let result_digest =
         tessara_composition::canonical_digest(&resources).map_err(|_| BootstrapError::Internal)?;
+    record_provider_compatibility(&mut transaction).await?;
     let response = OwnerBootstrapResponseV1::signed(
         BootstrapReceiptV1 {
             owner: MODULE_DEFINITION_ID.into(),
@@ -302,9 +318,76 @@ async fn apply(
     .bind(request.apply_sequence as i64)
     .bind(request.authorization.payload.jti)
     .bind(serde_json::to_value(&response).map_err(|_| BootstrapError::Internal)?)
-    .execute(&runtime.pool)
+    .execute(&mut *transaction)
     .await?;
+    transaction.commit().await?;
     Ok(Json(response))
+}
+
+fn validate_provider_compatibility_authority(
+    actions: &[OwnerBootstrapProviderActionV1],
+    installation_id: Uuid,
+) -> Result<(), BootstrapError> {
+    let expected = [
+        (
+            RESPONSE_FORM_BINDING,
+            tessara_forms_contract::FORM_VERSION_SCHEMA_CONTRACT_ID,
+            tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+            tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        ),
+        (
+            RESPONSE_WORKFLOW_CONTEXT_BINDING,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_PATH,
+        ),
+        (
+            RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
+            tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
+        ),
+    ];
+    if actions.len() != expected.len()
+        || expected.iter().any(|(binding, contract, action, path)| {
+            actions
+                .iter()
+                .filter(|candidate| {
+                    candidate.dependency_binding == *binding
+                        && candidate.functional_contract == *contract
+                        && candidate.action == *action
+                        && candidate.method == ServiceActionMethod::Post
+                        && candidate.path == *path
+                        && matches!(
+                            candidate.audience,
+                            AuthorizationAudienceV1::CoreInstallation {
+                                installation_id: candidate_installation
+                            } if candidate_installation == installation_id
+                        )
+                })
+                .count()
+                != 1
+        })
+    {
+        return Err(BootstrapError::Forbidden);
+    }
+    Ok(())
+}
+
+async fn record_provider_compatibility(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+) -> Result<(), BootstrapError> {
+    let result = sqlx::query(
+        "UPDATE response_provider_observations
+         SET compatibility_state='compatible',last_observed_at=now(),last_compatible_at=now(),
+             last_stable_finding=NULL",
+    )
+    .execute(&mut **transaction)
+    .await?;
+    if result.rows_affected() != 3 {
+        return Err(BootstrapError::Internal);
+    }
+    Ok(())
 }
 
 fn validate_input(input: &ResponseBootstrapV1) -> Result<(), BootstrapError> {
@@ -436,6 +519,49 @@ mod tests {
                 responses: Vec::new(),
             })
             .is_err()
+        );
+
+        let installation_id = Uuid::from_u128(1);
+        let mut actions = [
+            (
+                RESPONSE_FORM_BINDING,
+                tessara_forms_contract::FORM_VERSION_SCHEMA_CONTRACT_ID,
+                tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+                tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_PATH,
+            ),
+            (
+                RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_PATH,
+            ),
+            (
+                RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
+            ),
+        ]
+        .into_iter()
+        .map(
+            |(binding, contract, action, path)| OwnerBootstrapProviderActionV1 {
+                dependency_binding: binding.into(),
+                functional_contract: contract.into(),
+                action: action.into(),
+                method: ServiceActionMethod::Post,
+                path: path.into(),
+                audience: AuthorizationAudienceV1::CoreInstallation { installation_id },
+            },
+        )
+        .collect::<Vec<_>>();
+        validate_provider_compatibility_authority(&actions, installation_id)
+            .expect("signed bootstrap resolves every exact Core provider action");
+        actions[0].audience = AuthorizationAudienceV1::CoreInstallation {
+            installation_id: Uuid::from_u128(2),
+        };
+        assert!(
+            validate_provider_compatibility_authority(&actions, installation_id).is_err(),
+            "a healthy wrong-owner provider authority must be rejected"
         );
     }
 }

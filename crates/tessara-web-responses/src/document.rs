@@ -14,11 +14,11 @@ pub const RESPONSE_BINDINGS_JS: &str = include_str!("../assets/response-bindings
 pub const RESPONSE_CSS_SHA256: &str =
     "c2e598461f162e4dd73b091788f09890e234287fc0e54e71dcc2b38d7d10a87b";
 pub const RESPONSE_JS_SHA256: &str =
-    "eaecb5e8c2eb344d5b6e1011447fb50973246266c79247bb53af2bd1bd000d67";
+    "258731e47c22e8b3d301669e400c62d24588782c09e0ed47e61df6e6fba7c5a8";
 pub const RESPONSE_BINDINGS_JS_SHA256: &str =
-    "c966ec796b5ef1370fd101a9094d5392490a0eb698b1837e334479351c782090";
+    "67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf";
 pub const RESPONSE_WASM_SHA256: &str =
-    "1916393e4738588ad29e0f07f19ce8a052a8caf7089ef210bcaf27b5178f0f83";
+    "450bbaaeca98338044316f2662abf6a4563279d2da7fbcf25639550e4fe21ea7";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "route", rename_all = "snake_case", deny_unknown_fields)]
@@ -77,4 +77,50 @@ fn escaped_bootstrap_json(bootstrap: &ResponseRouteBootstrap) -> String {
         .replace('>', "\\u003e")
         .replace('\u{2028}', "\\u2028")
         .replace('\u{2029}', "\\u2029")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_entry_asset_supports_complete_documents_and_lifecycle_hosts() {
+        for required in [
+            "hydrate_response",
+            "export async function createModule(host)",
+            "mount_response",
+            "navigate_response",
+            "can_deactivate_response",
+            "suspend_response",
+            "resume_response",
+            "unmount_response",
+            "Discard unsaved Response changes?",
+        ] {
+            assert!(
+                RESPONSE_JS.contains(required),
+                "Response entry asset omitted {required}"
+            );
+        }
+        assert!(!RESPONSE_JS.contains("https://"));
+        assert!(!RESPONSE_JS.contains("http://"));
+    }
+
+    #[test]
+    fn response_route_bootstrap_preserves_all_public_document_shapes() {
+        for bootstrap in [
+            ResponseRouteBootstrap::Directory,
+            ResponseRouteBootstrap::Start,
+            ResponseRouteBootstrap::Detail {
+                response_id: "draft-response".into(),
+            },
+            ResponseRouteBootstrap::Edit {
+                response_id: "draft-response".into(),
+            },
+        ] {
+            let encoded = escaped_bootstrap_json(&bootstrap);
+            let decoded = serde_json::from_str::<ResponseRouteBootstrap>(&encoded)
+                .expect("Response route bootstrap should round trip");
+            assert_eq!(decoded, bootstrap);
+        }
+    }
 }

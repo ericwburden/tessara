@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 use crate::{MODULE_DEFINITION_ID, ResponseRuntime};
 
+const PROVIDER_RESPONSE_LIMIT_BYTES: usize = 1024 * 1024;
+
 #[derive(Clone, Copy)]
 pub(crate) struct ProviderAction {
     pub binding: &'static str,
@@ -60,11 +62,12 @@ where
         .ok()
         .filter(|seconds| (1..=30).contains(seconds))
         .ok_or(ProviderClientError::Internal)?;
-    let response = runtime
+    let response = match runtime
         .provider_client
         .post(format!("{provider_url}{}", target.path))
         .timeout(Duration::from_secs(timeout_seconds))
         .header("content-type", target.media_type)
+        .header("accept", target.media_type)
         .header("x-tessara-authorization", &downstream.encoded)
         .header("x-tessara-module-service-request", service_request)
         .header(
@@ -74,13 +77,22 @@ where
         .body(body)
         .send()
         .await
-        .map_err(|_| ProviderClientError::Unavailable)?;
+    {
+        Ok(response) => response,
+        Err(_) => {
+            record_provider_observation(runtime, target.binding, ProviderClientError::Unavailable)
+                .await;
+            return Err(ProviderClientError::Unavailable);
+        }
+    };
     if !response.status().is_success() {
-        return Err(if response.status().is_server_error() {
+        let error = if response.status().is_server_error() {
             ProviderClientError::Unavailable
         } else {
             ProviderClientError::Restricted
-        });
+        };
+        record_provider_observation(runtime, target.binding, error).await;
+        return Err(error);
     }
     if response
         .headers()
@@ -88,13 +100,25 @@ where
         .and_then(|value| value.to_str().ok())
         != Some(target.media_type)
     {
+        record_provider_observation(runtime, target.binding, ProviderClientError::Incompatible)
+            .await;
         return Err(ProviderClientError::Incompatible);
     }
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|_| ProviderClientError::Unavailable)?;
-    serde_json::from_slice(&bytes).map_err(|_| ProviderClientError::Incompatible)
+    let bytes = match bounded_response_body(response).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            record_provider_observation(runtime, target.binding, error).await;
+            return Err(error);
+        }
+    };
+    let decoded = serde_json::from_slice(&bytes).map_err(|_| ProviderClientError::Incompatible);
+    match decoded {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            record_provider_observation(runtime, target.binding, error).await;
+            Err(error)
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -154,6 +178,7 @@ async fn exchange(
         ))
         .timeout(Duration::from_secs(5))
         .header("content-type", "application/json")
+        .header("accept", "application/json")
         .header("x-tessara-authorization", &inbound_encoded)
         .header("x-tessara-module-service-request", service_request)
         .header(
@@ -171,10 +196,17 @@ async fn exchange(
             ProviderClientError::Restricted
         });
     }
-    let response: AuthorizationExchangeResponseV2 = response
-        .json()
-        .await
-        .map_err(|_| ProviderClientError::Incompatible)?;
+    if response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        != Some("application/json")
+    {
+        return Err(ProviderClientError::Incompatible);
+    }
+    let response: AuthorizationExchangeResponseV2 =
+        serde_json::from_slice(&bounded_response_body(response).await?)
+            .map_err(|_| ProviderClientError::Incompatible)?;
     if response.schema_version != AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2 {
         return Err(ProviderClientError::Incompatible);
     }
@@ -218,9 +250,136 @@ async fn exchange(
     })
 }
 
+pub(crate) async fn bounded_response_body(
+    mut response: reqwest::Response,
+) -> Result<Vec<u8>, ProviderClientError> {
+    if !declared_response_length_is_bounded(response.content_length()) {
+        return Err(ProviderClientError::Incompatible);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| ProviderClientError::Unavailable)?
+    {
+        append_bounded_response_chunk(&mut body, &chunk)?;
+    }
+    Ok(body)
+}
+
+fn declared_response_length_is_bounded(length: Option<u64>) -> bool {
+    length.is_none_or(|length| length <= PROVIDER_RESPONSE_LIMIT_BYTES as u64)
+}
+
+fn append_bounded_response_chunk(
+    body: &mut Vec<u8>,
+    chunk: &[u8],
+) -> Result<(), ProviderClientError> {
+    if body.len().saturating_add(chunk.len()) > PROVIDER_RESPONSE_LIMIT_BYTES {
+        return Err(ProviderClientError::Incompatible);
+    }
+    body.extend_from_slice(chunk);
+    Ok(())
+}
+
+pub(crate) async fn record_provider_compatible(runtime: &ResponseRuntime, binding: &str) {
+    let _ = sqlx::query(
+        "UPDATE response_provider_observations
+         SET compatibility_state='compatible',last_observed_at=now(),last_compatible_at=now(),
+             last_stable_finding=NULL
+         WHERE binding_key=$1",
+    )
+    .bind(binding)
+    .execute(&runtime.pool)
+    .await;
+}
+
+pub(crate) async fn record_provider_observation(
+    runtime: &ResponseRuntime,
+    binding: &str,
+    error: ProviderClientError,
+) {
+    let Some((state, finding)) = provider_observation(binding, error) else {
+        return;
+    };
+    let _ = sqlx::query(
+        "UPDATE response_provider_observations
+         SET compatibility_state=$2,last_observed_at=now(),last_stable_finding=$3
+         WHERE binding_key=$1",
+    )
+    .bind(binding)
+    .bind(state)
+    .bind(finding)
+    .execute(&runtime.pool)
+    .await;
+}
+
+fn provider_observation(
+    binding: &str,
+    error: ProviderClientError,
+) -> Option<(&'static str, &'static str)> {
+    match (binding, error) {
+        (_, ProviderClientError::Restricted | ProviderClientError::Internal) => None,
+        (crate::RESPONSE_FORM_BINDING, ProviderClientError::Unavailable) => {
+            Some(("unavailable", "response.provider.forms.unavailable"))
+        }
+        (crate::RESPONSE_FORM_BINDING, ProviderClientError::Incompatible) => {
+            Some(("incompatible", "response.provider.forms.incompatible"))
+        }
+        (
+            crate::RESPONSE_WORKFLOW_CONTEXT_BINDING | crate::RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+            ProviderClientError::Unavailable,
+        ) => Some(("unavailable", "response.provider.workflow.unavailable")),
+        (
+            crate::RESPONSE_WORKFLOW_CONTEXT_BINDING | crate::RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+            ProviderClientError::Incompatible,
+        ) => Some(("incompatible", "response.provider.workflow.incompatible")),
+        _ => None,
+    }
+}
+
 fn signed_service_request(
     runtime: &ResponseRuntime,
     authorization: &str,
+    path: &str,
+    body: &[u8],
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+    correlation_id: Uuid,
+) -> Result<String, ProviderClientError> {
+    signed_service_request_with_context(
+        runtime,
+        authorization.as_bytes(),
+        path,
+        body,
+        installation_id,
+        module_instance_id,
+        correlation_id,
+    )
+}
+
+pub(crate) fn signed_operational_request(
+    runtime: &ResponseRuntime,
+    path: &str,
+    body: &[u8],
+    installation_id: Uuid,
+    module_instance_id: Uuid,
+    correlation_id: Uuid,
+) -> Result<String, ProviderClientError> {
+    signed_service_request_with_context(
+        runtime,
+        tessara_module_contract::MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT.as_bytes(),
+        path,
+        body,
+        installation_id,
+        module_instance_id,
+        correlation_id,
+    )
+}
+
+fn signed_service_request_with_context(
+    runtime: &ResponseRuntime,
+    inbound_context: &[u8],
     path: &str,
     body: &[u8],
     installation_id: Uuid,
@@ -237,7 +396,7 @@ fn signed_service_request(
         method: "POST".into(),
         path: path.into(),
         canonical_body_digest: sha256_hex(body),
-        inbound_grant_digest: sha256_hex(authorization.as_bytes()),
+        inbound_grant_digest: sha256_hex(inbound_context),
         correlation_id: correlation_id.to_string(),
         nonce: Uuid::new_v4(),
         issued_at: now,
@@ -265,4 +424,60 @@ pub(crate) enum ProviderClientError {
     Incompatible,
     #[error("provider client failed")]
     Internal,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_response_bound_rejects_declared_and_streamed_overflow() {
+        assert!(declared_response_length_is_bounded(None));
+        assert!(declared_response_length_is_bounded(Some(
+            PROVIDER_RESPONSE_LIMIT_BYTES as u64
+        )));
+        assert!(!declared_response_length_is_bounded(Some(
+            PROVIDER_RESPONSE_LIMIT_BYTES as u64 + 1
+        )));
+
+        let mut body = vec![0; PROVIDER_RESPONSE_LIMIT_BYTES - 1];
+        append_bounded_response_chunk(&mut body, &[1]).expect("exact response limit");
+        assert_eq!(body.len(), PROVIDER_RESPONSE_LIMIT_BYTES);
+        assert_eq!(
+            append_bounded_response_chunk(&mut body, &[2]),
+            Err(ProviderClientError::Incompatible)
+        );
+    }
+
+    #[test]
+    fn provider_observation_is_sanitized_and_binding_specific() {
+        assert_eq!(
+            provider_observation(
+                crate::RESPONSE_FORM_BINDING,
+                ProviderClientError::Incompatible,
+            ),
+            Some(("incompatible", "response.provider.forms.incompatible"))
+        );
+        assert_eq!(
+            provider_observation(
+                crate::RESPONSE_WORKFLOW_CONTEXT_BINDING,
+                ProviderClientError::Unavailable,
+            ),
+            Some(("unavailable", "response.provider.workflow.unavailable"))
+        );
+        assert_eq!(
+            provider_observation(
+                crate::RESPONSE_WORKFLOW_ASSIGNMENTS_BINDING,
+                ProviderClientError::Restricted,
+            ),
+            None
+        );
+        assert_eq!(
+            provider_observation(
+                "tessara.responses.unknown",
+                ProviderClientError::Unavailable
+            ),
+            None
+        );
+    }
 }
