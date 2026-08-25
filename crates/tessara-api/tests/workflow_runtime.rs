@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use axum::{
     body::{Body, to_bytes},
@@ -45,22 +45,43 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         authorized_request("GET", "/api/workflows", &admin_token, None),
     )
     .await;
-    let linked_workflow = workflows
+    let workflow_items = workflows
         .as_array()
-        .expect("workflow list should be an array")
+        .expect("workflow list should be an array");
+    let generated_source_form_ids = workflow_items
         .iter()
-        .find(|workflow| workflow["slug"] == "demo-session-log-workflow")
-        .cloned()
-        .expect("seeded form should expose a linked workflow");
-    assert!(
-        workflows
-            .as_array()
-            .expect("workflow list should be an array")
-            .len()
-            >= seed["form_count"]
-                .as_u64()
-                .expect("seed should report form_count") as usize
+        .filter(|workflow| workflow["source"] == "generated_form")
+        .map(|workflow| {
+            workflow["source_form_id"]
+                .as_str()
+                .expect("generated workflow should expose its source form id")
+        })
+        .collect::<BTreeSet<_>>();
+    let expected_generated_source_form_ids = [
+        "program_form_id",
+        "activity_form_id",
+        "intake_activity_form_id",
+        "workshop_activity_form_id",
+    ]
+    .into_iter()
+    .map(|key| {
+        seed[key]
+            .as_str()
+            .expect("seed should expose every assigned form id")
+    })
+    .collect::<BTreeSet<_>>();
+    assert_eq!(
+        generated_source_form_ids,
+        expected_generated_source_form_ids
     );
+    let linked_workflow = workflow_items
+        .iter()
+        .find(|workflow| {
+            workflow["source"] == "generated_form"
+                && workflow["source_form_id"] == seed["program_form_id"]
+        })
+        .cloned()
+        .expect("seeded Program form should expose its generated workflow");
     assert_eq!(linked_workflow["current_status"], "published");
     assert!(
         linked_workflow["assignment_count"]
@@ -75,9 +96,9 @@ async fn demo_seed_backfills_workflows_and_form_links() {
             "GET",
             &format!(
                 "/api/forms/{}",
-                seed["form_id"]
+                seed["program_form_id"]
                     .as_str()
-                    .expect("seed should include form id")
+                    .expect("seed should include Program form id")
             ),
             &admin_token,
             None,
@@ -109,14 +130,14 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
-    assert_eq!(workflow_detail["workflow_node_type_name"], "Session");
+    assert_eq!(workflow_detail["workflow_node_type_name"], "Program");
     assert!(
         workflow_detail["assignments"]
             .as_array()
             .expect("workflow detail should include assignments")
             .iter()
             .any(|assignment| {
-                assignment["form_id"] == seed["form_id"]
+                assignment["form_id"] == seed["program_form_id"]
                     && assignment["is_active"] == true
                     && assignment["workflow_step_title"]
                         .as_str()
@@ -152,7 +173,12 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
+    assert_eq!(scoped_workflow["id"], seed["program_workflow_id"]);
     assert_eq!(scoped_workflow["workflow_node_type_name"], "Program");
+    assert_eq!(
+        scoped_workflow["versions"][0]["id"],
+        seed["program_workflow_version_id"]
+    );
     assert_eq!(
         scoped_workflow["versions"][0]["workflow_revision_label"],
         "1"
@@ -971,10 +997,11 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 #[tokio::test]
 async fn operations_status_keeps_assignments_usable_when_dataset_provider_is_unavailable() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
+    let state = test_state().await;
+    let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
-    let _seed = request_json(
+    let seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
@@ -991,16 +1018,86 @@ async fn operations_status_keeps_assignments_usable_when_dataset_provider_is_una
     assert!(datasets.is_empty());
     assert_eq!(status["dataset_readiness"]["state"], "unavailable");
     assert!(status["summary"]["dataset_attention_count"].is_null());
-    assert!(
-        status["workflow_assignments"]
-            .as_array()
-            .expect("operations status should include workflow assignments")
-            .iter()
-            .any(|assignment| {
-                assignment["workflow_id"].as_str().is_some()
-                    && assignment["workflow_assignment_id"].as_str().is_some()
-            })
+    let unstarted_assignment = status["workflow_assignments"]
+        .as_array()
+        .expect("operations status should include workflow assignments")
+        .iter()
+        .find(|assignment| {
+            assignment["workflow_assignment_id"] == seed["program_workflow_assignment_id"]
+        })
+        .expect("Operations should retain the unstarted Program workflow assignment");
+    assert_eq!(
+        unstarted_assignment["workflow_id"],
+        seed["program_workflow_id"]
     );
+    assert!(unstarted_assignment["workflow_instance_id"].is_null());
+    assert_eq!(unstarted_assignment["assignment_status"], "Not Started");
+    assert!(unstarted_assignment["current_step_title"].is_null());
+    assert_eq!(unstarted_assignment["completed_step_count"], 0);
+    assert_eq!(unstarted_assignment["total_step_count"], 3);
+    assert_eq!(unstarted_assignment["draft_response_count"], 0);
+    assert_eq!(unstarted_assignment["submitted_response_count"], 0);
+    assert!(unstarted_assignment["started_at"].is_null());
+    assert!(unstarted_assignment["completed_at"].is_null());
+
+    let workflow_assignment_id = seed["program_workflow_assignment_id"]
+        .as_str()
+        .expect("seed should expose Program workflow assignment id")
+        .parse::<uuid::Uuid>()
+        .expect("Program workflow assignment id should be a UUID");
+    let workflow_instance_id = sqlx::query_scalar::<_, uuid::Uuid>(
+        r#"
+        INSERT INTO workflow_instances (
+            workflow_assignment_id,
+            workflow_version_id,
+            node_id,
+            assignee_account_id,
+            started_by_account_id
+        )
+        SELECT id, workflow_version_id, node_id, account_id, account_id
+        FROM workflow_assignments
+        WHERE id = $1
+        RETURNING id
+        "#,
+    )
+    .bind(workflow_assignment_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("test setup should start the Program workflow assignment");
+    sqlx::query(
+        r#"
+        INSERT INTO workflow_step_instances (workflow_instance_id, workflow_step_id)
+        SELECT $1, workflow_step_id
+        FROM workflow_assignments
+        WHERE id = $2
+        "#,
+    )
+    .bind(workflow_instance_id)
+    .bind(workflow_assignment_id)
+    .execute(&state.pool)
+    .await
+    .expect("test setup should start the assigned Workflow step");
+
+    let started_status = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/operations/status", &admin_token, None),
+    )
+    .await;
+    let started_assignment = started_status["workflow_assignments"]
+        .as_array()
+        .expect("operations status should retain started workflow assignments")
+        .iter()
+        .find(|assignment| {
+            assignment["workflow_assignment_id"] == seed["program_workflow_assignment_id"]
+        })
+        .expect("Operations should project the started Program workflow assignment");
+    assert_eq!(
+        started_assignment["workflow_instance_id"],
+        workflow_instance_id.to_string()
+    );
+    assert_eq!(started_assignment["assignment_status"], "In Progress");
+    assert_eq!(started_assignment["current_step_title"], "Program Snapshot");
+    assert!(started_assignment["started_at"].as_str().is_some());
     let app_summary = request_json(
         app.clone(),
         authorized_request("GET", "/api/summary", &admin_token, None),

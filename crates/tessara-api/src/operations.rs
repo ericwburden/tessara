@@ -45,7 +45,7 @@ pub struct OperationsSummary {
 
 #[derive(Serialize)]
 pub struct WorkflowAssignmentStatus {
-    pub workflow_instance_id: Uuid,
+    pub workflow_instance_id: Option<Uuid>,
     pub workflow_assignment_id: Uuid,
     pub workflow_id: Uuid,
     pub workflow_name: String,
@@ -60,7 +60,7 @@ pub struct WorkflowAssignmentStatus {
     pub total_step_count: i64,
     pub draft_response_count: i64,
     pub submitted_response_count: i64,
-    pub started_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
 }
 
@@ -143,23 +143,20 @@ async fn load_workflow_assignments(
     pool: &sqlx::PgPool,
     boundary: &CapabilityBoundary,
 ) -> ApiResult<Vec<WorkflowAssignmentStatus>> {
-    let rows = match boundary {
-        CapabilityBoundary::Global => {
-            sqlx::query(workflow_assignments_sql(false))
-                .fetch_all(pool)
-                .await?
-        }
+    let scope_node_ids = match boundary {
+        CapabilityBoundary::Global => None,
         CapabilityBoundary::Scoped(node_ids) => {
             if node_ids.is_empty() {
                 return Ok(Vec::new());
             }
-            sqlx::query(workflow_assignments_sql(true))
-                .bind(node_ids)
-                .fetch_all(pool)
-                .await?
+            Some(node_ids.clone())
         }
         CapabilityBoundary::None => return Ok(Vec::new()),
     };
+    let rows = sqlx::query(workflow_assignments_sql())
+        .bind(scope_node_ids)
+        .fetch_all(pool)
+        .await?;
 
     rows.into_iter()
         .map(|row| {
@@ -203,115 +200,75 @@ fn assignment_has_all_steps_complete(assignment: &WorkflowAssignmentStatus) -> b
         && assignment.completed_step_count >= assignment.total_step_count
 }
 
-fn workflow_assignments_sql(scoped: bool) -> &'static str {
-    if scoped {
-        r#"
+fn workflow_assignments_sql() -> &'static str {
+    r#"
         SELECT
             workflow_instances.id AS workflow_instance_id,
             workflow_assignments.id AS workflow_assignment_id,
             workflows.id AS workflow_id,
             workflows.name AS workflow_name,
             workflow_versions.version_label AS workflow_version_label,
-            workflow_instances.node_id,
+            workflow_assignments.node_id,
             nodes.name AS node_name,
             accounts.display_name AS assignee_display_name,
             accounts.email AS assignee_email,
-            workflow_instances.status AS assignment_status,
-            current_steps.title AS current_step_title,
-            COUNT(DISTINCT completed_step_instances.id) AS completed_step_count,
-            COUNT(DISTINCT workflow_steps.id) AS total_step_count,
-            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'draft') AS draft_response_count,
-            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'submitted') AS submitted_response_count,
+            COALESCE(workflow_instances.status, 'not_started') AS assignment_status,
+            (
+                SELECT workflow_steps.title
+                FROM workflow_step_instances
+                JOIN workflow_steps ON workflow_steps.id = workflow_step_instances.workflow_step_id
+                WHERE workflow_step_instances.workflow_instance_id = workflow_instances.id
+                  AND workflow_step_instances.status = 'in_progress'
+                ORDER BY workflow_step_instances.started_at DESC, workflow_step_instances.id DESC
+                LIMIT 1
+            ) AS current_step_title,
+            (
+                SELECT COUNT(*)
+                FROM workflow_step_instances
+                WHERE workflow_step_instances.workflow_instance_id = workflow_instances.id
+                  AND workflow_step_instances.status = 'completed'
+            ) AS completed_step_count,
+            (
+                SELECT COUNT(*)
+                FROM workflow_steps
+                WHERE workflow_steps.workflow_version_id = workflow_assignments.workflow_version_id
+            ) AS total_step_count,
+            (
+                SELECT COUNT(*)
+                FROM workflow_response_projection
+                WHERE workflow_response_projection.workflow_instance_id = workflow_instances.id
+                  AND workflow_response_projection.response_state = 'draft'
+            ) AS draft_response_count,
+            (
+                SELECT COUNT(*)
+                FROM workflow_response_projection
+                WHERE workflow_response_projection.workflow_instance_id = workflow_instances.id
+                  AND workflow_response_projection.response_state = 'submitted'
+            ) AS submitted_response_count,
             workflow_instances.created_at AS started_at,
             workflow_instances.completed_at
-        FROM workflow_instances
-        JOIN workflow_assignments ON workflow_assignments.id = workflow_instances.workflow_assignment_id
-        JOIN workflow_versions ON workflow_versions.id = workflow_instances.workflow_version_id
+        FROM workflow_assignments
+        JOIN workflow_versions ON workflow_versions.id = workflow_assignments.workflow_version_id
         JOIN workflows ON workflows.id = workflow_versions.workflow_id
-        JOIN nodes ON nodes.id = workflow_instances.node_id
-        JOIN accounts ON accounts.id = workflow_instances.assignee_account_id
-        LEFT JOIN workflow_step_instances AS active_step_instances
-            ON active_step_instances.workflow_instance_id = workflow_instances.id
-           AND active_step_instances.status = 'in_progress'
-        LEFT JOIN workflow_steps AS current_steps ON current_steps.id = active_step_instances.workflow_step_id
-        LEFT JOIN workflow_step_instances AS completed_step_instances
-            ON completed_step_instances.workflow_instance_id = workflow_instances.id
-           AND completed_step_instances.status = 'completed'
-        LEFT JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_instances.workflow_version_id
-        LEFT JOIN workflow_response_projection AS responses
-            ON responses.workflow_instance_id = workflow_instances.id
-        WHERE workflow_instances.node_id = ANY($1)
-        GROUP BY
-            workflow_instances.id,
-            workflow_assignments.id,
-            workflows.id,
-            workflows.name,
-            workflow_versions.version_label,
-            workflow_instances.node_id,
-            nodes.name,
-            accounts.display_name,
-            accounts.email,
-            workflow_instances.status,
-            current_steps.title,
-            workflow_instances.created_at,
-            workflow_instances.completed_at
-        ORDER BY workflow_instances.created_at DESC, workflow_instances.id
+        JOIN nodes ON nodes.id = workflow_assignments.node_id
+        JOIN accounts ON accounts.id = workflow_assignments.account_id
+        LEFT JOIN LATERAL (
+            SELECT candidate_instances.*
+            FROM workflow_instances AS candidate_instances
+            WHERE candidate_instances.workflow_assignment_id = workflow_assignments.id
+            ORDER BY
+                (candidate_instances.status = 'in_progress') DESC,
+                candidate_instances.created_at DESC,
+                candidate_instances.id DESC
+            LIMIT 1
+        ) AS workflow_instances ON true
+        WHERE ($1::uuid[] IS NULL OR workflow_assignments.node_id = ANY($1))
+          AND (workflow_assignments.is_active OR workflow_instances.id IS NOT NULL)
+        ORDER BY
+            COALESCE(workflow_instances.created_at, workflow_assignments.created_at) DESC,
+            workflow_assignments.id
         LIMIT 100
         "#
-    } else {
-        r#"
-        SELECT
-            workflow_instances.id AS workflow_instance_id,
-            workflow_assignments.id AS workflow_assignment_id,
-            workflows.id AS workflow_id,
-            workflows.name AS workflow_name,
-            workflow_versions.version_label AS workflow_version_label,
-            workflow_instances.node_id,
-            nodes.name AS node_name,
-            accounts.display_name AS assignee_display_name,
-            accounts.email AS assignee_email,
-            workflow_instances.status AS assignment_status,
-            current_steps.title AS current_step_title,
-            COUNT(DISTINCT completed_step_instances.id) AS completed_step_count,
-            COUNT(DISTINCT workflow_steps.id) AS total_step_count,
-            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'draft') AS draft_response_count,
-            COUNT(DISTINCT responses.response_id) FILTER (WHERE responses.response_state = 'submitted') AS submitted_response_count,
-            workflow_instances.created_at AS started_at,
-            workflow_instances.completed_at
-        FROM workflow_instances
-        JOIN workflow_assignments ON workflow_assignments.id = workflow_instances.workflow_assignment_id
-        JOIN workflow_versions ON workflow_versions.id = workflow_instances.workflow_version_id
-        JOIN workflows ON workflows.id = workflow_versions.workflow_id
-        JOIN nodes ON nodes.id = workflow_instances.node_id
-        JOIN accounts ON accounts.id = workflow_instances.assignee_account_id
-        LEFT JOIN workflow_step_instances AS active_step_instances
-            ON active_step_instances.workflow_instance_id = workflow_instances.id
-           AND active_step_instances.status = 'in_progress'
-        LEFT JOIN workflow_steps AS current_steps ON current_steps.id = active_step_instances.workflow_step_id
-        LEFT JOIN workflow_step_instances AS completed_step_instances
-            ON completed_step_instances.workflow_instance_id = workflow_instances.id
-           AND completed_step_instances.status = 'completed'
-        LEFT JOIN workflow_steps ON workflow_steps.workflow_version_id = workflow_instances.workflow_version_id
-        LEFT JOIN workflow_response_projection AS responses
-            ON responses.workflow_instance_id = workflow_instances.id
-        GROUP BY
-            workflow_instances.id,
-            workflow_assignments.id,
-            workflows.id,
-            workflows.name,
-            workflow_versions.version_label,
-            workflow_instances.node_id,
-            nodes.name,
-            accounts.display_name,
-            accounts.email,
-            workflow_instances.status,
-            current_steps.title,
-            workflow_instances.created_at,
-            workflow_instances.completed_at
-        ORDER BY workflow_instances.created_at DESC, workflow_instances.id
-        LIMIT 100
-        "#
-    }
 }
 
 async fn requested_scope_node_ids(

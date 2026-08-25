@@ -11,6 +11,10 @@ use leptos::prelude::*;
 #[component]
 pub(super) fn WorkflowAssignmentMobileCard(instance: WorkflowAssignmentStatus) -> impl IntoView {
     let assignment_href = workflow_assignment_href(&instance);
+    let started_at = match instance.started_at.clone() {
+        Some(value) => view! { <Timestamp value/> }.into_any(),
+        None => view! { <span>"Not started"</span> }.into_any(),
+    };
     view! {
         <article class="related-work-mobile-card operations-mobile-card">
             <header class="related-work-mobile-card__header">
@@ -46,7 +50,7 @@ pub(super) fn WorkflowAssignmentMobileCard(instance: WorkflowAssignmentStatus) -
                 </div>
                 <div>
                     <dt>"Started"</dt>
-                    <dd><Timestamp value=instance.started_at.clone()/></dd>
+                    <dd>{started_at}</dd>
                 </div>
             </dl>
         </article>

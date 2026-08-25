@@ -21,7 +21,7 @@ pub(super) struct OperationsSummary {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub(super) struct WorkflowAssignmentStatus {
-    pub(super) workflow_instance_id: String,
+    pub(super) workflow_instance_id: Option<String>,
     pub(super) workflow_assignment_id: String,
     pub(super) workflow_id: String,
     pub(super) workflow_name: String,
@@ -35,7 +35,7 @@ pub(super) struct WorkflowAssignmentStatus {
     pub(super) total_step_count: i64,
     pub(super) draft_response_count: i64,
     pub(super) submitted_response_count: i64,
-    pub(super) started_at: String,
+    pub(super) started_at: Option<String>,
     pub(super) completed_at: Option<String>,
 }
 
