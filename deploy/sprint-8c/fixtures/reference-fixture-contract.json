@@ -30,8 +30,8 @@
     { "key": "response.submitted.restricted", "kind": "upsert", "state": "submitted", "source": "form.disjoint/v1", "provisioning": "tessara.responses-bootstrap" }
   ],
   "source_bindings": [
-    { "key": "binding.primary", "form_version": "form.primary/v1", "scope": "scope.full", "cursor_partition": "cursor.primary" },
-    { "key": "binding.independent", "form_version": "form.secondary/v1", "scope": "scope.full", "cursor_partition": "cursor.independent", "requires_authorized_empty_page_advancement": true }
+    { "key": "binding.primary", "form_version": "form.primary/v1", "scopes": ["scope.full", "scope.restricted"], "cursor_partition": "cursor.primary" },
+    { "key": "binding.independent", "form_version": "form.secondary/v1", "scopes": ["scope.full"], "cursor_partition": "cursor.independent", "requires_authorized_empty_page_advancement": true }
   ],
   "datasets": [
     { "key": "dataset.base", "sources": ["binding.primary"], "expected": "published-ready" },

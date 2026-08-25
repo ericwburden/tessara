@@ -205,6 +205,78 @@ function Assert-ReferenceFormWorkflowBlueprintAlignment {
     }
 }
 
+function Assert-ReferenceFormDatasetBlueprintAlignment {
+    param(
+        [Parameter(Mandatory)][object]$Fixture,
+        [Parameter(Mandatory)][object]$Blueprint
+    )
+
+    $fixtureForms = @($Fixture.form_versions)
+    foreach ($binding in @($Fixture.source_bindings)) {
+        $bindingKey = [string]$binding.key
+        if ($binding.PSObject.Properties.Name -contains "scope") {
+            throw "Reference source binding '$bindingKey' retains the retired singular scope shape."
+        }
+        $formKey = [string]$binding.form_version
+        $fixtureForm = @($fixtureForms | Where-Object { [string]$_.key -ceq $formKey })
+        if ($fixtureForm.Count -ne 1) {
+            throw "Reference source binding '$bindingKey' uses missing or duplicated Form '$formKey'."
+        }
+        $bindingScopes = @($binding.scopes | ForEach-Object { [string]$_ })
+        $formScopes = @($fixtureForm[0].scopes | ForEach-Object { [string]$_ })
+        if ($bindingScopes.Count -eq 0 -or
+            @($bindingScopes | Sort-Object -Unique).Count -ne $bindingScopes.Count -or
+            (($bindingScopes -join "`n") -cne ($formScopes -join "`n"))) {
+            throw "Reference source binding '$bindingKey' scopes differ from Form '$formKey'."
+        }
+    }
+
+    $datasetModules = @($Blueprint.modules | Where-Object {
+        [string]$_.definition_id -ceq "tessara.datasets"
+    })
+    if ($datasetModules.Count -ne 1) {
+        throw "Reference Blueprint must select Dataset exactly once."
+    }
+    $datasets = @($datasetModules[0].bootstrap.value.datasets)
+    $receiptBindings = @($datasetModules[0].bootstrap.receipt_bindings)
+    $formSourceBindings = @($receiptBindings | Where-Object {
+        [string]$_.source_owner -ceq "core" -and
+        [string]$_.resource_key -clike "form.*/v*.dataset_source"
+    })
+    foreach ($sourceBinding in $formSourceBindings) {
+        $targetPointer = [string]$sourceBinding.target_pointer
+        if ($targetPointer -cnotmatch '^/datasets/([0-9]+)/definition/initial_source$') {
+            throw "Reference Form-backed Dataset binding has invalid target '$targetPointer'."
+        }
+        $datasetIndex = [int]$Matches[1]
+        if ($datasetIndex -ge $datasets.Count) {
+            throw "Reference Form-backed Dataset binding targets missing Dataset index $datasetIndex."
+        }
+        $formKey = ([string]$sourceBinding.resource_key) -replace '\.dataset_source$', ''
+        $fixtureForm = @($fixtureForms | Where-Object { [string]$_.key -ceq $formKey })
+        if ($fixtureForm.Count -ne 1) {
+            throw "Reference Form-backed Dataset uses unknown Form '$formKey'."
+        }
+        $formScopes = @($fixtureForm[0].scopes | ForEach-Object { [string]$_ })
+        $visibilityPrefix = "/datasets/$datasetIndex/definition/visibility_node_ids/"
+        $visibilityBindings = @($receiptBindings | Where-Object {
+            [string]$_.target_pointer -clike "$visibilityPrefix*"
+        } | Sort-Object { [int](([string]$_.target_pointer).Substring($visibilityPrefix.Length)) })
+        $visibilityScopes = @($visibilityBindings | ForEach-Object { [string]$_.resource_key })
+        $declaredVisibility = @($datasets[$datasetIndex].definition.visibility_node_ids)
+        if ($declaredVisibility.Count -ne $formScopes.Count -or
+            $visibilityBindings.Count -ne $formScopes.Count -or
+            @($visibilityBindings | Where-Object {
+                [string]$_.source_owner -cne "core" -or
+                [string]$_.value_encoding -cne "string"
+            }).Count -ne 0 -or
+            (($visibilityScopes -join "`n") -cne ($formScopes -join "`n"))) {
+            $datasetKey = [string]$datasets[$datasetIndex].resource_key
+            throw "Reference Dataset '$datasetKey' visibility does not contain its Form '$formKey' source scopes exactly."
+        }
+    }
+}
+
 function Assert-ReferenceDownstreamBlueprintAlignment {
     param(
         [Parameter(Mandatory)][object]$Fixture,
@@ -697,6 +769,7 @@ $acceptance = Read-TrackedJson "end2end/acceptance-manifest.json"
 Assert-ReferenceFixture $reference
 Assert-ReferenceActorBlueprintAlignment -Fixture $reference -Blueprint $blueprint
 Assert-ReferenceFormWorkflowBlueprintAlignment -Fixture $reference -Blueprint $blueprint
+Assert-ReferenceFormDatasetBlueprintAlignment -Fixture $reference -Blueprint $blueprint
 Assert-ReferenceDownstreamBlueprintAlignment -Fixture $reference -Blueprint $blueprint
 Assert-ProviderFaultFixture $faults
 Assert-UpgradeFixture $upgrade
@@ -741,6 +814,26 @@ if ($SelfTest) {
     } catch { $rejected = $true }
     if (-not $rejected) {
         throw "Acceptance contract self-test admitted a workflow node outside its Form source scopes."
+    }
+
+    $tamperedDatasetBlueprint = $blueprint | ConvertTo-Json -Depth 100 |
+        ConvertFrom-Json -Depth 100
+    $tamperedDatasetModule = @($tamperedDatasetBlueprint.modules | Where-Object {
+        [string]$_.definition_id -ceq "tessara.datasets"
+    })[0]
+    $tamperedDatasetModule.bootstrap.value.datasets[0].definition.visibility_node_ids = @($null)
+    $tamperedDatasetModule.bootstrap.receipt_bindings = @(
+        $tamperedDatasetModule.bootstrap.receipt_bindings | Where-Object {
+            [string]$_.target_pointer -cne "/datasets/0/definition/visibility_node_ids/1"
+        }
+    )
+    $rejected = $false
+    try {
+        Assert-ReferenceFormDatasetBlueprintAlignment -Fixture $reference `
+            -Blueprint $tamperedDatasetBlueprint
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Acceptance contract self-test admitted Dataset visibility narrower than its Form source."
     }
 
     $tamperedDownstreamBlueprint = $blueprint | ConvertTo-Json -Depth 100 |

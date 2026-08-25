@@ -442,6 +442,7 @@
                 "version_label": "Initial",
                 "force_new_major_version": false,
                 "visibility_node_ids": [
+                  null,
                   null
                 ],
                 "initial_source": null,
@@ -657,6 +658,12 @@
             "target_pointer": "/datasets/0/definition/visibility_node_ids/0",
             "source_owner": "core",
             "resource_key": "scope.full",
+            "value_encoding": "string"
+          },
+          {
+            "target_pointer": "/datasets/0/definition/visibility_node_ids/1",
+            "source_owner": "core",
+            "resource_key": "scope.restricted",
             "value_encoding": "string"
           },
           {
