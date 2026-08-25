@@ -65,7 +65,20 @@
   gap: 0.5rem;
 }
 
+.tessara-response .responses-mobile-cards {
+  display: none;
+}
+
 @media (max-width: 780px) {
+  .tessara-response .responses-list .table-wrap {
+    display: none;
+  }
+
+  .tessara-response .responses-mobile-cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+
   .tessara-response .response-form-field {
     grid-column: 1 / -1;
     grid-row: auto;

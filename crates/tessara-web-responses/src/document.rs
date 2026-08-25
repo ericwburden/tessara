@@ -12,7 +12,7 @@ pub const RESPONSE_CSS: &str = include_str!("../assets/response.css");
 pub const RESPONSE_JS: &str = include_str!("../assets/response.js");
 pub const RESPONSE_BINDINGS_JS: &str = include_str!("../assets/response-bindings.js");
 pub const RESPONSE_CSS_SHA256: &str =
-    "c2e598461f162e4dd73b091788f09890e234287fc0e54e71dcc2b38d7d10a87b";
+    "017a7c9c7ffdba2d2d107899efe9d35235cfc797f4c4d95529e347d467f693b7";
 pub const RESPONSE_JS_SHA256: &str =
     "85caaa7f2b12a91ac71616c5d3bffc4cee40309000fb92aefd16427b2dccd45c";
 pub const RESPONSE_BINDINGS_JS_SHA256: &str =

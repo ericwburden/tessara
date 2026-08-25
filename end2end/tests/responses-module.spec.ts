@@ -471,7 +471,9 @@ test.describe("Sprint 8C independent Response module", () => {
       }
     }
     await page.getByRole("tab", { name: "Dependencies", exact: true }).click();
-    const dependencyText = await page.locator(".module-detail-dependencies").innerText();
+    const dependencyText = await page
+      .locator('.module-detail-sections > [data-module-section="dependencies"]')
+      .innerText();
     expect(dependencyText).toContain("tessara.forms.form-version-schema");
     expect(dependencyText).toContain("tessara.workflows.response-context");
     expect(dependencyText).toContain("tessara.workflows.response-assignment-catalog");
