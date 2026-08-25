@@ -186,11 +186,11 @@ function Assert-Sprint8CFormSchema {
     }
     $section = @($Schema.sections)[0]
     Assert-Sprint8CExactProperties -Value $section -Label "Form section" `
-        -Expected @("section_id", "key", "label", "position")
+        -Expected @("section_id", "key", "label", "description", "position")
     $sectionId = Assert-Sprint8CCanonicalUuid -Value ([string]$section.section_id) `
         -Label "Form section"
     if ([string]$section.key -cne $sectionId -or [string]$section.label -cne "Response" -or
-        [int]$section.position -ne 0) {
+        [string]$section.description -cne "" -or [int]$section.position -ne 0) {
         throw "Core FormVersion schema '$($FormDefinition.resource_key)' section content is not exact."
     }
 
@@ -210,7 +210,7 @@ function Assert-Sprint8CFormSchema {
         $actual = $actualFields[$index]
         Assert-Sprint8CExactProperties -Value $actual -Label "Form field" -Expected @(
             "field_id", "key", "label", "field_type", "required", "options", "section_id",
-            "position", "grid_row", "grid_column"
+            "position", "grid_row", "grid_column", "grid_width", "grid_height"
         )
         $fieldId = Assert-Sprint8CCanonicalUuid -Value ([string]$actual.field_id) -Label "Form field"
         if (-not $fieldIds.Add($fieldId) -or
@@ -222,7 +222,8 @@ function Assert-Sprint8CFormSchema {
             [string]$actual.section_id -cne $sectionId -or
             [int]$actual.position -ne [int]$expected.position -or
             [int]$actual.grid_row -ne [int]$expected.grid_row -or
-            [int]$actual.grid_column -ne [int]$expected.grid_column) {
+            [int]$actual.grid_column -ne [int]$expected.grid_column -or
+            [int]$actual.grid_width -ne 1 -or [int]$actual.grid_height -ne 1) {
             throw "Core FormVersion schema '$($FormDefinition.resource_key)' field/type/options/layout is not exact."
         }
     }
@@ -729,6 +730,7 @@ function New-Sprint8CFixtureSelfTestSchema {
         section_id = $sectionId
         key = $sectionId
         label = "Response"
+        description = ""
         position = 0
     })
     $fieldOrdinal = ($Ordinal * 100)
@@ -750,6 +752,8 @@ function New-Sprint8CFixtureSelfTestSchema {
                 position = [int]$_.position
                 grid_row = [int]$_.grid_row
                 grid_column = [int]$_.grid_column
+                grid_width = 1
+                grid_height = 1
             }
         })
     $scopeIds = [string[]]@($FormDefinition.scope_node_keys | ForEach-Object {
@@ -1039,7 +1043,7 @@ function Test-Sprint8CFixturePreparation {
     $schemaCoreReceipt = @($tamperedSchema.receipt.bootstrap_receipts | Where-Object owner -CEQ "core")[0]
     $schema = $schemaCoreReceipt.resource_ids.'form.primary/v1.schema' |
         ConvertFrom-Json -Depth 100
-    $schema.fields[0].grid_column = 99
+    $schema.fields[0].grid_width = 2
     $schemaCoreReceipt.resource_ids.'form.primary/v1.schema' =
         $schema | ConvertTo-Json -Depth 100 -Compress
     try {
