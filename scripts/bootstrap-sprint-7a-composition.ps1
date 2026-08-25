@@ -175,6 +175,7 @@ function Get-Sprint7ARuntimeServiceName {
 
     switch -CaseSensitive ($DefinitionId) {
         "tessara.reference.scoped-records" { "scoped-records"; break }
+        "tessara.responses" { "responses"; break }
         "tessara.datasets" { "datasets"; break }
         "tessara.components" { "components"; break }
         "tessara.dashboards" { "dashboards"; break }
@@ -200,6 +201,7 @@ function Test-Sprint7ABootstrapHelpers {
     }
     $expectedRuntimeServices = [ordered]@{
         "tessara.reference.scoped-records" = "scoped-records"
+        "tessara.responses" = "responses"
         "tessara.datasets" = "datasets"
         "tessara.components" = "components"
         "tessara.dashboards" = "dashboards"

@@ -1137,31 +1137,37 @@
     {
       "destination_id": "tessara.responses.navigation",
       "group_id": "core.main",
-      "order": 6,
+      "order": 4,
+      "visible": true
+    },
+    {
+      "destination_id": "core.operations",
+      "group_id": "core.main",
+      "order": 5,
       "visible": true
     },
     {
       "destination_id": "tessara.datasets.navigation",
       "group_id": "core.main",
-      "order": 7,
+      "order": 6,
       "visible": true
     },
     {
       "destination_id": "tessara.reference.scoped-records.navigation",
       "group_id": "core.main",
-      "order": 8,
+      "order": 7,
       "visible": true
     },
     {
       "destination_id": "tessara.components.navigation",
       "group_id": "core.main",
-      "order": 9,
+      "order": 8,
       "visible": true
     },
     {
       "destination_id": "tessara.dashboards.navigation",
       "group_id": "core.main",
-      "order": 10,
+      "order": 9,
       "visible": true
     },
     {

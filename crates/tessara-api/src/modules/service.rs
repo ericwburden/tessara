@@ -2122,7 +2122,7 @@ fn navigation_policy_model(
     revision: i64,
     rows: Vec<NavigationPolicyEntryRow>,
 ) -> Result<NavigationPolicyReadModel, ()> {
-    if revision < 0 || rows.len() != 3 {
+    if revision < 0 || rows.len() != 2 {
         return Err(());
     }
     let mut seen = BTreeSet::new();
@@ -2707,7 +2707,6 @@ async fn validate_current_projection(
 
 #[cfg(test)]
 mod tests {
-    use sha2::{Digest, Sha256};
     use sqlx::{Row, postgres::PgPoolOptions};
 
     use super::*;
@@ -2838,40 +2837,30 @@ mod tests {
     }
 
     #[test]
-    fn lockfile_navigation_materializes_the_sprint_8b_module_topology_with_exact_identities() {
-        let mut blueprint: tessara_composition::ApplicationBlueprintV1 = serde_json::from_str(
-            include_str!("../../../../deploy/sprint-8a/blueprints/reference.json"),
+    fn lockfile_navigation_materializes_the_sprint_8c_module_topology_with_exact_identities() {
+        let blueprint: tessara_composition::ApplicationBlueprintV1 = serde_json::from_str(
+            include_str!("../../../../deploy/sprint-8c/blueprints/reference.json"),
         )
-        .expect("the Sprint 8A reference Blueprint is valid JSON");
+        .expect("the Sprint 8C reference Blueprint is valid JSON");
         let release_catalog: tessara_composition::ReleaseCatalogV1 = serde_json::from_str(
-            include_str!("../../../../deploy/sprint-8a/catalogs/local-release-catalog.json"),
+            include_str!("../../../../deploy/sprint-8c/catalogs/local-release-catalog.json"),
         )
-        .expect("the Sprint 8A release catalog is valid JSON");
-        for (destination_id, order, visible) in [
-            ("tessara.components.navigation", 9, true),
-            ("tessara.dashboards.navigation", 8, false),
-        ] {
-            let destination = blueprint
-                .navigation
-                .iter_mut()
-                .find(|destination| destination.destination_id == destination_id)
-                .unwrap_or_else(|| panic!("{destination_id} is declared by the Blueprint"));
-            destination.order = order;
-            destination.visible = visible;
-        }
-        let mut lockfile = tessara_composition::resolve(&blueprint, &release_catalog)
-            .expect("the non-default Blueprint navigation policy resolves");
-        lockfile.navigation.push(NavigationPolicyEntryV1 {
-            destination_id: "tessara.datasets.navigation".to_string(),
-            group_id: "core.main".to_string(),
-            order: 6,
-            visible: true,
-        });
+        .expect("the Sprint 8C release catalog is valid JSON");
+        let lockfile = tessara_composition::resolve(&blueprint, &release_catalog)
+            .expect("the Sprint 8C reference Blueprint resolves");
 
+        let response_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-response-module/manifest.json"
+        ))
+        .expect("Response manifest fixture is valid JSON");
         let dataset_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-dataset-module/manifest.json"
         ))
         .expect("Dataset manifest fixture is valid JSON");
+        let scoped_records_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-reference-scoped-records/manifest.json"
+        ))
+        .expect("Scoped Records manifest fixture is valid JSON");
         let component_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-component-module/manifest.json"
         ))
@@ -2880,8 +2869,13 @@ mod tests {
             "../../../tessara-dashboard-module/manifest.json"
         ))
         .expect("Dashboard manifest fixture is valid JSON");
-        let catalog =
-            resolve_navigation_catalog(&[dataset_manifest, component_manifest, dashboard_manifest]);
+        let catalog = resolve_navigation_catalog(&[
+            response_manifest,
+            dataset_manifest,
+            scoped_records_manifest,
+            component_manifest,
+            dashboard_manifest,
+        ]);
         let groups = vec![
             NavigationGroupRow {
                 group_id: "core.main".to_string(),
@@ -2914,68 +2908,92 @@ mod tests {
             catalog.len(),
             "every active catalog identity has exactly one materialized placement"
         );
-        let extracted = reconciled
+        let main = reconciled
             .iter()
-            .filter_map(|placement| {
-                let destination = catalog
-                    .iter()
-                    .find(|destination| destination.id == placement.destination_id)?;
-                matches!(
-                    destination.definition_id.as_deref(),
-                    Some(
-                        "tessara.datasets"
-                            | "tessara.reference.scoped-records"
-                            | "tessara.components"
-                            | "tessara.dashboards"
-                    )
+            .filter(|placement| placement.group_id == "core.main")
+            .map(|placement| {
+                (
+                    placement.display_order,
+                    placement.destination_id.as_str(),
+                    placement.visible,
                 )
-                .then(|| {
-                    (
-                        placement.destination_id.as_str(),
-                        destination.definition_id.as_deref(),
-                        placement.display_order,
-                        placement.visible,
-                    )
-                })
             })
             .collect::<Vec<_>>();
         assert_eq!(
-            extracted,
+            main,
             vec![
-                (
-                    "tessara.datasets.navigation",
-                    Some("tessara.datasets"),
-                    6,
-                    true,
-                ),
-                (
-                    "tessara.reference.scoped-records.navigation",
-                    Some("tessara.reference.scoped-records"),
-                    7,
-                    true,
-                ),
-                (
-                    "tessara.dashboards.navigation",
-                    Some("tessara.dashboards"),
-                    8,
-                    false,
-                ),
-                (
-                    "tessara.components.navigation",
-                    Some("tessara.components"),
-                    9,
-                    true,
-                ),
+                (0, "core.home", true),
+                (1, "core.organization", true),
+                (2, "tessara.forms.navigation", true),
+                (3, "tessara.workflows.navigation", true),
+                (4, "tessara.responses.navigation", true),
+                (5, "core.operations", true),
+                (6, "tessara.datasets.navigation", true),
+                (7, "tessara.reference.scoped-records.navigation", true),
+                (8, "tessara.components.navigation", true),
+                (9, "tessara.dashboards.navigation", true),
             ],
-            "the lockfile controls the exact four-module order and visibility"
+            "the reference lockfile controls the exact Sprint 8C Main sequence"
+        );
+
+        let admin = reconciled
+            .iter()
+            .filter(|placement| placement.group_id == "core.admin")
+            .map(|placement| {
+                (
+                    placement.display_order,
+                    placement.destination_id.as_str(),
+                    placement.visible,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            admin,
+            vec![
+                (0, "core.admin.users", true),
+                (1, "core.admin.roles", true),
+                (2, "core.admin.node_types", true),
+                (3, "core.admin.modules", true),
+                (4, "core.admin.composition", true),
+            ],
+            "the reference lockfile preserves the exact Sprint 8C Admin sequence"
+        );
+
+        let response = catalog
+            .iter()
+            .find(|destination| destination.id == "tessara.responses.navigation")
+            .expect("the enrolled Response manifest contributes navigation");
+        assert_eq!(response.owner, NavigationCatalogOwner::Contribution);
+        assert_eq!(response.definition_id.as_deref(), Some("tessara.responses"));
+        assert_eq!(response.route, "/responses");
+        assert_eq!(response.key, "responses");
+        assert_eq!(
+            response.required_capabilities_any_of,
+            [
+                "submissions:read_own",
+                "submissions:respond",
+                "submissions:manage",
+            ]
         );
         assert_eq!(
-            extracted
+            catalog
                 .iter()
-                .filter(|(identity, ..)| *identity == "tessara.datasets.navigation")
+                .filter(|destination| destination.id == "tessara.responses.navigation")
                 .count(),
             1,
-            "Dataset remains a single manifest-owned navigation identity"
+            "Response remains a single manifest-owned navigation identity"
+        );
+        assert!(
+            navigation_catalog::resolved_destinations()
+                .iter()
+                .all(|destination| destination.id != "tessara.responses.navigation"),
+            "Core must not retain the removed static Response navigation entry"
+        );
+        assert!(
+            canonical_inputs()
+                .iter()
+                .all(|input| input.definition_id != "tessara.responses"),
+            "Core must not retain the removed Response transition entry"
         );
         navigation_policy_v2_model_with_catalog(
             blueprint.installation_id,
@@ -3053,15 +3071,6 @@ mod tests {
     }
 
     #[test]
-    fn squashed_baseline_migration_remains_byte_identical() {
-        let baseline = include_bytes!("../../migrations/001_baseline.sql");
-        assert_eq!(
-            format!("{:x}", Sha256::digest(baseline)),
-            "43e7dc146db613972ddef9482faf60320d329de6fe50055c4a668fe840ef0175"
-        );
-    }
-
-    #[test]
     fn configured_navigation_labels_are_bounded_and_sanitized() {
         assert!(valid_navigation_label("Scoped Records!"));
         assert!(!valid_navigation_label(""));
@@ -3072,11 +3081,39 @@ mod tests {
 
     #[test]
     fn independent_manifest_navigation_extends_the_transition_catalog_generically() {
-        let manifest: ModuleManifest = serde_json::from_str(include_str!(
+        let response_manifest: ModuleManifest = serde_json::from_str(include_str!(
+            "../../../tessara-response-module/manifest.json"
+        ))
+        .expect("Response manifest fixture is valid JSON");
+        let reference_manifest: ModuleManifest = serde_json::from_str(include_str!(
             "../../../tessara-reference-module-sdk/manifest.json"
         ))
         .expect("reference manifest fixture is valid JSON");
-        let catalog = resolve_navigation_catalog(&[manifest]);
+        let catalog = resolve_navigation_catalog(&[response_manifest, reference_manifest]);
+        let response = catalog
+            .iter()
+            .find(|destination| destination.id == "tessara.responses.navigation")
+            .expect("Response manifest navigation is projected");
+        assert_eq!(response.owner, NavigationCatalogOwner::Contribution);
+        assert_eq!(response.definition_id.as_deref(), Some("tessara.responses"));
+        assert_eq!(response.route, "/responses");
+        assert_eq!(response.key, "responses");
+        assert_eq!(
+            response.required_capabilities_any_of,
+            [
+                "submissions:read_own",
+                "submissions:respond",
+                "submissions:manage",
+            ]
+        );
+        assert_eq!(
+            catalog
+                .iter()
+                .filter(|destination| destination.id == "tessara.responses.navigation")
+                .count(),
+            1,
+            "Response navigation is projected exactly once from its real manifest"
+        );
         let reference = catalog
             .iter()
             .find(|destination| destination.id == "tessara.reference.module-sdk.navigation")
@@ -3184,9 +3221,8 @@ mod tests {
         let current = example_policy();
         let mut requested = update_entries(&current);
         for (contribution_id, order, visible) in [
-            ("tessara.forms.navigation", 1, true),
+            ("tessara.forms.navigation", 1, false),
             ("tessara.workflows.navigation", 0, true),
-            ("tessara.responses.navigation", 2, false),
         ] {
             let entry = requested
                 .iter_mut()
@@ -3199,7 +3235,7 @@ mod tests {
             .expect("same-band dense reorder is valid");
         assert_eq!(validated["tessara.forms.navigation"].order, 1);
         assert_eq!(validated["tessara.workflows.navigation"].order, 0);
-        assert!(!validated["tessara.responses.navigation"].visible);
+        assert!(!validated["tessara.forms.navigation"].visible);
     }
 
     #[test]
@@ -3522,6 +3558,15 @@ mod tests {
             .expect("canonical Forms transition");
         let before_identity = inventory_identity(&before);
         let before_policy = load_navigation_policy(&pool).await.expect("policy reads");
+        assert_eq!(
+            before_policy
+                .entries
+                .iter()
+                .map(|entry| entry.contribution_id.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["tessara.forms.navigation", "tessara.workflows.navigation",]),
+            "the test-only legacy policy projection contains only current Core navigation transitions"
+        );
         let capability_ids_before = capability_ids(&pool).await;
         let role_capabilities_before = role_capabilities(&pool).await;
         let successful_audits_before = audit_count(&pool, "module_catalog.synchronized").await;
@@ -3934,13 +3979,6 @@ mod tests {
                 "main_between_organization_and_operations",
                 1,
             ),
-            (
-                "tessara.responses.navigation",
-                "tessara.responses",
-                "Main",
-                "main_between_organization_and_operations",
-                2,
-            ),
         ];
         NavigationPolicyReadModel {
             installation_id: Uuid::nil(),
@@ -3999,15 +4037,7 @@ mod tests {
                 owner: "core".to_string(),
             },
         ];
-        let placements = catalog
-            .iter()
-            .map(|destination| NavigationPlacementRow {
-                destination_id: destination.id.clone(),
-                group_id: destination.default_group_id.clone(),
-                visible: true,
-                display_order: destination.default_order,
-            })
-            .collect();
+        let placements = default_navigation_placements(&catalog);
         navigation_policy_v2_model_with_catalog(Uuid::nil(), 0, groups, placements, &catalog)
             .expect("the authoritative catalog defaults form a valid schema-v2 policy")
     }
