@@ -20,6 +20,7 @@ $candidateSourcePath = Join-Path $repoRoot "crates/tessara-response-module/src/l
 $candidateMigrationPath = Join-Path $repoRoot "crates/tessara-response-module/migrations/001_response_module.sql"
 $candidateMainPath = Join-Path $repoRoot "crates/tessara-response-module/src/main.rs"
 $candidateOperationalPath = Join-Path $repoRoot "crates/tessara-response-module/src/operational.rs"
+$candidatePrivateProviderAuthPath = Join-Path $repoRoot "crates/tessara-response-module/src/private_provider_auth.rs"
 $candidateProviderClientPath = Join-Path $repoRoot "crates/tessara-response-module/src/provider_client.rs"
 $candidateReversePath = Join-Path $repoRoot "crates/tessara-response-module/src/reverse_provider.rs"
 $baselineCommit = "13eb6ffaa9479fa71f4270edb049d079495d1a79"
@@ -34,7 +35,7 @@ $resourceContractId = "tessara.responses.response"
 $resourceContractVersion = "2.0.0"
 $lifecycleContractId = "tessara.responses.response-lifecycle"
 $lifecycleContractVersion = "2.0.0"
-$responseMigrationSha256 = "958c7928d90950f588fa943992430e81fabcfbe23ac52c1ec453291b3b811dbd"
+$responseMigrationSha256 = "008945e957ad2f0bf9c1969db4165da9a53316e2e27f52a67892635bb21ea7b7"
 
 function Resolve-OutputPath([string]$Path) {
     if ([IO.Path]::IsPathRooted($Path)) { return [IO.Path]::GetFullPath($Path) }
@@ -258,7 +259,8 @@ function Assert-SourceFixture {
     Assert-ExactSequence -Actual @($schema.required_owned_tables) -Expected @(
         "response_module_configuration", "response_module_security_state",
         "response_provider_observations", "response_consumed_service_nonces",
-        "response_consumed_core_service_nonces", "responses", "response_start_claims",
+        "response_consumed_bootstrap_service_nonces", "response_consumed_core_service_nonces",
+        "responses", "response_start_claims",
         "response_values", "response_audit_events", "response_idempotency_receipts",
         "response_workflow_event_state", "response_workflow_events", "response_export_state",
         "response_export_changes", "response_bootstrap_receipts"
@@ -287,6 +289,7 @@ function Assert-MaterializedBaselineSource {
     $migrationPath = Join-Path $responseRoot "migrations/001_response_module.sql"
     $mainPath = Join-Path $responseRoot "src/main.rs"
     $operationalPath = Join-Path $responseRoot "src/operational.rs"
+    $privateProviderAuthPath = Join-Path $responseRoot "src/private_provider_auth.rs"
     $providerClientPath = Join-Path $responseRoot "src/provider_client.rs"
     $reversePath = Join-Path $responseRoot "src/reverse_provider.rs"
     $moduleContractCargoPath = Join-Path $SourceRoot "crates/tessara-module-contract/Cargo.toml"
@@ -297,7 +300,7 @@ function Assert-MaterializedBaselineSource {
     $lockPath = Join-Path $SourceRoot "Cargo.lock"
     foreach ($path in @(
         $markerPath, $cargoPath, $sourcePath, $manifestPath, $migrationPath,
-        $mainPath, $operationalPath, $providerClientPath, $reversePath,
+        $mainPath, $operationalPath, $privateProviderAuthPath, $providerClientPath, $reversePath,
         $moduleContractCargoPath, $moduleContractSourcePath, $moduleProtocolPath,
         $responseContractSourcePath, $webCargoPath, $lockPath
     )) {
@@ -364,6 +367,7 @@ function Assert-MaterializedBaselineSource {
     if ($normalizedBaselineSource -cne (Get-Content -LiteralPath $candidateSourcePath -Raw) -or
         (Get-FileSha256 -Path $mainPath) -cne (Get-FileSha256 -Path $candidateMainPath) -or
         (Get-FileSha256 -Path $operationalPath) -cne (Get-FileSha256 -Path $candidateOperationalPath) -or
+        (Get-FileSha256 -Path $privateProviderAuthPath) -cne (Get-FileSha256 -Path $candidatePrivateProviderAuthPath) -or
         (Get-FileSha256 -Path $providerClientPath) -cne (Get-FileSha256 -Path $candidateProviderClientPath) -or
         (Get-FileSha256 -Path $reversePath) -cne (Get-FileSha256 -Path $candidateReversePath)) {
         throw "Response 0.9.0 operational/readiness behavior drifted from the current candidate."

@@ -891,7 +891,7 @@ mod tests {
         assert!(!sql.contains("submission_value_multi"));
         assert_eq!(
             format!("{:x}", Sha256::digest(BASELINE)),
-            "958c7928d90950f588fa943992430e81fabcfbe23ac52c1ec453291b3b811dbd"
+            "008945e957ad2f0bf9c1969db4165da9a53316e2e27f52a67892635bb21ea7b7"
         );
     }
 }

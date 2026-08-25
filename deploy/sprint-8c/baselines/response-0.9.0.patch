@@ -603,7 +603,7 @@ index bef91a2a380a866f77928d648f2c7f161cbe2b59..d32693f8f18c11b49c438a7e9caa4739
    "assets": [
      { "path": "/module-ui.css", "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc", "content_type": "text/css; charset=utf-8" },
 diff --git a/crates/tessara-response-module/migrations/001_response_module.sql b/crates/tessara-response-module/migrations/001_response_module.sql
-index 23e4f939f53e67ec5b6a6cb6640027b1d512ba2e..ebaf6d611c30016ac75f5f428249db471a143126 100644
+index 23e4f939f53e67ec5b6a6cb6640027b1d512ba2e..b588d2753217fe136df066c008b20ab24655fb4c 100644
 --- a/crates/tessara-response-module/migrations/001_response_module.sql
 +++ b/crates/tessara-response-module/migrations/001_response_module.sql
 @@ -14,6 +14,27 @@ INSERT INTO response_module_configuration (
@@ -634,7 +634,24 @@ index 23e4f939f53e67ec5b6a6cb6640027b1d512ba2e..ebaf6d611c30016ac75f5f428249db47
  CREATE TABLE response_module_security_state (
      singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
      schema_version SMALLINT NOT NULL CHECK (schema_version = 1),
-@@ -83,12 +104,14 @@ CREATE TABLE response_start_claims (
+@@ -36,6 +57,16 @@ CREATE TABLE response_consumed_service_nonces (
+     PRIMARY KEY (module_instance_id, nonce)
+ );
+ 
++CREATE TABLE response_consumed_bootstrap_service_nonces (
++    module_instance_id UUID NOT NULL,
++    nonce UUID NOT NULL,
++    authorization_jti UUID NOT NULL,
++    correlation_id TEXT NOT NULL CHECK (btrim(correlation_id) <> ''),
++    issued_at TIMESTAMPTZ NOT NULL,
++    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
++    PRIMARY KEY (module_instance_id, nonce)
++);
++
+ CREATE TABLE response_consumed_core_service_nonces (
+     installation_id UUID NOT NULL,
+     nonce UUID NOT NULL,
+@@ -83,12 +114,14 @@ CREATE TABLE response_start_claims (
      actor_account_id UUID NOT NULL,
      idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
      request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
@@ -650,7 +667,7 @@ index 23e4f939f53e67ec5b6a6cb6640027b1d512ba2e..ebaf6d611c30016ac75f5f428249db47
      CHECK ((state = 'committed') = (response_id IS NOT NULL)),
      CHECK ((state = 'pending') = (finalized_at IS NULL))
  );
-@@ -130,15 +153,20 @@ CREATE TABLE response_idempotency_receipts (
+@@ -130,15 +163,20 @@ CREATE TABLE response_idempotency_receipts (
      action TEXT NOT NULL,
      idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
      request_digest TEXT NOT NULL CHECK (request_digest ~ '^sha256:[0-9a-f]{64}$'),
@@ -1535,7 +1552,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          assert_eq!(
              format!("{:x}", Sha256::digest(BASELINE)),
 -            "b6c550168df05e933f1f19327b9ce0ccb0c498561ac9fa461a334ae9b93058f7"
-+            "958c7928d90950f588fa943992430e81fabcfbe23ac52c1ec453291b3b811dbd"
++            "008945e957ad2f0bf9c1969db4165da9a53316e2e27f52a67892635bb21ea7b7"
          );
      }
  }
@@ -2682,6 +2699,196 @@ index 576d68ca1ff8115d5b0f9903213c7d9e04eb9655..f67ebafcb7e7dfeb8859c44e9b212158
      #[error("Response persistence is unavailable")]
      Persistence(#[from] sqlx::Error),
  }
+diff --git a/crates/tessara-response-module/src/private_provider_auth.rs b/crates/tessara-response-module/src/private_provider_auth.rs
+index ba44e91dcaa1d929062186c44caab59cb85b6261..d4c3f2003ab59e036e5df33ad40fd6247f0531ee 100644
+--- a/crates/tessara-response-module/src/private_provider_auth.rs
++++ b/crates/tessara-response-module/src/private_provider_auth.rs
+@@ -1,12 +1,13 @@
+ use axum::http::HeaderMap;
+ use chrono::Utc;
+ use sha2::{Digest, Sha256};
++use tessara_composition::{OwnerBootstrapAuthorizationContextV1, OwnerBootstrapAuthorizationV1};
+ use tessara_module_contract::{
+     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+     AuthorizationValidationContextV3, CoreServiceRequestV1, CoreServiceRequestValidationContextV1,
+     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleServicePrincipalV1,
+     ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1, SecurityCapabilityId,
+-    SignedEnvelopeV1,
++    ServiceActionMethod, SignedEnvelopeV1,
+ };
+ use tessara_module_runtime::{
+     SecurityStateProvider, decode_signed_envelope_header, request_correlation_id,
+@@ -22,6 +23,12 @@ pub(crate) struct PrivateProviderContract {
+     pub(crate) capability: &'static str,
+ }
+ 
++#[derive(Clone, Copy)]
++enum ModuleServiceAuthorizationDomain {
++    OneUseGrant,
++    OwnerBootstrap,
++}
++
+ pub(crate) async fn authorize(
+     runtime: &ResponseRuntime,
+     headers: &HeaderMap,
+@@ -96,6 +103,7 @@ pub(crate) async fn authorize(
+                 grant.payload.jti,
+                 security.installation_id,
+                 correlation_id,
++                ModuleServiceAuthorizationDomain::OneUseGrant,
+             )
+             .await?;
+         }
+@@ -116,6 +124,100 @@ pub(crate) async fn authorize(
+     Ok(grant)
+ }
+ 
++pub(crate) async fn authorize_owner_bootstrap(
++    runtime: &ResponseRuntime,
++    headers: &HeaderMap,
++    body: &[u8],
++    boundary: PrivateProviderContract,
++) -> Result<SignedEnvelopeV1<OwnerBootstrapAuthorizationV1>, ()> {
++    if headers.contains_key("x-tessara-authorization") {
++        return Err(());
++    }
++    let encoded_authorization = headers
++        .get("x-tessara-owner-bootstrap-authorization")
++        .and_then(|value| value.to_str().ok())
++        .ok_or(())?;
++    let authorization: SignedEnvelopeV1<OwnerBootstrapAuthorizationV1> =
++        decode_signed_envelope_header(headers, "x-tessara-owner-bootstrap-authorization")
++            .map_err(|_| ())?;
++    runtime
++        .core_owner_bootstrap_verifier
++        .verify(&authorization)
++        .map_err(|_| ())?;
++    let security = runtime.current_security_state().await.map_err(|_| ())?;
++    if !security.enabled || security.document_state != "enabled" {
++        return Err(());
++    }
++    let correlation_id = request_correlation_id(headers).map_err(|_| ())?;
++    let AuthorizationAudienceV1::ModuleInstance {
++        module_instance_id,
++        module_definition_id,
++    } = &authorization.payload.owner
++    else {
++        return Err(());
++    };
++    if authorization.payload.owner_definition_id != module_definition_id.as_str()
++        || *module_instance_id
++            != tessara_composition::module_instance_id(
++                authorization.payload.installation_id,
++                module_definition_id.as_str(),
++            )
++        || !authorization
++            .payload
++            .capability_scope_bindings
++            .iter()
++            .any(|binding| binding.capability.as_str() == boundary.capability)
++        || !authorization.payload.provider_actions.iter().any(|action| {
++            action.dependency_binding == boundary.binding
++                && action.functional_contract == boundary.contract
++                && action.action == boundary.action
++                && action.method == ServiceActionMethod::Post
++                && action.path == boundary.path
++                && action.audience
++                    == (AuthorizationAudienceV1::ModuleInstance {
++                        module_instance_id: security.module_instance_id,
++                        module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
++                            .expect("static Response definition ID"),
++                    })
++        })
++    {
++        return Err(());
++    }
++    authorization
++        .payload
++        .validate_for(&OwnerBootstrapAuthorizationContextV1 {
++            installation_id: security.installation_id,
++            owner: &authorization.payload.owner,
++            owner_definition_id: module_definition_id.as_str(),
++            locked_input_digest: &authorization.payload.locked_input_digest,
++            input_digest: &authorization.payload.input_digest,
++            desired_revision: authorization.payload.desired_revision,
++            apply_sequence: authorization.payload.apply_sequence,
++            target_plan_digest: &authorization.payload.target_plan_digest,
++            idempotency_key: &authorization.payload.idempotency_key,
++            now: Utc::now(),
++        })
++        .map_err(|_| ())?;
++    let presenting_service = ModuleServicePrincipalV1::ModuleInstance {
++        module_instance_id: *module_instance_id,
++        module_definition_id: module_definition_id.clone(),
++    };
++    validate_and_consume_service_request(
++        runtime,
++        headers,
++        boundary.path,
++        body,
++        encoded_authorization,
++        &presenting_service,
++        authorization.payload.jti,
++        security.installation_id,
++        correlation_id,
++        ModuleServiceAuthorizationDomain::OwnerBootstrap,
++    )
++    .await?;
++    Ok(authorization)
++}
++
+ #[allow(clippy::too_many_arguments)]
+ async fn validate_and_consume_core_service_request(
+     runtime: &ResponseRuntime,
+@@ -172,6 +274,7 @@ async fn validate_and_consume_service_request(
+     authorization_jti: uuid::Uuid,
+     installation_id: uuid::Uuid,
+     correlation_id: uuid::Uuid,
++    authorization_domain: ModuleServiceAuthorizationDomain,
+ ) -> Result<(), ()> {
+     let (module_instance_id, module_definition_id) = match presenting_service {
+         ModuleServicePrincipalV1::ModuleInstance {
+@@ -203,19 +306,27 @@ async fn validate_and_consume_service_request(
+             now: Utc::now(),
+         })
+         .map_err(|_| ())?;
+-    let consumed = sqlx::query(
+-        "INSERT INTO response_consumed_service_nonces
+-         (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
+-         VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
+-    )
+-    .bind(service.payload.module_instance_id)
+-    .bind(service.payload.nonce)
+-    .bind(authorization_jti)
+-    .bind(&service.payload.correlation_id)
+-    .bind(service.payload.issued_at)
+-    .execute(&runtime.pool)
+-    .await
+-    .map_err(|_| ())?;
++    let query = match authorization_domain {
++        ModuleServiceAuthorizationDomain::OneUseGrant => {
++            "INSERT INTO response_consumed_service_nonces
++             (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
++             VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING"
++        }
++        ModuleServiceAuthorizationDomain::OwnerBootstrap => {
++            "INSERT INTO response_consumed_bootstrap_service_nonces
++             (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
++             VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING"
++        }
++    };
++    let consumed = sqlx::query(query)
++        .bind(service.payload.module_instance_id)
++        .bind(service.payload.nonce)
++        .bind(authorization_jti)
++        .bind(&service.payload.correlation_id)
++        .bind(service.payload.issued_at)
++        .execute(&runtime.pool)
++        .await
++        .map_err(|_| ())?;
+     (consumed.rows_affected() == 1).then_some(()).ok_or(())
+ }
+ 
 diff --git a/crates/tessara-response-module/src/product_api.rs b/crates/tessara-response-module/src/product_api.rs
 index d2f27c7ba834b250ad58db579f85a712eb412f2f..b9db44cf915b03d6d8d26e248d0f6f19a3a3c61c 100644
 --- a/crates/tessara-response-module/src/product_api.rs
