@@ -1059,43 +1059,26 @@ async fn issue_bootstrap_dependency_authorization(
     let original_actor_id =
         Uuid::parse_str(&request.apply_authorization.payload.initiator.actor_id)
             .map_err(|_| reject_bootstrap_authorization("initiator_identity"))?;
+    let provider_manifests = match (module, manifest.as_ref()) {
+        (Some(module), Some(manifest)) => {
+            load_owner_bootstrap_provider_manifests(&lockfile, module, manifest).await?
+        }
+        _ => BTreeMap::new(),
+    };
     let provider_actions = match (module, manifest.as_ref()) {
-        (Some(module), Some(manifest)) => manifest
-            .consumed_service_actions
-            .iter()
-            .filter_map(|action| {
-                let binding = module
-                    .dependency_bindings
-                    .get(action.dependency_binding.as_str())?;
-                if binding.provider != "core"
-                    || binding.contract_id != action.functional_contract.as_str()
-                {
-                    return None;
-                }
-                let declaration = crate::core_service_providers::resolve_service_action(
-                    action.functional_contract.as_str(),
-                    &action.authorization_action,
-                )?;
-                Some((
-                    declaration.required_capability,
-                    OwnerBootstrapProviderActionV1 {
-                        dependency_binding: action.dependency_binding.to_string(),
-                        functional_contract: action.functional_contract.to_string(),
-                        action: action.authorization_action.clone(),
-                        method: declaration.method,
-                        path: declaration.path.into(),
-                        audience: AuthorizationAudienceV1::CoreInstallation {
-                            installation_id: request.installation_id,
-                        },
-                    },
-                ))
-            })
-            .collect::<Vec<_>>(),
+        (Some(module), Some(manifest)) => resolve_owner_bootstrap_provider_actions(
+            request.installation_id,
+            &lockfile.modules,
+            module,
+            manifest,
+            &provider_manifests,
+        )
+        .map_err(reject_bootstrap_authorization)?,
         _ => Vec::new(),
     };
     let required_capabilities = provider_actions
         .iter()
-        .map(|(capability, _)| *capability)
+        .map(|(capability, _)| capability.as_str())
         .collect::<BTreeSet<_>>();
     let mut capability_scope_bindings = Vec::new();
     for required_capability in required_capabilities {
@@ -1215,6 +1198,134 @@ async fn issue_bootstrap_dependency_authorization(
             validation,
         },
     ))
+}
+
+async fn load_owner_bootstrap_provider_manifests(
+    lockfile: &ApplicationLockfileV1,
+    owner: &tessara_composition::ResolvedModuleReleaseV1,
+    owner_manifest: &ModuleManifest,
+) -> ApiResult<BTreeMap<String, ModuleManifest>> {
+    let mut endpoints = module_control_endpoints()?;
+    let mut manifests = BTreeMap::new();
+    for action in &owner_manifest.consumed_service_actions {
+        let binding = owner
+            .dependency_bindings
+            .get(action.dependency_binding.as_str())
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_binding"))?;
+        if binding.provider == "core" || manifests.contains_key(&binding.provider) {
+            continue;
+        }
+        let provider = lockfile
+            .modules
+            .iter()
+            .find(|module| module.enabled && module.definition_id == binding.provider)
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_provider"))?;
+        let endpoint = endpoints
+            .remove(&provider.definition_id)
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_endpoint"))?;
+        let manifest = reqwest::Client::new()
+            .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+            .header("x-tessara-module-control-key", module_control_key()?)
+            .send()
+            .await
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_request"))?
+            .error_for_status()
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_status"))?
+            .json::<ModuleManifest>()
+            .await
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_decode"))?;
+        manifests.insert(provider.definition_id.clone(), manifest);
+    }
+    Ok(manifests)
+}
+
+fn resolve_owner_bootstrap_provider_actions(
+    installation_id: Uuid,
+    modules: &[tessara_composition::ResolvedModuleReleaseV1],
+    owner: &tessara_composition::ResolvedModuleReleaseV1,
+    owner_manifest: &ModuleManifest,
+    provider_manifests: &BTreeMap<String, ModuleManifest>,
+) -> Result<Vec<(String, OwnerBootstrapProviderActionV1)>, &'static str> {
+    let mut resolved = Vec::with_capacity(owner_manifest.consumed_service_actions.len());
+    for action in &owner_manifest.consumed_service_actions {
+        let binding = owner
+            .dependency_bindings
+            .get(action.dependency_binding.as_str())
+            .ok_or("provider_action_binding")?;
+        if binding.contract_id != action.functional_contract.as_str() {
+            return Err("provider_action_contract");
+        }
+        let (required_capability, method, path, audience) = if binding.provider == "core" {
+            let declaration = crate::core_service_providers::resolve_service_action(
+                action.functional_contract.as_str(),
+                &action.authorization_action,
+            )
+            .ok_or("provider_action_declaration")?;
+            if crate::core_service_providers::contract_version(action.functional_contract.as_str())
+                != Some(binding.contract_version.clone())
+            {
+                return Err("provider_action_version");
+            }
+            (
+                declaration.required_capability.to_string(),
+                declaration.method,
+                declaration.path.to_string(),
+                AuthorizationAudienceV1::CoreInstallation { installation_id },
+            )
+        } else {
+            let provider = modules
+                .iter()
+                .find(|module| module.enabled && module.definition_id == binding.provider)
+                .ok_or("provider_action_provider")?;
+            let provider_manifest = provider_manifests
+                .get(&provider.definition_id)
+                .ok_or("provider_action_manifest")?;
+            if provider_manifest.definition_id.as_str() != provider.definition_id
+                || provider_manifest.release_version != provider.version
+                || canonical_digest(provider_manifest)
+                    .map_err(|_| "provider_action_manifest_digest")?
+                    != provider.manifest_digest
+                || !provider_manifest.provided_contracts.iter().any(|contract| {
+                    contract.id == action.functional_contract
+                        && contract.version == binding.contract_version
+                })
+            {
+                return Err("provider_action_manifest_identity");
+            }
+            let declaration = provider_manifest
+                .provided_service_actions
+                .iter()
+                .find(|declaration| {
+                    declaration.functional_contract == action.functional_contract
+                        && declaration.authorization_action == action.authorization_action
+                })
+                .ok_or("provider_action_declaration")?;
+            (
+                declaration.required_capability.to_string(),
+                declaration.method,
+                declaration.path.clone(),
+                AuthorizationAudienceV1::ModuleInstance {
+                    module_instance_id: tessara_composition::module_instance_id(
+                        installation_id,
+                        &provider.definition_id,
+                    ),
+                    module_definition_id: provider_manifest.definition_id.clone(),
+                },
+            )
+        };
+        resolved.push((
+            required_capability,
+            OwnerBootstrapProviderActionV1 {
+                dependency_binding: action.dependency_binding.to_string(),
+                functional_contract: action.functional_contract.to_string(),
+                action: action.authorization_action.clone(),
+                method,
+                path,
+                audience,
+            },
+        ));
+    }
+    Ok(resolved)
 }
 
 fn reject_bootstrap_authorization(reason: &'static str) -> ApiError {
@@ -2609,6 +2720,102 @@ mod tests {
             )
             .is_err(),
             "the exact enabled-module manifest set is mandatory"
+        );
+    }
+
+    #[test]
+    fn owner_bootstrap_authorization_resolves_module_provider_actions() {
+        let installation_id = Uuid::from_u128(0x8c);
+        let (mut owner, mut owner_manifest) = dataset_bootstrap_manifest_fixture();
+        owner_manifest.consumed_service_actions.retain(|action| {
+            action.dependency_binding.as_str() == "tessara.datasets.response-export"
+        });
+        owner.dependency_bindings.insert(
+            "tessara.datasets.response-export".into(),
+            tessara_composition::ResolvedContractBindingV1 {
+                provider: "tessara.responses".into(),
+                contract_id: "tessara.responses.submitted-response-export".into(),
+                contract_version: semver::Version::new(1, 0, 0),
+            },
+        );
+        let provider_manifest: ModuleManifest = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tessara-response-module/manifest.json"
+        )))
+        .expect("Response manifest");
+        let provider = tessara_composition::ResolvedModuleReleaseV1 {
+            definition_id: provider_manifest.definition_id.to_string(),
+            version: provider_manifest.release_version.clone(),
+            manifest_digest: canonical_digest(&provider_manifest)
+                .expect("Response manifest digest"),
+            runtime_image: ArtifactDigest::new(format!("sha256:{}", "9".repeat(64)))
+                .expect("runtime digest"),
+            deployment_profile: "tessara-oci-v1".into(),
+            enabled: true,
+            configuration_schema_version: "tessara.io/response-configuration/v1".into(),
+            configuration: serde_json::json!({}),
+            configuration_digest: canonical_digest(&serde_json::json!({}))
+                .expect("configuration digest"),
+            bootstrap_schema_version: Some("tessara.io/response-bootstrap/v1".into()),
+            bootstrap: None,
+            bootstrap_digest: None,
+            dependency_bindings: BTreeMap::new(),
+        };
+        let provider_manifests =
+            BTreeMap::from([(provider.definition_id.clone(), provider_manifest.clone())]);
+
+        let actions = resolve_owner_bootstrap_provider_actions(
+            installation_id,
+            std::slice::from_ref(&provider),
+            &owner,
+            &owner_manifest,
+            &provider_manifests,
+        )
+        .expect("module provider actions");
+        assert_eq!(actions.len(), 3);
+        assert!(actions.iter().all(|(capability, action)| {
+            capability == "submissions:manage"
+                && action.functional_contract == "tessara.responses.submitted-response-export"
+                && action.audience
+                    == (AuthorizationAudienceV1::ModuleInstance {
+                        module_instance_id: tessara_composition::module_instance_id(
+                            installation_id,
+                            "tessara.responses",
+                        ),
+                        module_definition_id: provider_manifest.definition_id.clone(),
+                    })
+        }));
+        assert_eq!(
+            actions
+                .iter()
+                .map(|(_, action)| action.action.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "responses.export_checkpoint",
+                "responses.export_page",
+                "responses.export_start",
+            ])
+        );
+
+        let mut incomplete_manifest = provider_manifest;
+        incomplete_manifest
+            .provided_service_actions
+            .retain(|action| action.authorization_action != "responses.export_page");
+        let mut incomplete_provider = provider;
+        incomplete_provider.manifest_digest =
+            canonical_digest(&incomplete_manifest).expect("incomplete manifest digest");
+        assert_eq!(
+            resolve_owner_bootstrap_provider_actions(
+                installation_id,
+                std::slice::from_ref(&incomplete_provider),
+                &owner,
+                &owner_manifest,
+                &BTreeMap::from([(
+                    incomplete_provider.definition_id.clone(),
+                    incomplete_manifest,
+                )]),
+            ),
+            Err("provider_action_declaration")
         );
     }
 
