@@ -391,10 +391,11 @@ function Assert-Sprint8CPreparedResponseFixtures {
         "response.submitted.delegated" = "submitted"
         "response.submitted.restricted" = "submitted"
     }
-    $expectedKeys = @($expectedStates.Keys | Sort-Object)
+    $expectedKeys = @($expectedStates.Keys)
+    $expectedKeySet = @($expectedKeys | Sort-Object)
     $responses = $FixtureReceipt.logical_identities.responses
     $actualKeys = @($responses.PSObject.Properties.Name | Sort-Object)
-    if (($actualKeys -join "`n") -cne ($expectedKeys -join "`n")) {
+    if (($actualKeys -join "`n") -cne ($expectedKeySet -join "`n")) {
         throw "Prepared Response fixture keys are not the exact Response-owner bootstrap set."
     }
     $responseOwnerDigests = @($FixtureReceipt.owner_receipt_digests | Where-Object {
@@ -409,6 +410,7 @@ function Assert-Sprint8CPreparedResponseFixtures {
     $moduleInstanceIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $responseIds = [ordered]@{}
     $lifecycleStates = [ordered]@{}
+    $previousWorkflowEventSequence = [uint64]0
     foreach ($key in $expectedKeys) {
         $identity = $responses.PSObject.Properties[$key].Value
         if ([string]$identity.response_id -cnotmatch
@@ -430,9 +432,10 @@ function Assert-Sprint8CPreparedResponseFixtures {
                 ($identity.reference | ConvertTo-Json -Depth 30 -Compress)) -or
             [string]$readBack.lifecycle_state -cne [string]$expectedStates[$key] -or
             [uint64]$readBack.revision -ne $expectedRevision -or
-            [uint64]$readBack.workflow_event_sequence -ne $expectedRevision) {
+            [uint64]$readBack.workflow_event_sequence -le $previousWorkflowEventSequence) {
             throw "Prepared Response fixture '$key' lacks exact typed Response-owner read-back."
         }
+        $previousWorkflowEventSequence = [uint64]$readBack.workflow_event_sequence
         foreach ($idName in @(
             "workflow_assignment_id", "workflow_instance_id", "workflow_step_instance_id"
         )) {
@@ -499,7 +502,7 @@ function New-Sprint8CPreparedResponseFixturesSelfTestProjection {
                 workflow_assignment_id = "01980000-0090-7000-8000-{0:d12}" -f $ordinal
                 workflow_instance_id = "01980000-0091-7000-8000-{0:d12}" -f $ordinal
                 workflow_step_instance_id = "01980000-0092-7000-8000-{0:d12}" -f $ordinal
-                workflow_event_sequence = $revision
+                workflow_event_sequence = (($ordinal * 2) - 1)
             }
             provenance = "signed-tessara.responses-bootstrap-receipt"
         }
@@ -589,6 +592,16 @@ function Test-Sprint8CHarnessIsolation {
     } catch { $rejected = $true }
     if (-not $rejected) {
         throw "Prepared Response fixture self-test accepted substituted lifecycle read-back."
+    }
+    $tamperedResponseFixture = $responseFixture | ConvertTo-Json -Depth 100 |
+        ConvertFrom-Json -Depth 100
+    $tamperedResponseFixture.logical_identities.responses.'response.submitted.delegated'.read_back.workflow_event_sequence = 3
+    $rejected = $false
+    try {
+        Assert-Sprint8CPreparedResponseFixtures -FixtureReceipt $tamperedResponseFixture | Out-Null
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Prepared Response fixture self-test accepted a non-monotonic workflow event cursor."
     }
 
     $names = @("COMPOSE_PROJECT_NAME", "TESSARA_GATEWAY_PORT", "TESSARA_CORE_CONTROL_PORT", "TESSARA_SUPERVISOR_PORT")
