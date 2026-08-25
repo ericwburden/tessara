@@ -155,8 +155,6 @@ pub(crate) async fn authorize_owner_bootstrap(
                 authorization.payload.installation_id,
                 module_definition_id.as_str(),
             )
-        || authorization.payload.authorization_revision != security.authorization_revision
-        || authorization.payload.organization_revision != security.organization_revision
         || !authorization
             .payload
             .capability_scope_bindings
