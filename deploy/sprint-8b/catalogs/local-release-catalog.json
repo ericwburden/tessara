@@ -17,7 +17,7 @@
   "module_releases": [
     {
       "definition_id":"tessara.datasets","version":"1.0.0",
-      "manifest_digest":"sha256:4d577783c1cba8e2d30a85b68440cb2f61ec6263e968e3c25fb747819fd7b501",
+      "manifest_digest":"sha256:a94252c9b791d3b9afbfaa7d378828ce6b71c8009b4215a7317946a75b10e013",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dataset-configuration/v1",
@@ -33,7 +33,7 @@
     },
     {
       "definition_id":"tessara.components","version":"1.1.0",
-      "manifest_digest":"sha256:fc41192c042f1170921d5d6209979a7008622aefcd84a6752f1426a4dac27492",
+      "manifest_digest":"sha256:437101b5db2d67f139cb72d49802970c3b6000a2204233576fcfd917d233b501",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000004",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/component-configuration/v1",
@@ -44,7 +44,7 @@
     },
     {
       "definition_id":"tessara.dashboards","version":"3.0.2",
-      "manifest_digest":"sha256:e0c7e07718884bb03f7a57ac958074c9ef841820e51ecb0732e489dcbeb9487f",
+      "manifest_digest":"sha256:06e6c43da8362b93dc1faefacddd910e22f2546e7a43dffaf2b11fe88f99d1ae",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000005",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dashboard-configuration/v1",
