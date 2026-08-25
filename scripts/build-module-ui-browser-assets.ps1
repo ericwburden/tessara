@@ -26,7 +26,10 @@ $modules = @(
         WasmName = "component.wasm"
         DigestContract = "crates/tessara-component-ui/src/document.rs"
         Manifest = "crates/tessara-component-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
+        ReleaseCatalogs = @(
+            "deploy/sprint-8b/catalogs/local-release-catalog.json",
+            "deploy/sprint-8c/catalogs/local-release-catalog.json"
+        )
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/component.css"; Constant = "COMPONENT_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css") }
             [pscustomobject]@{ Path = "/component-lifecycle.css"; Constant = "COMPONENT_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-component-ui/assets/component.css", "crates/tessara-component-ui/assets/component-lifecycle.css") }
@@ -49,7 +52,10 @@ $modules = @(
         WasmName = "dashboard.wasm"
         DigestContract = "crates/tessara-dashboard-ui/src/document.rs"
         Manifest = "crates/tessara-dashboard-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
+        ReleaseCatalogs = @(
+            "deploy/sprint-8b/catalogs/local-release-catalog.json",
+            "deploy/sprint-8c/catalogs/local-release-catalog.json"
+        )
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/dashboard.css"; Constant = "DASHBOARD_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css") }
             [pscustomobject]@{ Path = "/dashboard-lifecycle.css"; Constant = "DASHBOARD_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-dashboard-ui/assets/dashboard.css", "crates/tessara-dashboard-ui/assets/dashboard-lifecycle.css") }
@@ -72,7 +78,10 @@ $modules = @(
         WasmName = "dataset.wasm"
         DigestContract = "crates/tessara-web-datasets/src/document.rs"
         Manifest = "crates/tessara-dataset-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8b/catalogs/local-release-catalog.json"
+        ReleaseCatalogs = @(
+            "deploy/sprint-8b/catalogs/local-release-catalog.json",
+            "deploy/sprint-8c/catalogs/local-release-catalog.json"
+        )
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/dataset.css"; Constant = "DATASET_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.css") }
             [pscustomobject]@{ Path = "/dataset-lifecycle.css"; Constant = "DATASET_LIFECYCLE_CSS_SHA256"; Sources = @("crates/tessara-web-datasets/assets/dataset.css", "crates/tessara-web-datasets/assets/dataset-lifecycle.css") }
@@ -95,7 +104,7 @@ $modules = @(
         WasmName = "response.wasm"
         DigestContract = "crates/tessara-web-responses/src/document.rs"
         Manifest = "crates/tessara-response-module/manifest.json"
-        ReleaseCatalog = "deploy/sprint-8c/catalogs/local-release-catalog.json"
+        ReleaseCatalogs = @("deploy/sprint-8c/catalogs/local-release-catalog.json")
         AssetSpecs = @(
             [pscustomobject]@{ Path = "/response.css"; Constant = "RESPONSE_CSS_SHA256"; Sources = @("crates/tessara-web-responses/assets/response.css") }
             [pscustomobject]@{ Path = "/response.js"; Constant = "RESPONSE_JS_SHA256"; Sources = @("crates/tessara-web-responses/assets/response.js") }
@@ -177,9 +186,13 @@ function Sync-ReleaseCatalogManifestDigest([pscustomobject]$ModuleDefinition, [s
     if ($manifestDigest -cnotmatch '^sha256:(?<value>[0-9a-f]{64})$') {
         throw "$($ModuleDefinition.Name) manifest canonical digest output is invalid: $manifestDigest"
     }
-    $catalogPath = Join-Path $repoRoot $ModuleDefinition.ReleaseCatalog
     $catalogPattern = "(?s)`"definition_id`"\s*:\s*`"$([regex]::Escape($ModuleDefinition.Definition))`"\s*,\s*`"version`"\s*:\s*`"$([regex]::Escape($ModuleDefinition.Release))`"\s*,\s*`"manifest_digest`"\s*:\s*`"sha256:(?<digest>[0-9a-f]{64})`""
-    Sync-SingleDigest $catalogPath $catalogPattern $manifestDigest.Substring(7) "$($ModuleDefinition.Name) release-catalog manifest identity" -CheckOnly:$CheckOnly
+    foreach ($releaseCatalog in @($ModuleDefinition.ReleaseCatalogs)) {
+        $catalogPath = Join-Path $repoRoot $releaseCatalog
+        Sync-SingleDigest $catalogPath $catalogPattern $manifestDigest.Substring(7) `
+            "$($ModuleDefinition.Name) release-catalog manifest identity in $releaseCatalog" `
+            -CheckOnly:$CheckOnly
+    }
     $manifestDigest
 }
 
