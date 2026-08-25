@@ -1,12 +1,13 @@
 use axum::http::HeaderMap;
 use chrono::Utc;
 use sha2::{Digest, Sha256};
+use tessara_composition::{OwnerBootstrapAuthorizationContextV1, OwnerBootstrapAuthorizationV1};
 use tessara_module_contract::{
     AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
     AuthorizationValidationContextV3, CoreServiceRequestV1, CoreServiceRequestValidationContextV1,
     DependencyBindingKey, FunctionalContractId, ModuleDefinitionId, ModuleServicePrincipalV1,
     ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1, SecurityCapabilityId,
-    SignedEnvelopeV1,
+    ServiceActionMethod, SignedEnvelopeV1,
 };
 use tessara_module_runtime::{
     SecurityStateProvider, decode_signed_envelope_header, request_correlation_id,
@@ -114,6 +115,101 @@ pub(crate) async fn authorize(
         }
     }
     Ok(grant)
+}
+
+pub(crate) async fn authorize_owner_bootstrap(
+    runtime: &ResponseRuntime,
+    headers: &HeaderMap,
+    body: &[u8],
+    boundary: PrivateProviderContract,
+) -> Result<SignedEnvelopeV1<OwnerBootstrapAuthorizationV1>, ()> {
+    if headers.contains_key("x-tessara-authorization") {
+        return Err(());
+    }
+    let encoded_authorization = headers
+        .get("x-tessara-owner-bootstrap-authorization")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(())?;
+    let authorization: SignedEnvelopeV1<OwnerBootstrapAuthorizationV1> =
+        decode_signed_envelope_header(headers, "x-tessara-owner-bootstrap-authorization")
+            .map_err(|_| ())?;
+    runtime
+        .core_owner_bootstrap_verifier
+        .verify(&authorization)
+        .map_err(|_| ())?;
+    let security = runtime.current_security_state().await.map_err(|_| ())?;
+    if !security.enabled || security.document_state != "enabled" {
+        return Err(());
+    }
+    let correlation_id = request_correlation_id(headers).map_err(|_| ())?;
+    let AuthorizationAudienceV1::ModuleInstance {
+        module_instance_id,
+        module_definition_id,
+    } = &authorization.payload.owner
+    else {
+        return Err(());
+    };
+    if authorization.payload.owner_definition_id != module_definition_id.as_str()
+        || *module_instance_id
+            != tessara_composition::module_instance_id(
+                authorization.payload.installation_id,
+                module_definition_id.as_str(),
+            )
+        || authorization.payload.authorization_revision != security.authorization_revision
+        || authorization.payload.organization_revision != security.organization_revision
+        || !authorization
+            .payload
+            .capability_scope_bindings
+            .iter()
+            .any(|binding| binding.capability.as_str() == boundary.capability)
+        || !authorization.payload.provider_actions.iter().any(|action| {
+            action.dependency_binding == boundary.binding
+                && action.functional_contract == boundary.contract
+                && action.action == boundary.action
+                && action.method == ServiceActionMethod::Post
+                && action.path == boundary.path
+                && action.audience
+                    == (AuthorizationAudienceV1::ModuleInstance {
+                        module_instance_id: security.module_instance_id,
+                        module_definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
+                            .expect("static Response definition ID"),
+                    })
+        })
+    {
+        return Err(());
+    }
+    authorization
+        .payload
+        .validate_for(&OwnerBootstrapAuthorizationContextV1 {
+            installation_id: security.installation_id,
+            owner: &authorization.payload.owner,
+            owner_definition_id: module_definition_id.as_str(),
+            locked_input_digest: &authorization.payload.locked_input_digest,
+            input_digest: &authorization.payload.input_digest,
+            desired_revision: authorization.payload.desired_revision,
+            apply_sequence: authorization.payload.apply_sequence,
+            target_plan_digest: &authorization.payload.target_plan_digest,
+            idempotency_key: &authorization.payload.idempotency_key,
+            now: Utc::now(),
+        })
+        .map_err(|_| ())?;
+    let presenting_service = ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id: *module_instance_id,
+        module_definition_id: module_definition_id.clone(),
+    };
+    validate_and_consume_service_request(
+        runtime,
+        headers,
+        boundary.path,
+        body,
+        encoded_authorization,
+        &presenting_service,
+        authorization.payload.jti,
+        security.installation_id,
+        correlation_id,
+    )
+    .await?;
+    Ok(authorization)
 }
 
 #[allow(clippy::too_many_arguments)]

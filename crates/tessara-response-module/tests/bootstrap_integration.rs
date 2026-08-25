@@ -10,6 +10,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use serde::de::DeserializeOwned;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tessara_composition::{
     ActorEvidenceV1, OwnerBootstrapAuthorizationV1, OwnerBootstrapProviderActionV1,
     OwnerBootstrapRequestV1, OwnerBootstrapResponseV1,
@@ -20,9 +21,11 @@ use tessara_forms_contract::{
     RESPONSE_FORM_VERSION_SCHEMA_PATH,
 };
 use tessara_module_contract::{
-    ArtifactDigest, AuthorizationAudienceV1, MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
-    ModuleDefinitionId, ModuleServiceIdentityRegistrationV1, ModuleServiceIdentityRegistryV1,
-    ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, ResourceOwner, ServiceActionMethod,
+    ArtifactDigest, AuthorizationAudienceV1, CapabilityScopeBindingV1,
+    MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1, ModuleDefinitionId,
+    ModuleServiceIdentityRegistrationV1, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
+    ModuleServiceRequestV1, ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, ResourceOwner,
+    SecurityCapabilityId, ServiceActionMethod,
 };
 use tessara_module_runtime::CoreVerifiers;
 use tessara_response_module::{
@@ -32,7 +35,13 @@ use tessara_response_module::{
     ResponseBootstrapV1, ResponseCoreVerifiers, ResponseRuntime, ResponseServiceEndpoints,
     ResponseValidationFaultControl, router,
 };
-use tessara_responses_contract::{ResponseLifecycleState, ResponseReference};
+use tessara_responses_contract::{
+    RESPONSE_EXPORT_BINDING_KEY, RESPONSE_EXPORT_CHECKPOINT_ACTION,
+    RESPONSE_EXPORT_CHECKPOINT_PATH, RESPONSE_EXPORT_CONTRACT_ID, RESPONSE_EXPORT_MEDIA_TYPE,
+    RESPONSE_EXPORT_SCHEMA_VERSION, ResponseExportAction, ResponseExportCheckpointRequest,
+    ResponseExportCheckpointResponse, ResponseExportPartition, ResponseLifecycleState,
+    ResponseReference,
+};
 use tessara_workflows_contract::{
     WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION, WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID,
     WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH, WORKFLOW_RESPONSE_CONTEXT_ACTION,
@@ -46,6 +55,8 @@ struct BootstrapFixture {
     app: Router,
     request: OwnerBootstrapRequestV1<ResponseBootstrapV1>,
     receipt_signer: Arc<PurposeBoundSigningKeyV1>,
+    owner_signer: Arc<PurposeBoundSigningKeyV1>,
+    dataset_service_signer: Arc<PurposeBoundSigningKeyV1>,
     installation_id: Uuid,
     module_instance_id: Uuid,
 }
@@ -71,12 +82,12 @@ async fn bootstrap_fixture(
     .await
     .expect("Response security state");
 
-    let owner_signer = signer(
+    let owner_signer = Arc::new(signer(
         "tessara.core",
         "response-bootstrap-core",
         ProtocolSignaturePurposeV1::OwnerBootstrapAuthorization,
         [41; 32],
-    );
+    ));
     let receipt_signer = Arc::new(signer(
         "tessara.responses",
         "response-bootstrap-owner",
@@ -88,6 +99,12 @@ async fn bootstrap_fixture(
         "response-bootstrap-owner",
         ProtocolSignaturePurposeV1::ModuleServiceRequest,
         [42; 32],
+    ));
+    let dataset_service_signer = Arc::new(signer(
+        "tessara.datasets",
+        "response-bootstrap-dataset",
+        ProtocolSignaturePurposeV1::ModuleServiceRequest,
+        [43; 32],
     ));
     let authorization_signer = signer(
         "tessara.core",
@@ -115,13 +132,24 @@ async fn bootstrap_fixture(
     );
     let registry = ModuleServiceIdentityRegistryV1 {
         schema_version: MODULE_SERVICE_IDENTITY_REGISTRY_SCHEMA_VERSION_V1,
-        identities: BTreeMap::from([(
-            ModuleDefinitionId::new("tessara.responses").expect("Response definition"),
-            ModuleServiceIdentityRegistrationV1 {
-                key_id: "response-bootstrap-owner".into(),
-                public_key: URL_SAFE_NO_PAD.encode(service_signer.verifier().public_key_bytes()),
-            },
-        )]),
+        identities: BTreeMap::from([
+            (
+                ModuleDefinitionId::new("tessara.responses").expect("Response definition"),
+                ModuleServiceIdentityRegistrationV1 {
+                    key_id: "response-bootstrap-owner".into(),
+                    public_key: URL_SAFE_NO_PAD
+                        .encode(service_signer.verifier().public_key_bytes()),
+                },
+            ),
+            (
+                ModuleDefinitionId::new("tessara.datasets").expect("Dataset definition"),
+                ModuleServiceIdentityRegistrationV1 {
+                    key_id: "response-bootstrap-dataset".into(),
+                    public_key: URL_SAFE_NO_PAD
+                        .encode(dataset_service_signer.verifier().public_key_bytes()),
+                },
+            ),
+        ]),
     };
     let unavailable = "http://127.0.0.1:1".to_string();
     let endpoints = ResponseServiceEndpoints::new(
@@ -256,6 +284,8 @@ async fn bootstrap_fixture(
         app,
         request,
         receipt_signer,
+        owner_signer,
+        dataset_service_signer,
         installation_id,
         module_instance_id,
     }
@@ -342,6 +372,143 @@ async fn signed_response_bootstrap_materializes_submits_and_replays(sql_pool: sq
     .await
     .expect("replayed provider compatibility projection");
     assert_eq!(replay_compatible_provider_count, 3);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn owner_bootstrap_authorizes_dataset_export_checkpoint(sql_pool: sqlx::PgPool) {
+    let fixture = bootstrap_fixture(
+        &sql_pool,
+        ResponseValidationFaultControl::disabled(),
+        "response.export.owner",
+        "response-export-owner-bootstrap",
+    )
+    .await;
+    let dataset_definition =
+        ModuleDefinitionId::new("tessara.datasets").expect("Dataset definition");
+    let dataset_instance_id = tessara_composition::module_instance_id(
+        fixture.installation_id,
+        dataset_definition.as_str(),
+    );
+    let presenting_service = ModuleServicePrincipalV1::ModuleInstance {
+        module_instance_id: dataset_instance_id,
+        module_definition_id: dataset_definition.clone(),
+    };
+    let scope_id = Uuid::new_v4();
+    let partition = ResponseExportPartition {
+        source_binding_id: Uuid::new_v4(),
+        form_version_ids: vec![Uuid::new_v4()],
+        authorized_scope_node_ids: vec![scope_id],
+        authorization_digest: String::new(),
+    }
+    .with_recomputed_authorization_digest(&presenting_service, fixture.installation_id)
+    .expect("authorized Response export partition");
+    let body = serde_json::to_vec(&ResponseExportCheckpointRequest {
+        schema_version: RESPONSE_EXPORT_SCHEMA_VERSION,
+        action: ResponseExportAction::Checkpoint,
+        partition,
+        committed_cursor: None,
+    })
+    .expect("Response export checkpoint request");
+    let now = Utc::now();
+    let correlation_id = Uuid::new_v4();
+    let authorization = fixture
+        .owner_signer
+        .sign(OwnerBootstrapAuthorizationV1 {
+            schema_version: tessara_composition::OWNER_BOOTSTRAP_AUTHORIZATION_SCHEMA_VERSION_V1,
+            installation_id: fixture.installation_id,
+            owner: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: dataset_instance_id,
+                module_definition_id: dataset_definition.clone(),
+            },
+            owner_definition_id: dataset_definition.to_string(),
+            initiator: ActorEvidenceV1 {
+                actor_id: Uuid::new_v4().to_string(),
+                actor_kind: "user".into(),
+                authority: "bootstrap-integration".into(),
+            },
+            original_actor_id: Uuid::new_v4(),
+            capability_scope_bindings: vec![CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("submissions:manage")
+                    .expect("submission management capability"),
+                organization_root_id: scope_id,
+                authorized_organization_ids: Vec::new(),
+            }],
+            provider_actions: vec![OwnerBootstrapProviderActionV1 {
+                dependency_binding: RESPONSE_EXPORT_BINDING_KEY.into(),
+                functional_contract: RESPONSE_EXPORT_CONTRACT_ID.into(),
+                action: RESPONSE_EXPORT_CHECKPOINT_ACTION.into(),
+                method: ServiceActionMethod::Post,
+                path: RESPONSE_EXPORT_CHECKPOINT_PATH.into(),
+                audience: AuthorizationAudienceV1::ModuleInstance {
+                    module_instance_id: fixture.module_instance_id,
+                    module_definition_id: ModuleDefinitionId::new("tessara.responses")
+                        .expect("Response definition"),
+                },
+            }],
+            authorization_revision: 7,
+            organization_revision: 11,
+            locked_input_digest: digest('b'),
+            input_digest: digest('c'),
+            desired_revision: 1,
+            apply_sequence: 1,
+            target_plan_digest: digest('d'),
+            idempotency_key: "response-export-owner-bootstrap".into(),
+            correlation_id,
+            jti: Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        })
+        .expect("signed Dataset owner bootstrap authorization");
+    let encoded_authorization = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&authorization).expect("serialize owner bootstrap authorization"),
+    );
+    let service_request = fixture
+        .dataset_service_signer
+        .sign(ModuleServiceRequestV1 {
+            schema_version: 1,
+            installation_id: fixture.installation_id,
+            module_instance_id: dataset_instance_id,
+            module_definition_id: dataset_definition,
+            method: "POST".into(),
+            path: RESPONSE_EXPORT_CHECKPOINT_PATH.into(),
+            canonical_body_digest: sha256_hex(&body),
+            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
+            correlation_id: correlation_id.to_string(),
+            nonce: Uuid::new_v4(),
+            issued_at: now,
+            expires_at: now + Duration::seconds(30),
+        })
+        .expect("signed Dataset service request");
+    let encoded_service_request = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&service_request).expect("serialize Dataset service request"));
+
+    let response = send_export_checkpoint(
+        &fixture.app,
+        &body,
+        &encoded_authorization,
+        &encoded_service_request,
+        correlation_id,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        RESPONSE_EXPORT_MEDIA_TYPE
+    );
+    let checkpoint: ResponseExportCheckpointResponse = response_json(response).await;
+    assert_eq!(checkpoint.schema_version, RESPONSE_EXPORT_SCHEMA_VERSION);
+    assert!(checkpoint.committed_cursor_valid);
+    assert!(checkpoint.changed);
+
+    let replay = send_export_checkpoint(
+        &fixture.app,
+        &body,
+        &encoded_authorization,
+        &encoded_service_request,
+        correlation_id,
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::NOT_FOUND);
 }
 
 #[cfg(feature = "sprint-8c-validation-faults")]
@@ -517,6 +684,32 @@ async fn send_response(
         .expect("bootstrap response")
 }
 
+async fn send_export_checkpoint(
+    app: &Router,
+    body: &[u8],
+    encoded_authorization: &str,
+    encoded_service_request: &str,
+    correlation_id: Uuid,
+) -> Response {
+    app.clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(RESPONSE_EXPORT_CHECKPOINT_PATH)
+                .header(header::CONTENT_TYPE, RESPONSE_EXPORT_MEDIA_TYPE)
+                .header(
+                    "x-tessara-owner-bootstrap-authorization",
+                    encoded_authorization,
+                )
+                .header("x-tessara-module-service-request", encoded_service_request)
+                .header("x-tessara-correlation-id", correlation_id.to_string())
+                .body(Body::from(body.to_vec()))
+                .expect("Response export checkpoint request"),
+        )
+        .await
+        .expect("Response export checkpoint response")
+}
+
 fn signer(
     issuer: &str,
     key_id: &str,
@@ -529,6 +722,10 @@ fn signer(
 
 fn digest(value: char) -> ArtifactDigest {
     ArtifactDigest::new(format!("sha256:{}", value.to_string().repeat(64))).expect("test digest")
+}
+
+fn sha256_hex(value: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(value))
 }
 
 async fn response_json<T: DeserializeOwned>(response: Response) -> T {

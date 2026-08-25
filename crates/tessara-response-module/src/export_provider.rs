@@ -10,6 +10,9 @@ use axum::{
 };
 use serde::Serialize;
 use sqlx::Row;
+use tessara_module_contract::{
+    AuthorizationAudienceV1, CapabilityScopeBindingV1, ModuleServicePrincipalV1,
+};
 use tessara_responses_contract::{
     MAX_EXPORT_PAGE_SIZE, RESPONSE_EXPORT_BINDING_KEY, RESPONSE_EXPORT_CHECKPOINT_ACTION,
     RESPONSE_EXPORT_CHECKPOINT_PATH, RESPONSE_EXPORT_CONTRACT_ID, RESPONSE_EXPORT_MEDIA_TYPE,
@@ -50,7 +53,7 @@ async fn checkpoint(
         if request.action != ResponseExportAction::Checkpoint {
             return Err(());
         }
-        let digest = validate_partition(&grant.payload, &request.partition)?;
+        let digest = validate_partition(&grant, &request.partition)?;
         let epoch = provider_epoch(&runtime).await?;
         let head_sequence = partition_head(&runtime, &request.partition).await?;
         let head = ProviderCursor::new(epoch, digest.clone(), head_sequence).encode()?;
@@ -92,7 +95,7 @@ async fn start(
         .await?;
         let request: ResponseExportStartRequest = serde_json::from_slice(&body).map_err(|_| ())?;
         request.validate().map_err(|_| ())?;
-        let digest = validate_partition(&grant.payload, &request.partition)?;
+        let digest = validate_partition(&grant, &request.partition)?;
         let epoch = provider_epoch(&runtime).await?;
         let head_sequence = partition_head(&runtime, &request.partition).await?;
         let head = ProviderCursor::parse(&request.authenticated_head, &digest)?;
@@ -142,7 +145,7 @@ async fn page(
         {
             return Err(());
         }
-        let digest = validate_partition(&grant.payload, &request.partition)?;
+        let digest = validate_partition(&grant, &request.partition)?;
         let epoch = provider_epoch(&runtime).await?;
         let upper = ProviderCursor::parse(&request.snapshot_upper_bound, &digest)?;
         let after = match &request.after_cursor {
@@ -214,10 +217,7 @@ async fn authorize(
     body: &[u8],
     path: &'static str,
     action: &'static str,
-) -> Result<
-    tessara_module_contract::SignedEnvelopeV1<tessara_module_contract::AuthorizationGrantV3>,
-    (),
-> {
+) -> Result<ExportProviderAuthorization, ()> {
     if headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -225,23 +225,52 @@ async fn authorize(
     {
         return Err(());
     }
-    crate::private_provider_auth::authorize(
-        runtime,
-        headers,
-        body,
-        crate::private_provider_auth::PrivateProviderContract {
-            path,
-            binding: RESPONSE_EXPORT_BINDING_KEY,
-            contract: RESPONSE_EXPORT_CONTRACT_ID,
-            action,
-            capability: "submissions:manage",
-        },
-    )
-    .await
+    let boundary = crate::private_provider_auth::PrivateProviderContract {
+        path,
+        binding: RESPONSE_EXPORT_BINDING_KEY,
+        contract: RESPONSE_EXPORT_CONTRACT_ID,
+        action,
+        capability: "submissions:manage",
+    };
+    if headers.contains_key("x-tessara-owner-bootstrap-authorization") {
+        let authorization = crate::private_provider_auth::authorize_owner_bootstrap(
+            runtime, headers, body, boundary,
+        )
+        .await?;
+        let AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id,
+            module_definition_id,
+        } = &authorization.payload.owner
+        else {
+            return Err(());
+        };
+        Ok(ExportProviderAuthorization {
+            installation_id: authorization.payload.installation_id,
+            presenting_service: ModuleServicePrincipalV1::ModuleInstance {
+                module_instance_id: *module_instance_id,
+                module_definition_id: module_definition_id.clone(),
+            },
+            capability_scope_bindings: authorization.payload.capability_scope_bindings.clone(),
+        })
+    } else {
+        let grant =
+            crate::private_provider_auth::authorize(runtime, headers, body, boundary).await?;
+        Ok(ExportProviderAuthorization {
+            installation_id: grant.payload.installation_id,
+            presenting_service: grant.payload.presenting_service.clone(),
+            capability_scope_bindings: grant.payload.capability_scope_bindings.clone(),
+        })
+    }
+}
+
+struct ExportProviderAuthorization {
+    installation_id: Uuid,
+    presenting_service: ModuleServicePrincipalV1,
+    capability_scope_bindings: Vec<CapabilityScopeBindingV1>,
 }
 
 fn validate_partition(
-    grant: &tessara_module_contract::AuthorizationGrantV3,
+    authorization: &ExportProviderAuthorization,
     partition: &ResponseExportPartition,
 ) -> Result<String, ()> {
     if partition.form_version_ids.is_empty() || partition.authorized_scope_node_ids.is_empty() {
@@ -249,11 +278,11 @@ fn validate_partition(
     }
     let mut authorized_nodes = BTreeSet::new();
     let mut installation_wide = false;
-    for binding in &grant.capability_scope_bindings {
+    for binding in &authorization.capability_scope_bindings {
         if binding.capability.as_str() != "submissions:manage" {
             continue;
         }
-        installation_wide |= binding.organization_root_id == grant.installation_id;
+        installation_wide |= binding.organization_root_id == authorization.installation_id;
         authorized_nodes.insert(binding.organization_root_id);
         authorized_nodes.extend(binding.authorized_organization_ids.iter().copied());
     }
@@ -266,7 +295,10 @@ fn validate_partition(
         return Err(());
     }
     partition
-        .validate_authorization_digest(&grant.presenting_service, grant.installation_id)
+        .validate_authorization_digest(
+            &authorization.presenting_service,
+            authorization.installation_id,
+        )
         .map_err(|_| ())
 }
 
