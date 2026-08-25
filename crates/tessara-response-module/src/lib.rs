@@ -2,13 +2,14 @@
 
 use async_trait::async_trait;
 use axum::{
-    Router,
+    Json, Router,
     body::Body,
     extract::{DefaultBodyLimit, Path, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{Html, IntoResponse, Response},
     routing::get,
 };
+use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::{FromRow, PgPool};
@@ -17,10 +18,11 @@ use std::{
     sync::{Arc, OnceLock},
 };
 use tessara_module_contract::{
-    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
-    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
-    ModuleDefinitionId, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
-    PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, SecurityCapabilityId,
+    ArtifactDigest, AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+    AuthorizationValidationContextV3, BrowserLifecycleAssetV1, BrowserLifecycleBootstrapV1,
+    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
+    ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1, PurposeBoundSigningKeyV1,
+    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, SemanticRouteName,
     ShellContextValidationContextV2,
 };
 use tessara_module_runtime::{
@@ -648,14 +650,94 @@ async fn document(
     let Ok(shell) = verified_document(runtime, headers, action, capability).await else {
         return (StatusCode::FORBIDDEN, "module action unavailable").into_response();
     };
-    Html(render_response_document(
+    if accepts_lifecycle_bootstrap(headers) {
+        let Ok(payload) = serde_json::to_value(&bootstrap) else {
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        };
+        let projection = BrowserLifecycleBootstrapV1 {
+            schema_version: BrowserLifecycleBootstrapV1::SCHEMA_VERSION,
+            definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
+                .expect("static Response definition id is valid"),
+            release_version: Version::parse(MODULE_RELEASE_VERSION)
+                .expect("static Response release is valid"),
+            lifecycle_abi: Version::new(1, 0, 0),
+            destination: SemanticRouteName::new(response_destination(&bootstrap))
+                .expect("static Response destination is valid"),
+            path: path.to_string(),
+            title: title.to_string(),
+            document_state: shell.document_state,
+            entry_asset: lifecycle_asset(
+                RESPONSE_JS_SHA256,
+                "response.js",
+                "text/javascript; charset=utf-8",
+            ),
+            stylesheet_assets: vec![lifecycle_asset(
+                RESPONSE_CSS_SHA256,
+                "response.css",
+                "text/css; charset=utf-8",
+            )],
+            payload,
+        };
+        let mut response = Json(projection).into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/vnd.tessara.module-view+json; version=1"),
+        );
+        no_store_document(&mut response);
+        return response;
+    }
+    let mut response = Html(render_response_document(
         &shell,
         path,
         title,
         &bootstrap,
         MODULE_RELEASE_VERSION,
     ))
-    .into_response()
+    .into_response();
+    no_store_document(&mut response);
+    response
+}
+
+fn response_destination(bootstrap: &ResponseRouteBootstrap) -> &'static str {
+    match bootstrap {
+        ResponseRouteBootstrap::Directory => "responses.directory",
+        ResponseRouteBootstrap::Start => "responses.start",
+        ResponseRouteBootstrap::Detail { .. } => "responses.detail",
+        ResponseRouteBootstrap::Edit { .. } => "responses.edit",
+    }
+}
+
+fn accepts_lifecycle_bootstrap(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value.split(',').any(|media| {
+                media
+                    .trim()
+                    .starts_with("application/vnd.tessara.module-view+json")
+            })
+        })
+}
+
+fn lifecycle_asset(digest: &str, name: &str, content_type: &str) -> BrowserLifecycleAssetV1 {
+    BrowserLifecycleAssetV1 {
+        url: response_asset_path(MODULE_RELEASE_VERSION, digest, name),
+        digest: ArtifactDigest::new(format!("sha256:{digest}"))
+            .expect("compiled Response asset digest is valid"),
+        content_type: content_type.into(),
+    }
+}
+
+fn no_store_document(response: &mut Response) {
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response.headers_mut().insert(
+        header::VARY,
+        HeaderValue::from_static("Accept, Authorization"),
+    );
 }
 
 async fn verified_document(
@@ -862,6 +944,65 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["submissions:respond", "submissions:manage"]
         );
+    }
+
+    #[test]
+    fn lifecycle_bootstrap_requires_the_versioned_accept_media_type() {
+        let mut headers = HeaderMap::new();
+        assert!(!accepts_lifecycle_bootstrap(&headers));
+        headers.insert(
+            header::ACCEPT,
+            HeaderValue::from_static(
+                "text/html, application/vnd.tessara.module-view+json; version=1",
+            ),
+        );
+        assert!(accepts_lifecycle_bootstrap(&headers));
+    }
+
+    #[test]
+    fn lifecycle_projection_matches_response_manifest_routes_and_assets() {
+        let cases = [
+            (ResponseRouteBootstrap::Directory, "responses.directory"),
+            (ResponseRouteBootstrap::Start, "responses.start"),
+            (
+                ResponseRouteBootstrap::Detail {
+                    response_id: "response-1".into(),
+                },
+                "responses.detail",
+            ),
+            (
+                ResponseRouteBootstrap::Edit {
+                    response_id: "response-1".into(),
+                },
+                "responses.edit",
+            ),
+        ];
+        for (bootstrap, destination) in cases {
+            assert_eq!(response_destination(&bootstrap), destination);
+        }
+
+        let entry = lifecycle_asset(
+            RESPONSE_JS_SHA256,
+            "response.js",
+            "text/javascript; charset=utf-8",
+        );
+        assert_eq!(
+            entry.digest.as_str(),
+            format!("sha256:{RESPONSE_JS_SHA256}")
+        );
+        assert!(entry.url.ends_with("/response.js"));
+        assert!(entry.url.contains("/tessara.responses/1.0.0/"));
+
+        let stylesheet = lifecycle_asset(
+            RESPONSE_CSS_SHA256,
+            "response.css",
+            "text/css; charset=utf-8",
+        );
+        assert_eq!(
+            stylesheet.digest.as_str(),
+            format!("sha256:{RESPONSE_CSS_SHA256}")
+        );
+        assert!(stylesheet.url.ends_with("/response.css"));
     }
 
     #[test]
