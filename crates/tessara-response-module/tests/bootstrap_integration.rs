@@ -462,22 +462,23 @@ async fn owner_bootstrap_authorizes_dataset_export_checkpoint(sql_pool: sqlx::Pg
     let encoded_authorization = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&authorization).expect("serialize owner bootstrap authorization"),
     );
+    let service_request_payload = ModuleServiceRequestV1 {
+        schema_version: 1,
+        installation_id: fixture.installation_id,
+        module_instance_id: dataset_instance_id,
+        module_definition_id: dataset_definition,
+        method: "POST".into(),
+        path: RESPONSE_EXPORT_CHECKPOINT_PATH.into(),
+        canonical_body_digest: sha256_hex(&body),
+        inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
+        correlation_id: correlation_id.to_string(),
+        nonce: Uuid::new_v4(),
+        issued_at: now,
+        expires_at: now + Duration::seconds(30),
+    };
     let service_request = fixture
         .dataset_service_signer
-        .sign(ModuleServiceRequestV1 {
-            schema_version: 1,
-            installation_id: fixture.installation_id,
-            module_instance_id: dataset_instance_id,
-            module_definition_id: dataset_definition,
-            method: "POST".into(),
-            path: RESPONSE_EXPORT_CHECKPOINT_PATH.into(),
-            canonical_body_digest: sha256_hex(&body),
-            inbound_grant_digest: sha256_hex(encoded_authorization.as_bytes()),
-            correlation_id: correlation_id.to_string(),
-            nonce: Uuid::new_v4(),
-            issued_at: now,
-            expires_at: now + Duration::seconds(30),
-        })
+        .sign(service_request_payload.clone())
         .expect("signed Dataset service request");
     let encoded_service_request = URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&service_request).expect("serialize Dataset service request"));
@@ -500,11 +501,32 @@ async fn owner_bootstrap_authorizes_dataset_export_checkpoint(sql_pool: sqlx::Pg
     assert!(checkpoint.committed_cursor_valid);
     assert!(checkpoint.changed);
 
+    let second_service_request = fixture
+        .dataset_service_signer
+        .sign(ModuleServiceRequestV1 {
+            nonce: Uuid::new_v4(),
+            ..service_request_payload
+        })
+        .expect("second signed Dataset service request");
+    let encoded_second_service_request = URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&second_service_request)
+            .expect("serialize second Dataset service request"),
+    );
+    let second = send_export_checkpoint(
+        &fixture.app,
+        &body,
+        &encoded_authorization,
+        &encoded_second_service_request,
+        correlation_id,
+    )
+    .await;
+    assert_eq!(second.status(), StatusCode::OK);
+
     let replay = send_export_checkpoint(
         &fixture.app,
         &body,
         &encoded_authorization,
-        &encoded_service_request,
+        &encoded_second_service_request,
         correlation_id,
     )
     .await;

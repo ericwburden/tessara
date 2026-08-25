@@ -57,6 +57,16 @@ CREATE TABLE response_consumed_service_nonces (
     PRIMARY KEY (module_instance_id, nonce)
 );
 
+CREATE TABLE response_consumed_bootstrap_service_nonces (
+    module_instance_id UUID NOT NULL,
+    nonce UUID NOT NULL,
+    authorization_jti UUID NOT NULL,
+    correlation_id TEXT NOT NULL CHECK (btrim(correlation_id) <> ''),
+    issued_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (module_instance_id, nonce)
+);
+
 CREATE TABLE response_consumed_core_service_nonces (
     installation_id UUID NOT NULL,
     nonce UUID NOT NULL,

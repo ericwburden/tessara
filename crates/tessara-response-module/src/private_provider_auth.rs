@@ -23,6 +23,12 @@ pub(crate) struct PrivateProviderContract {
     pub(crate) capability: &'static str,
 }
 
+#[derive(Clone, Copy)]
+enum ModuleServiceAuthorizationDomain {
+    OneUseGrant,
+    OwnerBootstrap,
+}
+
 pub(crate) async fn authorize(
     runtime: &ResponseRuntime,
     headers: &HeaderMap,
@@ -97,6 +103,7 @@ pub(crate) async fn authorize(
                 grant.payload.jti,
                 security.installation_id,
                 correlation_id,
+                ModuleServiceAuthorizationDomain::OneUseGrant,
             )
             .await?;
         }
@@ -205,6 +212,7 @@ pub(crate) async fn authorize_owner_bootstrap(
         authorization.payload.jti,
         security.installation_id,
         correlation_id,
+        ModuleServiceAuthorizationDomain::OwnerBootstrap,
     )
     .await?;
     Ok(authorization)
@@ -266,6 +274,7 @@ async fn validate_and_consume_service_request(
     authorization_jti: uuid::Uuid,
     installation_id: uuid::Uuid,
     correlation_id: uuid::Uuid,
+    authorization_domain: ModuleServiceAuthorizationDomain,
 ) -> Result<(), ()> {
     let (module_instance_id, module_definition_id) = match presenting_service {
         ModuleServicePrincipalV1::ModuleInstance {
@@ -297,19 +306,27 @@ async fn validate_and_consume_service_request(
             now: Utc::now(),
         })
         .map_err(|_| ())?;
-    let consumed = sqlx::query(
-        "INSERT INTO response_consumed_service_nonces
-         (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
-         VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING",
-    )
-    .bind(service.payload.module_instance_id)
-    .bind(service.payload.nonce)
-    .bind(authorization_jti)
-    .bind(&service.payload.correlation_id)
-    .bind(service.payload.issued_at)
-    .execute(&runtime.pool)
-    .await
-    .map_err(|_| ())?;
+    let query = match authorization_domain {
+        ModuleServiceAuthorizationDomain::OneUseGrant => {
+            "INSERT INTO response_consumed_service_nonces
+             (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
+             VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING"
+        }
+        ModuleServiceAuthorizationDomain::OwnerBootstrap => {
+            "INSERT INTO response_consumed_bootstrap_service_nonces
+             (module_instance_id,nonce,authorization_jti,correlation_id,issued_at)
+             VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING"
+        }
+    };
+    let consumed = sqlx::query(query)
+        .bind(service.payload.module_instance_id)
+        .bind(service.payload.nonce)
+        .bind(authorization_jti)
+        .bind(&service.payload.correlation_id)
+        .bind(service.payload.issued_at)
+        .execute(&runtime.pool)
+        .await
+        .map_err(|_| ())?;
     (consumed.rows_affected() == 1).then_some(()).ok_or(())
 }
 
