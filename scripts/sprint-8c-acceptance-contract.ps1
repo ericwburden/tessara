@@ -644,6 +644,17 @@ function Assert-AcceptanceManifest {
         ($expectedResponseLifecycle | ConvertTo-Json -Depth 10 -Compress)) {
         throw "Response manifest does not declare the exact lifecycle-v1 browser contract."
     }
+    $expectedResponseControlProjections = @(
+        [pscustomobject][ordered]@{
+            kind = "security_state"
+            path = "/api/private/security-state"
+            revision_field = "authorization_revision"
+        }
+    )
+    if (($responseManifest.control_projections | ConvertTo-Json -Depth 10 -Compress) -cne
+        ($expectedResponseControlProjections | ConvertTo-Json -Depth 10 -Compress)) {
+        throw "Response manifest does not declare the exact Core security-state projection contract."
+    }
     $responseDirtySource = @(
         Get-Content -Raw -LiteralPath (Join-Path $repoRoot "crates/tessara-web-responses/src/components/edit_form.rs")
         Get-Content -Raw -LiteralPath (Join-Path $repoRoot "crates/tessara-web-responses/src/actions.rs")

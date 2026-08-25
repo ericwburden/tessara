@@ -147,6 +147,13 @@
     { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
     { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
   ],
+  "control_projections": [
+    {
+      "kind": "security_state",
+      "path": "/api/private/security-state",
+      "revision_field": "authorization_revision"
+    }
+  ],
   "assets": [
     { "path": "/module-ui.css", "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc", "content_type": "text/css; charset=utf-8" },
     { "path": "/response.css", "digest": "sha256:c2e598461f162e4dd73b091788f09890e234287fc0e54e71dcc2b38d7d10a87b", "content_type": "text/css; charset=utf-8" },
