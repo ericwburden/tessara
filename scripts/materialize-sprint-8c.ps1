@@ -30,6 +30,15 @@ $expectedOwnerOrder = @(
     "tessara.dashboards",
     "tessara.reference.scoped-records"
 )
+$expectedResponseReadinessCodes = @(
+    "response.database",
+    "response.configuration",
+    "response.security_state",
+    "response.provider.forms",
+    "response.provider.workflow",
+    "response.events.publication",
+    "response.export.publication"
+)
 $compositionBuildServices = @("responses", "datasets", "components")
 $compositionNavigationHrefs = @("/responses", "/datasets", "/components")
 
@@ -285,6 +294,44 @@ function Invoke-Sprint8CServiceProbe {
     }
 }
 
+function Assert-Sprint8CResponseHealthDocuments {
+    param(
+        [Parameter(Mandatory)]$Live,
+        [Parameter(Mandatory)]$Ready
+    )
+
+    $expectedEnvelopeProperties = @("schema_version", "status", "checks")
+    foreach ($document in @($Live, $Ready)) {
+        $actualProperties = @($document.PSObject.Properties.Name | Sort-Object)
+        if (($actualProperties -join "`n") -cne
+            (($expectedEnvelopeProperties | Sort-Object) -join "`n")) {
+            throw "Response health must use the exact shared runtime envelope."
+        }
+        if ([int]$document.schema_version -ne 1 -or
+            [string]$document.status -cne "passing") {
+            throw "Response health must report the passing shared runtime contract."
+        }
+    }
+    if (@($Live.checks).Count -ne 0) {
+        throw "Response liveness must not contain readiness checks."
+    }
+
+    $readyChecks = @($Ready.checks)
+    if ($readyChecks.Count -ne $expectedResponseReadinessCodes.Count -or
+        (@($readyChecks.code) -join "`n") -cne ($expectedResponseReadinessCodes -join "`n")) {
+        throw "Response readiness must contain the exact ordered owner check inventory."
+    }
+    foreach ($check in $readyChecks) {
+        $actualCheckProperties = @($check.PSObject.Properties.Name | Sort-Object)
+        if (($actualCheckProperties -join "`n") -cne
+                ((@("code", "passing", "message") | Sort-Object) -join "`n") -or
+            -not [bool]$check.passing -or
+            [string]::IsNullOrWhiteSpace([string]$check.message)) {
+            throw "Response readiness checks must use the exact passing shared runtime shape."
+        }
+    }
+}
+
 function Get-Sprint8CMaterializationHealth {
     param(
         [Parameter(Mandatory)][string]$ComposePath,
@@ -303,13 +350,7 @@ function Get-Sprint8CMaterializationHealth {
         -Uri "http://127.0.0.1:8094/health/ready"
     $responseLiveDocument = $responseLive.body | ConvertFrom-Json -Depth 20
     $responseReadyDocument = $responseReady.body | ConvertFrom-Json -Depth 20
-    if ([int]$responseLiveDocument.schema_version -ne 1 -or
-        [string]$responseLiveDocument.module_definition_id -cne "tessara.responses" -or
-        [string]$responseLiveDocument.module_release_version -cne "1.0.0" -or
-        [string]$responseLiveDocument.status -cne "live" -or
-        [string]$responseReadyDocument.status -cne "ready") {
-        throw "Response exact liveness/readiness identity contract failed after materialization."
-    }
+    Assert-Sprint8CResponseHealthDocuments -Live $responseLiveDocument -Ready $responseReadyDocument
 
     $datasetLive = Invoke-Sprint8CServiceProbe -ComposePath $ComposePath -Service "datasets" `
         -Uri "http://127.0.0.1:8093/health/live"
@@ -537,6 +578,39 @@ function Test-Sprint8CMaterializationHarness {
     })
     Assert-Sprint8CSemanticNoOp -First $first -NoOp $noOp `
         -FirstTopology $topology -NoOpTopology $topology | Out-Null
+
+    $responseLive = [pscustomobject][ordered]@{
+        schema_version = 1
+        status = "passing"
+        checks = @()
+    }
+    $responseReady = [pscustomobject][ordered]@{
+        schema_version = 1
+        status = "passing"
+        checks = @(
+            $expectedResponseReadinessCodes | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    code = $_
+                    passing = $true
+                    message = "self-test passing check"
+                }
+            }
+        )
+    }
+    Assert-Sprint8CResponseHealthDocuments -Live $responseLive -Ready $responseReady
+
+    $datasetShapedResponseLive = [pscustomobject][ordered]@{
+        schema_version = 1
+        module_definition_id = "tessara.responses"
+        module_release_version = "1.0.0"
+        status = "live"
+    }
+    try {
+        Assert-Sprint8CResponseHealthDocuments -Live $datasetShapedResponseLive -Ready $responseReady
+        throw "Sprint 8C materialization self-test accepted a Dataset-shaped Response health document."
+    } catch {
+        if ($_.Exception.Message -notmatch 'exact shared runtime envelope') { throw }
+    }
 
     $tampered = $noOpResponse | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
     $tampered.receipt.bootstrap_receipts[1].changed = $true
