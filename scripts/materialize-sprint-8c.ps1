@@ -477,6 +477,14 @@ function New-Sprint8CMaterializationSelfTestReceipt {
 
 function Test-Sprint8CMaterializationHarness {
     $materializerSource = Get-Content -Raw -LiteralPath $PSCommandPath
+    $unsupportedFixtureUrlParameter = "-Core" + "BaseUrl"
+    if ($materializerSource.Contains(
+            $unsupportedFixtureUrlParameter,
+            [StringComparison]::Ordinal
+        ) -or
+        $materializerSource -cnotmatch '(?m)^\s*-ComposeProject \$ComposeProject \| Out-Host$') {
+        throw "Sprint 8C materialization must call receipt-driven fixture preparation through its exact supported interface."
+    }
     $compositionBootstrapSource = Get-Content -Raw -LiteralPath (
         Join-Path $repoRoot "scripts/bootstrap-sprint-7a-composition.ps1"
     )
@@ -765,13 +773,13 @@ try {
         $health = Get-Sprint8CMaterializationHealth -ComposePath $composePath -Ports $ports
     }
 
-    # Post-initial Response actions must occur only after Dataset's first bootstrap sync.
-    # For the semantic no-op target they also occur after the repeated owner apply, so
-    # fixture-only Response changes cannot turn the Blueprint repeat into a mutation.
+    # Validate the signed owner read-back only after Dataset's first bootstrap sync.
+    # For the semantic no-op target this also occurs after the repeated owner apply,
+    # so fixture receipt validation cannot turn the Blueprint repeat into a mutation.
     $fixtureReceiptPath = Join-Path $runtimeRoot "fixture-receipt.json"
     & (Join-Path $PSScriptRoot "prepare-sprint-8c-uat-fixtures.ps1") `
         -ApplyResponsePath $firstPath -OutputPath $fixtureReceiptPath `
-        -ComposeProject $ComposeProject -CoreBaseUrl $ports.core_url | Out-Host
+        -ComposeProject $ComposeProject | Out-Host
     if (-not (Test-Sprint7AEvidencePair -ArtifactPath $fixtureReceiptPath `
         -SidecarPath "$fixtureReceiptPath.sha256")) {
         throw "Sprint 8C owner-controlled fixture receipt was not published atomically."
