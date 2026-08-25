@@ -32,17 +32,10 @@ const DASHBOARD_CAPACITY: &[u8] =
 const POPULATED_SPRINT_5A: &str = include_str!("fixtures/sprint_5a_populated.sql");
 const POPULATED_SPRINT_5A_SHA256: &str =
     "29db015ddcd7206a548c5839b958a937c03aab78d2c53047a55483a7aef31172";
-const CURRENT_CORE_TRANSITION_DEFINITION_IDS: [&str; 4] = [
-    "tessara.forms",
-    "tessara.migration",
-    "tessara.responses",
-    "tessara.workflows",
-];
-const CURRENT_CORE_TRANSITION_NAVIGATION_IDS: [&str; 3] = [
-    "tessara.forms.navigation",
-    "tessara.responses.navigation",
-    "tessara.workflows.navigation",
-];
+const CURRENT_CORE_TRANSITION_DEFINITION_IDS: [&str; 3] =
+    ["tessara.forms", "tessara.migration", "tessara.workflows"];
+const CURRENT_CORE_TRANSITION_NAVIGATION_IDS: [&str; 2] =
+    ["tessara.forms.navigation", "tessara.workflows.navigation"];
 const PRODUCT_TABLES: &[&str] = &[
     "node_types",
     "node_type_relationships",
@@ -1196,9 +1189,9 @@ async fn assert_control_plane_shape(pool: &PgPool) {
     ]);
     assert_eq!(counts["installations"], 1);
     assert_eq!(counts["policies"], 1);
-    assert_eq!(counts["policy_entries"], 3);
+    assert_eq!(counts["policy_entries"], 2);
     assert_eq!(counts["groups"], 2);
-    assert_eq!(counts["placements"], 12);
+    assert_eq!(counts["placements"], 11);
     assert_eq!(counts["sync_audits"], 2);
 
     let expected_transition_ids = CURRENT_CORE_TRANSITION_DEFINITION_IDS
