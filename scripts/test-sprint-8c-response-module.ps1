@@ -33,6 +33,7 @@ $suiteContracts = [ordered]@{
     }
     Bootstrap = [pscustomobject][ordered]@{
         kind = "integration"; binary = "bootstrap_integration"; identities = @(
+            "owner_bootstrap_authorizes_dataset_export_checkpoint",
             "signed_response_bootstrap_materializes_submits_and_replays"
         )
     }
