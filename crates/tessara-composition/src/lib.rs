@@ -1855,6 +1855,12 @@ fn ordered_module_selections<'a>(
     blueprint: &'a ApplicationBlueprintV1,
     catalog: &ReleaseCatalogV1,
 ) -> Vec<&'a ModuleSelectionV1> {
+    let declaration_order = blueprint
+        .modules
+        .iter()
+        .enumerate()
+        .map(|(index, selection)| (selection.definition_id.as_str(), index))
+        .collect::<BTreeMap<_, _>>();
     let selected = blueprint
         .modules
         .iter()
@@ -1895,17 +1901,21 @@ fn ordered_module_selections<'a>(
     }
     let mut ready = prerequisites
         .iter()
-        .filter_map(|(definition, providers)| providers.is_empty().then_some(*definition))
+        .filter_map(|(definition, providers)| {
+            providers
+                .is_empty()
+                .then_some((declaration_order[definition], *definition))
+        })
         .collect::<BTreeSet<_>>();
     let mut ordered = Vec::with_capacity(selected.len());
-    while let Some(definition) = ready.pop_first() {
+    while let Some((_, definition)) = ready.pop_first() {
         ordered.push(selected[definition]);
         if let Some(consumers) = dependents.get(definition) {
             for consumer in consumers {
                 let providers = prerequisites.get_mut(consumer).expect("selected consumer");
                 providers.remove(definition);
                 if providers.is_empty() {
-                    ready.insert(consumer);
+                    ready.insert((declaration_order[consumer], consumer));
                 }
             }
         }
@@ -2285,6 +2295,41 @@ mod tests {
             bootstrap_owners,
             [
                 "core",
+                "tessara.datasets",
+                "tessara.components",
+                "tessara.dashboards",
+                "tessara.reference.scoped-records"
+            ]
+        );
+    }
+
+    #[test]
+    fn sprint_8c_reference_blueprint_resolves_owner_order() {
+        let blueprint: ApplicationBlueprintV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8c/blueprints/reference.json"
+        )))
+        .expect("Sprint 8C reference Blueprint");
+        let catalog: ReleaseCatalogV1 = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/sprint-8c/catalogs/local-release-catalog.json"
+        )))
+        .expect("Sprint 8C release catalog");
+        let lockfile = resolve(&blueprint, &catalog).expect("Sprint 8C reference composition");
+        let bootstrap_owners = lockfile
+            .materialization_plan
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                MaterializationActionV1::Bootstrap { owner, .. } => Some(owner.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            bootstrap_owners,
+            [
+                "core",
+                "tessara.responses",
                 "tessara.datasets",
                 "tessara.components",
                 "tessara.dashboards",
