@@ -361,15 +361,15 @@ impl ModuleInventoryEntryV1 {
             }
         } else {
             let count = descriptor.dependencies.len();
+            let (relationship_label, verb) = if count == 1 {
+                ("relationship", "describes")
+            } else {
+                ("relationships", "describe")
+            };
             ModuleDetailDimensionV1 {
                 state: ModuleDetailDimensionStateV1::TransitionInternalOnly,
                 evidence: format!(
-                    "{count} declared {} describe current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                    if count == 1 {
-                        "relationship"
-                    } else {
-                        "relationships"
-                    }
+                    "{count} declared {relationship_label} {verb} current in-process coupling and cannot be satisfied by a transition contribution provider."
                 ),
             }
         };
