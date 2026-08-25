@@ -47,6 +47,7 @@ use crate::{
 };
 
 const CORE_RESPONSE_BINDING: &str = "tessara.core.responses";
+const RESPONSE_READ_CAPABILITIES: &[&str] = &["submissions:read_own", "submissions:manage"];
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,7 +71,7 @@ pub(crate) async fn list_responses(
             "responses.list",
             AuthorizationGrantOperationV1::Read,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            &["submissions:read_own"],
+            RESPONSE_READ_CAPABILITIES,
         )
         .await?;
         let access = response_access(&grant.payload)?;
@@ -485,7 +486,7 @@ pub(crate) async fn get_response(
             "responses.get",
             AuthorizationGrantOperationV1::Read,
             RESPONSE_RESOURCE_CONTRACT_ID,
-            &["submissions:read_own"],
+            RESPONSE_READ_CAPABILITIES,
         )
         .await?;
         let detail = ResponseOwnerRepository::new(runtime.pool.clone())
@@ -997,6 +998,36 @@ mod tests {
             idempotency_key_digest(&headers),
             Err(ProductApiError::BadRequest)
         ));
+    }
+
+    #[test]
+    fn read_authority_preserves_scoped_and_global_manage_bindings() {
+        assert_eq!(
+            RESPONSE_READ_CAPABILITIES,
+            &["submissions:read_own", "submissions:manage"]
+        );
+        let manage = SecurityCapabilityId::new("submissions:manage").unwrap();
+        let mut grant = mutation_grant();
+        grant.capability_scope_bindings = vec![CapabilityScopeBindingV1 {
+            capability: manage.clone(),
+            organization_root_id: Uuid::from_u128(9),
+            authorized_organization_ids: vec![Uuid::from_u128(10)],
+        }];
+        let scoped = response_access(&grant).unwrap();
+        assert!(!scoped.manage_all);
+        assert_eq!(
+            scoped.managed_node_ids,
+            BTreeSet::from([Uuid::from_u128(9), Uuid::from_u128(10)])
+        );
+
+        grant.capability_scope_bindings = vec![CapabilityScopeBindingV1 {
+            capability: manage,
+            organization_root_id: grant.installation_id,
+            authorized_organization_ids: Vec::new(),
+        }];
+        let global = response_access(&grant).unwrap();
+        assert!(global.manage_all);
+        assert!(global.managed_node_ids.is_empty());
     }
 
     #[test]

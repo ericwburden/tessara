@@ -655,6 +655,23 @@ function Assert-AcceptanceManifest {
         ($expectedResponseControlProjections | ConvertTo-Json -Depth 10 -Compress)) {
         throw "Response manifest does not declare the exact Core security-state projection contract."
     }
+    foreach ($readRoute in @(
+        [pscustomobject]@{ path = "/api/responses"; action = "responses.list" },
+        [pscustomobject]@{ path = "/api/responses/{response_id}"; action = "responses.get" }
+    )) {
+        $matches = @($responseManifest.public_api_routes | Where-Object {
+            [string]$_.path_template -ceq $readRoute.path -and
+            [string]$_.method -ceq "GET" -and
+            [string]$_.authorization_action -ceq $readRoute.action
+        })
+        if ($matches.Count -ne 1) {
+            throw "Response manifest must declare one exact $($readRoute.action) public route."
+        }
+        Assert-ExactSequence `
+            -Expected @("submissions:read_own", "submissions:manage") `
+            -Actual @($matches[0].required_capabilities_any_of) `
+            -Label "Response $($readRoute.action) capability set"
+    }
     $responseDirtySource = @(
         Get-Content -Raw -LiteralPath (Join-Path $repoRoot "crates/tessara-web-responses/src/components/edit_form.rs")
         Get-Content -Raw -LiteralPath (Join-Path $repoRoot "crates/tessara-web-responses/src/actions.rs")
