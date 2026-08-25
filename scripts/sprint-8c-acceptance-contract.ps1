@@ -158,6 +158,53 @@ function Assert-ReferenceActorBlueprintAlignment {
     }
 }
 
+function Assert-ReferenceFormWorkflowBlueprintAlignment {
+    param(
+        [Parameter(Mandatory)][object]$Fixture,
+        [Parameter(Mandatory)][object]$Blueprint
+    )
+
+    $fixtureForms = @($Fixture.form_versions)
+    $blueprintForms = @($Blueprint.core.bootstrap.value.forms)
+    if ((@($fixtureForms.key | Sort-Object) -join "`n") -cne
+        (@($blueprintForms.resource_key | Sort-Object) -join "`n")) {
+        throw "Reference Blueprint Forms are not set-equal to the fixture FormVersions."
+    }
+    foreach ($fixtureForm in $fixtureForms) {
+        $formKey = [string]$fixtureForm.key
+        if ($fixtureForm.PSObject.Properties.Name -contains "scope") {
+            throw "Reference FormVersion '$formKey' retains the retired singular scope shape."
+        }
+        $blueprintForm = @($blueprintForms | Where-Object {
+            [string]$_.resource_key -ceq $formKey
+        })
+        if ($blueprintForm.Count -ne 1) {
+            throw "Reference Blueprint Form '$formKey' is missing or duplicated."
+        }
+        $fixtureScopes = @($fixtureForm.scopes | ForEach-Object { [string]$_ })
+        $blueprintScopes = @($blueprintForm[0].scope_node_keys | ForEach-Object { [string]$_ })
+        if ($fixtureScopes.Count -eq 0 -or
+            @($fixtureScopes | Sort-Object -Unique).Count -ne $fixtureScopes.Count -or
+            @($blueprintScopes | Sort-Object -Unique).Count -ne $blueprintScopes.Count -or
+            (($fixtureScopes -join "`n") -cne ($blueprintScopes -join "`n"))) {
+            throw "Reference Form '$formKey' source scopes differ between fixture and Blueprint."
+        }
+    }
+
+    foreach ($assignment in @($Blueprint.core.bootstrap.value.workflow_assignments)) {
+        $assignmentKey = [string]$assignment.resource_key
+        $formKey = [string]$assignment.form_resource_key
+        $nodeKey = [string]$assignment.node_key
+        $referencedForm = @($blueprintForms | Where-Object {
+            [string]$_.resource_key -ceq $formKey
+        })
+        if ($referencedForm.Count -ne 1 -or
+            -not (@($referencedForm[0].scope_node_keys | ForEach-Object { [string]$_ }) -ccontains $nodeKey)) {
+            throw "Reference workflow assignment '$assignmentKey' node '$nodeKey' is not a canonical source scope of Form '$formKey'."
+        }
+    }
+}
+
 function Assert-ReferenceDownstreamBlueprintAlignment {
     param(
         [Parameter(Mandatory)][object]$Fixture,
@@ -649,6 +696,7 @@ $acceptance = Read-TrackedJson "end2end/acceptance-manifest.json"
 
 Assert-ReferenceFixture $reference
 Assert-ReferenceActorBlueprintAlignment -Fixture $reference -Blueprint $blueprint
+Assert-ReferenceFormWorkflowBlueprintAlignment -Fixture $reference -Blueprint $blueprint
 Assert-ReferenceDownstreamBlueprintAlignment -Fixture $reference -Blueprint $blueprint
 Assert-ProviderFaultFixture $faults
 Assert-UpgradeFixture $upgrade
@@ -674,6 +722,25 @@ if ($SelfTest) {
     } catch { $rejected = $true }
     if (-not $rejected) {
         throw "Acceptance contract self-test admitted an actor capability/scope mismatch."
+    }
+
+    $tamperedFormFixture = $reference | ConvertTo-Json -Depth 100 |
+        ConvertFrom-Json -Depth 100
+    $tamperedPrimaryFixtureForm = @($tamperedFormFixture.form_versions |
+        Where-Object { [string]$_.key -ceq "form.primary/v1" })[0]
+    $tamperedPrimaryFixtureForm.scopes = @("scope.full")
+    $tamperedFormBlueprint = $blueprint | ConvertTo-Json -Depth 100 |
+        ConvertFrom-Json -Depth 100
+    $tamperedPrimaryForm = @($tamperedFormBlueprint.core.bootstrap.value.forms |
+        Where-Object { [string]$_.resource_key -ceq "form.primary/v1" })[0]
+    $tamperedPrimaryForm.scope_node_keys = @("scope.full")
+    $rejected = $false
+    try {
+        Assert-ReferenceFormWorkflowBlueprintAlignment -Fixture $tamperedFormFixture `
+            -Blueprint $tamperedFormBlueprint
+    } catch { $rejected = $true }
+    if (-not $rejected) {
+        throw "Acceptance contract self-test admitted a workflow node outside its Form source scopes."
     }
 
     $tamperedDownstreamBlueprint = $blueprint | ConvertTo-Json -Depth 100 |

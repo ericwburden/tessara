@@ -19,9 +19,9 @@
     { "key": "actor.response-outsider", "capabilities": ["submissions:read_own", "submissions:respond"], "scope": "scope.disjoint" }
   ],
   "form_versions": [
-    { "key": "form.primary/v1", "state": "published", "scope": "scope.full", "requires_exact_field_type_option_layout_digest": true },
-    { "key": "form.secondary/v1", "state": "published", "scope": "scope.full", "requires_exact_field_type_option_layout_digest": true },
-    { "key": "form.disjoint/v1", "state": "published", "scope": "scope.disjoint", "requires_exact_field_type_option_layout_digest": true }
+    { "key": "form.primary/v1", "state": "published", "scopes": ["scope.full", "scope.restricted"], "requires_exact_field_type_option_layout_digest": true },
+    { "key": "form.secondary/v1", "state": "published", "scopes": ["scope.full"], "requires_exact_field_type_option_layout_digest": true },
+    { "key": "form.disjoint/v1", "state": "published", "scopes": ["scope.disjoint"], "requires_exact_field_type_option_layout_digest": true }
   ],
   "response_changes": [
     { "key": "response.draft.owner", "kind": "upsert", "state": "draft", "source": "form.primary/v1", "provisioning": "tessara.responses-bootstrap" },
