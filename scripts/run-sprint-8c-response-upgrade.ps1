@@ -81,6 +81,12 @@ function ConvertTo-Sprint8CCanonicalJsonValue {
 function ConvertTo-Sprint8CStableJson {
     param([AllowNull()]$Value)
     if ($null -eq $Value) { return "null" }
+    $Value | ConvertTo-Json -Depth 100 -Compress
+}
+
+function ConvertTo-Sprint8CCanonicalJson {
+    param([AllowNull()]$Value)
+    if ($null -eq $Value) { return "null" }
     ConvertTo-Sprint8CCanonicalJsonValue -Value $Value |
         ConvertTo-Json -Depth 100 -Compress
 }
@@ -1097,7 +1103,7 @@ function Invoke-Sprint8CResponseTransition {
         throw "$Stage resolver substituted the intended source-authenticated Response release."
     }
     $fixedProjection = Get-Sprint8CFixedLockfileProjection -Lockfile $resolved.lockfile
-    if ((ConvertTo-Sprint8CStableJson $fixedProjection) -cne
+    if ((ConvertTo-Sprint8CCanonicalJson $fixedProjection) -cne
         $script:upgradeInitialFixedProjection) {
         throw "$Stage changed a fixed Core or unrelated Module lockfile projection."
     }
@@ -1474,17 +1480,23 @@ function Test-Sprint8CResponseUpgradeHarness {
     }
     Assert-Sprint8CFixedReleaseVersions -Lockfile $fixedLockfile `
         -Contract $contract | Out-Null
-    $fixedProjection = ConvertTo-Sprint8CStableJson `
+    $fixedProjection = ConvertTo-Sprint8CCanonicalJson `
         (Get-Sprint8CFixedLockfileProjection -Lockfile $fixedLockfile)
     $reorderedFixedLockfile = Copy-Sprint8CJsonValue -Value $fixedLockfile
     $reorderedFixedLockfile.core = [pscustomobject][ordered]@{
         core_image = $digest
         version = "0.1.0"
     }
-    if ((ConvertTo-Sprint8CStableJson `
+    if ((ConvertTo-Sprint8CCanonicalJson `
         (Get-Sprint8CFixedLockfileProjection -Lockfile $reorderedFixedLockfile)) -cne
         $fixedProjection) {
         throw "Response upgrade self-test treated fixed projection property order as drift."
+    }
+    if ((ConvertTo-Sprint8CStableJson `
+        (Get-Sprint8CFixedLockfileProjection -Lockfile $reorderedFixedLockfile)) -ceq
+        (ConvertTo-Sprint8CStableJson `
+            (Get-Sprint8CFixedLockfileProjection -Lockfile $fixedLockfile))) {
+        throw "Response upgrade self-test lost retained source-order serialization semantics."
     }
     $tamperedFixedLockfile = Copy-Sprint8CJsonValue -Value $fixedLockfile
     $tamperedFixedLockfile.modules[1].version = "9.9.9"
@@ -1493,7 +1505,7 @@ function Test-Sprint8CResponseUpgradeHarness {
         Assert-Sprint8CFixedReleaseVersions -Lockfile $tamperedFixedLockfile `
             -Contract $contract | Out-Null
     } catch { $rejected = $true }
-    if (-not $rejected -or (ConvertTo-Sprint8CStableJson `
+    if (-not $rejected -or (ConvertTo-Sprint8CCanonicalJson `
         (Get-Sprint8CFixedLockfileProjection -Lockfile $tamperedFixedLockfile)) -ceq
         $fixedProjection) {
         throw "Response upgrade self-test accepted a substituted fixed owner release."
@@ -1940,7 +1952,7 @@ try {
     }
     Assert-Sprint8CFixedReleaseVersions -Lockfile $summary.latest_lockfile `
         -Contract $contract | Out-Null
-    $script:upgradeInitialFixedProjection = ConvertTo-Sprint8CStableJson `
+    $script:upgradeInitialFixedProjection = ConvertTo-Sprint8CCanonicalJson `
         (Get-Sprint8CFixedLockfileProjection -Lockfile $summary.latest_lockfile)
     $script:upgradeInitialBootstrapReceipts = ConvertTo-Sprint8CStableJson `
         @($summary.latest_receipt.bootstrap_receipts | Sort-Object owner)
