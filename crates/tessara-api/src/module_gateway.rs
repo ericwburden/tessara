@@ -1541,11 +1541,18 @@ mod tests {
                 .iter()
                 .map(|binding| (binding.capability.as_str(), binding.organization_root_id))
                 .collect::<Vec<_>>(),
-            [("submissions:read_own", Uuid::from_u128(40))]
+            [
+                ("submissions:read_own", Uuid::from_u128(40)),
+                ("submissions:manage", Uuid::from_u128(50)),
+            ]
         );
         assert_eq!(
             detail_bindings[0].authorized_organization_ids,
             [Uuid::from_u128(140)]
+        );
+        assert_eq!(
+            detail_bindings[1].authorized_organization_ids,
+            [Uuid::from_u128(150)]
         );
     }
 
