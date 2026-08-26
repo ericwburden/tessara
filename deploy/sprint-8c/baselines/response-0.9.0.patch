@@ -551,7 +551,7 @@ index e0d219de4c250902f8841da1d0af6e1ca5f906fd..ac5d169364efdd4c84667e7f4ea8ff76
  
  [dev-dependencies]
 diff --git a/crates/tessara-response-module/manifest.json b/crates/tessara-response-module/manifest.json
-index bef91a2a380a866f77928d648f2c7f161cbe2b59..d32693f8f18c11b49c438a7e9caa4739fd734193 100644
+index bef91a2a380a866f77928d648f2c7f161cbe2b59..ee02b8c20a2e88d50b3b116877d39591b596bbe9 100644
 --- a/crates/tessara-response-module/manifest.json
 +++ b/crates/tessara-response-module/manifest.json
 @@ -1,7 +1,7 @@
@@ -581,9 +581,22 @@ index bef91a2a380a866f77928d648f2c7f161cbe2b59..d32693f8f18c11b49c438a7e9caa4739
      "module_runtime": "0.3.0",
      "module_ui": "0.3.0"
    },
-@@ -127,13 +127,13 @@
+@@ -126,21 +126,40 @@
+     { "destination": "responses.edit", "path_template": "/responses/{response_id}/edit", "methods": ["GET", "HEAD"], "required_capability": "submissions:respond", "authorization_action": "responses.edit", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null },
      { "destination": "responses.detail", "path_template": "/responses/{response_id}", "methods": ["GET", "HEAD"], "required_capability": "submissions:read_own", "authorization_action": "responses.get", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null }
    ],
++  "browser_lifecycle": {
++    "lifecycle_abi": "1.0.0",
++    "entry_asset": "/response.js",
++    "stylesheet_assets": [
++      "/response.css"
++    ],
++    "complete_document_fallback": true,
++    "capabilities": {
++      "navigation_guard": true,
++      "suspend_resume": true
++    }
++  },
    "public_api_routes": [
 -    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
 -    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
@@ -592,16 +605,34 @@ index bef91a2a380a866f77928d648f2c7f161cbe2b59..d32693f8f18c11b49c438a7e9caa4739
 -    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 -    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:respond", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 -    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
-+    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
++    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
 +    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
 +    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
-+    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own"], "functional_contract": "tessara.responses.response", "idempotency": "none" },
++    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response", "idempotency": "none" },
 +    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 +    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 +    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
++  ],
++  "control_projections": [
++    {
++      "kind": "security_state",
++      "path": "/api/private/security-state",
++      "revision_field": "authorization_revision"
++    }
    ],
    "assets": [
      { "path": "/module-ui.css", "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc", "content_type": "text/css; charset=utf-8" },
+-    { "path": "/response.css", "digest": "sha256:c2e598461f162e4dd73b091788f09890e234287fc0e54e71dcc2b38d7d10a87b", "content_type": "text/css; charset=utf-8" },
+-    { "path": "/response.js", "digest": "sha256:eaecb5e8c2eb344d5b6e1011447fb50973246266c79247bb53af2bd1bd000d67", "content_type": "text/javascript; charset=utf-8" },
+-    { "path": "/response-bindings.js", "digest": "sha256:c966ec796b5ef1370fd101a9094d5392490a0eb698b1837e334479351c782090", "content_type": "text/javascript; charset=utf-8" },
+-    { "path": "/response.wasm", "digest": "sha256:1916393e4738588ad29e0f07f19ce8a052a8caf7089ef210bcaf27b5178f0f83", "content_type": "application/wasm" }
++    { "path": "/response.css", "digest": "sha256:e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7", "content_type": "text/css; charset=utf-8" },
++    { "path": "/response.js", "digest": "sha256:94d2bfc37e17ac26a0833a0bbcf4ba5f6f0dc17cf4e4862d4098927e24e5f530", "content_type": "text/javascript; charset=utf-8" },
++    { "path": "/response-bindings.js", "digest": "sha256:d09a3596639d1ffeec5443f019c996cb160fbf935efc9c68c3531d8d3ffaa130", "content_type": "text/javascript; charset=utf-8" },
++    { "path": "/response.wasm", "digest": "sha256:f46b5ad579bf45891d7fd8ceb408435859c91c26c82865fb6f84bc0b2d6b446b", "content_type": "application/wasm" }
+   ],
+   "provided_service_actions": [
+     { "path": "/api/private/responses/submitted-export/checkpoint", "method": "POST", "authorization_action": "responses.export_checkpoint", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },
 diff --git a/crates/tessara-response-module/migrations/001_response_module.sql b/crates/tessara-response-module/migrations/001_response_module.sql
 index 23e4f939f53e67ec5b6a6cb6640027b1d512ba2e..b588d2753217fe136df066c008b20ab24655fb4c 100644
 --- a/crates/tessara-response-module/migrations/001_response_module.sql
@@ -1250,19 +1281,44 @@ index 60669008756d5162fd6f390e056cb26a49af71b5..1d189202b6a10537513891ab3830ab75
      (headers
          .get(header::CONTENT_TYPE)
 diff --git a/crates/tessara-response-module/src/lib.rs b/crates/tessara-response-module/src/lib.rs
-index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a70d6584c9 100644
+index 07e0554bf250f251956db99f9575a3bd9ca2bb26..e7558c050694cbd5b674ecd57cc6cd66ae15e47b 100644
 --- a/crates/tessara-response-module/src/lib.rs
 +++ b/crates/tessara-response-module/src/lib.rs
-@@ -4,7 +4,7 @@ use async_trait::async_trait;
+@@ -2,13 +2,14 @@
+ 
+ use async_trait::async_trait;
  use axum::{
-     Router,
+-    Router,
++    Json, Router,
      body::Body,
 -    extract::{Path, State},
+-    http::{HeaderMap, StatusCode, header},
 +    extract::{DefaultBodyLimit, Path, State},
-     http::{HeaderMap, StatusCode, header},
++    http::{HeaderMap, HeaderValue, StatusCode, header},
      response::{Html, IntoResponse, Response},
      routing::get,
-@@ -43,6 +43,7 @@ pub use bootstrap::{
+ };
++use semver::Version;
+ use serde::{Deserialize, Serialize};
+ use serde_json::Value;
+ use sqlx::{FromRow, PgPool};
+@@ -17,10 +18,11 @@ use std::{
+     sync::{Arc, OnceLock},
+ };
+ use tessara_module_contract::{
+-    AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
+-    AuthorizationValidationContextV3, DependencyBindingKey, FunctionalContractId,
+-    ModuleDefinitionId, ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1,
+-    PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1, SecurityCapabilityId,
++    ArtifactDigest, AuthorizationAudienceV1, AuthorizationGrantOperationV1, AuthorizationGrantV3,
++    AuthorizationValidationContextV3, BrowserLifecycleAssetV1, BrowserLifecycleBootstrapV1,
++    DependencyBindingKey, FunctionalContractId, ModuleDefinitionId,
++    ModuleServiceIdentityRegistryV1, ModuleServicePrincipalV1, PurposeBoundSigningKeyV1,
++    PurposeBoundVerifyingKeyV1, SecurityCapabilityId, SemanticRouteName,
+     ShellContextValidationContextV2,
+ };
+ use tessara_module_runtime::{
+@@ -43,6 +45,7 @@ pub use bootstrap::{
  };
  mod event_provider;
  mod export_provider;
@@ -1270,7 +1326,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
  mod owner;
  mod private_provider_auth;
  mod product_api;
-@@ -50,6 +51,7 @@ mod product_store;
+@@ -50,6 +53,7 @@ mod product_store;
  mod provider_client;
  mod reconciliation_provider;
  mod reverse_provider;
@@ -1278,7 +1334,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
  pub use owner::{
      CreateResponseCommand, IdempotentCommit, ResponseOwnerError, ResponseOwnerRepository,
      ResponseValueInput, StartResponseClaimCommand, canonical_digest,
-@@ -57,20 +59,19 @@ pub use owner::{
+@@ -57,20 +61,19 @@ pub use owner::{
  pub use product_store::{
      ResponseAccess, ResponseListFilter, ResponseMutationCommand, SaveResponseCommand,
  };
@@ -1304,7 +1360,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
  const REQUIRED_RESPONSE_PROVIDER_BINDINGS: [&str; 3] = [
      RESPONSE_FORM_BINDING,
      RESPONSE_WORKFLOW_CONTEXT_BINDING,
-@@ -180,15 +181,8 @@ pub enum ResponseServiceEndpointError {
+@@ -180,15 +183,8 @@ pub enum ResponseServiceEndpointError {
  }
  
  pub fn manifest() -> tessara_module_contract::ModuleManifest {
@@ -1322,7 +1378,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
  }
  
  #[derive(Clone)]
-@@ -198,32 +192,56 @@ pub struct ResponseRuntime {
+@@ -198,32 +194,56 @@ pub struct ResponseRuntime {
      provider_client: reqwest::Client,
      service_request_signer: Arc<PurposeBoundSigningKeyV1>,
      core_service_request_verifier: PurposeBoundVerifyingKeyV1,
@@ -1386,7 +1442,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          }
      }
  }
-@@ -395,8 +413,17 @@ impl ConfigurationProvider for ResponseRuntime {
+@@ -395,8 +415,17 @@ impl ConfigurationProvider for ResponseRuntime {
              .map_err(|_| RuntimeProviderError::Invalid)?
              .normalize()
              .map_err(|_| RuntimeProviderError::Invalid)?;
@@ -1405,7 +1461,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          serde_json::to_value(value).map_err(|_| RuntimeProviderError::Invalid)
      }
  }
-@@ -448,40 +475,17 @@ impl SecurityStateProvider for ResponseRuntime {
+@@ -448,40 +477,17 @@ impl SecurityStateProvider for ResponseRuntime {
  #[async_trait]
  impl ReadinessProvider for ResponseRuntime {
      async fn readiness_checks(&self) -> Vec<RuntimeCheck> {
@@ -1450,7 +1506,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
              ("definition".into(), MODULE_DEFINITION_ID.into()),
              ("release".into(), MODULE_RELEASE_VERSION.into()),
              ("database_owner".into(), RUNTIME_IDENTITY.into()),
-@@ -489,11 +493,14 @@ impl DiagnosticsProvider for ResponseRuntime {
+@@ -489,11 +495,14 @@ impl DiagnosticsProvider for ResponseRuntime {
                  "resource_contract".into(),
                  tessara_responses_contract::RESPONSE_CONTRACT_VERSION.into(),
              ),
@@ -1467,7 +1523,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
              .into_iter()
              .filter(|check| !check.passing)
              .collect()
-@@ -501,7 +508,7 @@ impl DiagnosticsProvider for ResponseRuntime {
+@@ -501,7 +510,7 @@ impl DiagnosticsProvider for ResponseRuntime {
  }
  
  pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
@@ -1476,7 +1532,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          .route(
              "/api/responses",
              get(product_api::list_responses).post(product_api::start_response),
-@@ -522,6 +529,11 @@ pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
+@@ -522,6 +531,11 @@ pub fn router(runtime: Arc<ResponseRuntime>) -> Router {
              "/api/responses/{response_id}/submit",
              axum::routing::post(product_api::submit_response),
          )
@@ -1488,7 +1544,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          .merge(event_provider::routes())
          .merge(export_provider::routes())
          .merge(reconciliation_provider::routes())
-@@ -551,13 +563,21 @@ async fn directory_document(
+@@ -551,13 +565,21 @@ async fn directory_document(
      State(runtime): State<Arc<ResponseRuntime>>,
      headers: HeaderMap,
  ) -> Response {
@@ -1511,7 +1567,104 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
          ResponseRouteBootstrap::Directory,
      )
      .await
-@@ -826,6 +846,22 @@ mod tests {
+@@ -628,14 +650,94 @@ async fn document(
+     let Ok(shell) = verified_document(runtime, headers, action, capability).await else {
+         return (StatusCode::FORBIDDEN, "module action unavailable").into_response();
+     };
+-    Html(render_response_document(
++    if accepts_lifecycle_bootstrap(headers) {
++        let Ok(payload) = serde_json::to_value(&bootstrap) else {
++            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
++        };
++        let projection = BrowserLifecycleBootstrapV1 {
++            schema_version: BrowserLifecycleBootstrapV1::SCHEMA_VERSION,
++            definition_id: ModuleDefinitionId::new(MODULE_DEFINITION_ID)
++                .expect("static Response definition id is valid"),
++            release_version: Version::parse(MODULE_RELEASE_VERSION)
++                .expect("static Response release is valid"),
++            lifecycle_abi: Version::new(1, 0, 0),
++            destination: SemanticRouteName::new(response_destination(&bootstrap))
++                .expect("static Response destination is valid"),
++            path: path.to_string(),
++            title: title.to_string(),
++            document_state: shell.document_state,
++            entry_asset: lifecycle_asset(
++                RESPONSE_JS_SHA256,
++                "response.js",
++                "text/javascript; charset=utf-8",
++            ),
++            stylesheet_assets: vec![lifecycle_asset(
++                RESPONSE_CSS_SHA256,
++                "response.css",
++                "text/css; charset=utf-8",
++            )],
++            payload,
++        };
++        let mut response = Json(projection).into_response();
++        response.headers_mut().insert(
++            header::CONTENT_TYPE,
++            HeaderValue::from_static("application/vnd.tessara.module-view+json; version=1"),
++        );
++        no_store_document(&mut response);
++        return response;
++    }
++    let mut response = Html(render_response_document(
+         &shell,
+         path,
+         title,
+         &bootstrap,
+         MODULE_RELEASE_VERSION,
+     ))
+-    .into_response()
++    .into_response();
++    no_store_document(&mut response);
++    response
++}
++
++fn response_destination(bootstrap: &ResponseRouteBootstrap) -> &'static str {
++    match bootstrap {
++        ResponseRouteBootstrap::Directory => "responses.directory",
++        ResponseRouteBootstrap::Start => "responses.start",
++        ResponseRouteBootstrap::Detail { .. } => "responses.detail",
++        ResponseRouteBootstrap::Edit { .. } => "responses.edit",
++    }
++}
++
++fn accepts_lifecycle_bootstrap(headers: &HeaderMap) -> bool {
++    headers
++        .get(header::ACCEPT)
++        .and_then(|value| value.to_str().ok())
++        .is_some_and(|value| {
++            value.split(',').any(|media| {
++                media
++                    .trim()
++                    .starts_with("application/vnd.tessara.module-view+json")
++            })
++        })
++}
++
++fn lifecycle_asset(digest: &str, name: &str, content_type: &str) -> BrowserLifecycleAssetV1 {
++    BrowserLifecycleAssetV1 {
++        url: response_asset_path(MODULE_RELEASE_VERSION, digest, name),
++        digest: ArtifactDigest::new(format!("sha256:{digest}"))
++            .expect("compiled Response asset digest is valid"),
++        content_type: content_type.into(),
++    }
++}
++
++fn no_store_document(response: &mut Response) {
++    response.headers_mut().insert(
++        header::CACHE_CONTROL,
++        HeaderValue::from_static("private, no-store"),
++    );
++    response.headers_mut().insert(
++        header::VARY,
++        HeaderValue::from_static("Accept, Authorization"),
++    );
+ }
+ 
+ async fn verified_document(
+@@ -826,6 +928,81 @@ mod tests {
                  && contract.version.to_string()
                      == tessara_responses_contract::RESPONSE_CONTRACT_VERSION
          }));
@@ -1531,10 +1684,69 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
 +                .collect::<Vec<_>>(),
 +            ["submissions:respond", "submissions:manage"]
 +        );
++    }
++
++    #[test]
++    fn lifecycle_bootstrap_requires_the_versioned_accept_media_type() {
++        let mut headers = HeaderMap::new();
++        assert!(!accepts_lifecycle_bootstrap(&headers));
++        headers.insert(
++            header::ACCEPT,
++            HeaderValue::from_static(
++                "text/html, application/vnd.tessara.module-view+json; version=1",
++            ),
++        );
++        assert!(accepts_lifecycle_bootstrap(&headers));
++    }
++
++    #[test]
++    fn lifecycle_projection_matches_response_manifest_routes_and_assets() {
++        let cases = [
++            (ResponseRouteBootstrap::Directory, "responses.directory"),
++            (ResponseRouteBootstrap::Start, "responses.start"),
++            (
++                ResponseRouteBootstrap::Detail {
++                    response_id: "response-1".into(),
++                },
++                "responses.detail",
++            ),
++            (
++                ResponseRouteBootstrap::Edit {
++                    response_id: "response-1".into(),
++                },
++                "responses.edit",
++            ),
++        ];
++        for (bootstrap, destination) in cases {
++            assert_eq!(response_destination(&bootstrap), destination);
++        }
++
++        let entry = lifecycle_asset(
++            RESPONSE_JS_SHA256,
++            "response.js",
++            "text/javascript; charset=utf-8",
++        );
++        assert_eq!(
++            entry.digest.as_str(),
++            format!("sha256:{RESPONSE_JS_SHA256}")
++        );
++        assert!(entry.url.ends_with("/response.js"));
++        assert!(entry.url.contains("/tessara.responses/1.0.0/"));
++
++        let stylesheet = lifecycle_asset(
++            RESPONSE_CSS_SHA256,
++            "response.css",
++            "text/css; charset=utf-8",
++        );
++        assert_eq!(
++            stylesheet.digest.as_str(),
++            format!("sha256:{RESPONSE_CSS_SHA256}")
++        );
++        assert!(stylesheet.url.ends_with("/response.css"));
      }
  
      #[test]
-@@ -836,8 +872,12 @@ mod tests {
+@@ -836,8 +1013,12 @@ mod tests {
              "CREATE TABLE response_values",
              "CREATE TABLE response_audit_events",
              "CREATE TABLE response_idempotency_receipts",
@@ -1547,7 +1759,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..2fc7084c37d3982227229e5690f4a6a7
              "form_snapshot JSONB NOT NULL",
              "workflow_context JSONB NOT NULL",
          ] {
-@@ -851,7 +891,7 @@ mod tests {
+@@ -851,7 +1032,7 @@ mod tests {
          assert!(!sql.contains("submission_value_multi"));
          assert_eq!(
              format!("{:x}", Sha256::digest(BASELINE)),
