@@ -1052,18 +1052,39 @@ function Assert-Sprint8CFocusedCleanEvidence {
     )
     Assert-Sprint8CExactSourceIdentity -Actual $Document.source -Expected $ExpectedSource `
         -Label "$ExpectedProof evidence"
-    $executed = if ($null -ne $Document.executed_test_count) {
-        [int]$Document.executed_test_count
-    } elseif ($null -ne $Document.response_owner_tests) {
-        [int]$Document.response_owner_tests + [int]$Document.dataset_sync_tests +
-            [int]$Document.dataset_refresh_tests
+    $executedCountProperty = $Document.PSObject.Properties["executed_test_count"]
+    $responseOwnerTestsProperty = $Document.PSObject.Properties["response_owner_tests"]
+    $executed = if ($null -ne $executedCountProperty) {
+        [int]$executedCountProperty.Value
+    } elseif ($null -ne $responseOwnerTestsProperty) {
+        $datasetSyncTestsProperty = $Document.PSObject.Properties["dataset_sync_tests"]
+        $datasetRefreshTestsProperty = $Document.PSObject.Properties["dataset_refresh_tests"]
+        if ($null -eq $datasetSyncTestsProperty -or $null -eq $datasetRefreshTestsProperty) { 0 }
+        else {
+            [int]$responseOwnerTestsProperty.Value + [int]$datasetSyncTestsProperty.Value +
+                [int]$datasetRefreshTestsProperty.Value
+        }
     } else { 0 }
+    $topLevelCleanupProperty = $Document.PSObject.Properties["cleanup_restoration"]
+    $databaseProperty = $Document.PSObject.Properties["database"]
+    $cleanupShapePassed = $false
+    if ($ExpectedProof -ceq "workflow-response-event-consumption" -and
+        $null -eq $topLevelCleanupProperty -and $null -ne $databaseProperty) {
+        $database = $databaseProperty.Value
+        $databaseCleanupProperty = $database.PSObject.Properties["cleanup_restoration"]
+        $cleanupShapePassed =
+            [string]$database.mode -ceq "disposable-postgres" -and
+            $null -ne $databaseCleanupProperty -and
+            [string]$databaseCleanupProperty.Value.state -ceq "passed"
+    } elseif ($ExpectedProof -ceq "response-owner-to-dataset-export-boundary" -and
+        $null -ne $topLevelCleanupProperty -and $null -eq $databaseProperty) {
+        $cleanupShapePassed = [string]$topLevelCleanupProperty.Value.state -ceq "passed"
+    }
     if ([int]$Document.schema_version -ne 1 -or
         [string]$Document.sprint -cne "sprint-8c" -or
         [string]$Document.proof -cne $ExpectedProof -or
         [string]$Document.state -cne "passed" -or
-        $executed -lt $MinimumExecutedTests -or
-        [string]$Document.cleanup_restoration.state -cne "passed") {
+        $executed -lt $MinimumExecutedTests -or -not $cleanupShapePassed) {
         throw "$ExpectedProof evidence is incomplete."
     }
 }
@@ -1962,11 +1983,28 @@ function New-Sprint8CSyntheticFocusedCleanEvidence {
         [Parameter(Mandatory)][string]$Proof,
         [Parameter(Mandatory)][int]$ExecutedTestCount
     )
-    [pscustomobject][ordered]@{
+    $document = [pscustomobject][ordered]@{
         schema_version = 1; sprint = "sprint-8c"; proof = $Proof; state = "passed"
-        source = $Source; executed_test_count = $ExecutedTestCount
-        cleanup_restoration = [pscustomobject][ordered]@{ state = "passed" }
+        source = $Source
     }
+    if ($Proof -ceq "workflow-response-event-consumption") {
+        $document | Add-Member -NotePropertyName executed_test_count `
+            -NotePropertyValue $ExecutedTestCount
+        $document | Add-Member -NotePropertyName database -NotePropertyValue ([pscustomobject][ordered]@{
+            mode = "disposable-postgres"
+            cleanup_restoration = [pscustomobject][ordered]@{ state = "passed" }
+        })
+    } elseif ($Proof -ceq "response-owner-to-dataset-export-boundary") {
+        $document | Add-Member -NotePropertyName response_owner_tests `
+            -NotePropertyValue $ExecutedTestCount
+        $document | Add-Member -NotePropertyName dataset_sync_tests -NotePropertyValue 0
+        $document | Add-Member -NotePropertyName dataset_refresh_tests -NotePropertyValue 0
+        $document | Add-Member -NotePropertyName cleanup_restoration `
+            -NotePropertyValue ([pscustomobject][ordered]@{ state = "passed" })
+    } else {
+        throw "Unknown synthetic focused clean proof '$Proof'."
+    }
+    $document
 }
 
 function New-Sprint8CSyntheticResponseUpgradeEvidence {
@@ -2344,6 +2382,40 @@ function Test-Sprint8CImplementationFinalizationContract {
             throw "Finalizer self-test admitted retired Dataset-shaped Response health evidence."
         }
 
+        $wrongWorkflowCleanup = New-Sprint8CSyntheticFocusedCleanEvidence -Source $source `
+            -Proof "workflow-response-event-consumption" -ExecutedTestCount 2
+        $wrongWorkflowCleanup | Add-Member -NotePropertyName cleanup_restoration `
+            -NotePropertyValue $wrongWorkflowCleanup.database.cleanup_restoration
+        $wrongWorkflowCleanup.PSObject.Properties.Remove("database")
+        $wrongWorkflowCleanupRejected = $false
+        try {
+            Assert-Sprint8CFocusedCleanEvidence -Document $wrongWorkflowCleanup `
+                -ExpectedSource $source -ExpectedProof "workflow-response-event-consumption" `
+                -MinimumExecutedTests 2
+        } catch { $wrongWorkflowCleanupRejected = $true }
+        if (-not $wrongWorkflowCleanupRejected) {
+            throw "Finalizer self-test admitted top-level cleanup for workflow event evidence."
+        }
+
+        $wrongDatasetCleanup = New-Sprint8CSyntheticFocusedCleanEvidence -Source $source `
+            -Proof "response-owner-to-dataset-export-boundary" -ExecutedTestCount 20
+        $wrongDatasetCleanup | Add-Member -NotePropertyName database `
+            -NotePropertyValue ([pscustomobject][ordered]@{
+                mode = "disposable-postgres"
+                cleanup_restoration = $wrongDatasetCleanup.cleanup_restoration
+            })
+        $wrongDatasetCleanup.PSObject.Properties.Remove("cleanup_restoration")
+        $wrongDatasetCleanupRejected = $false
+        try {
+            Assert-Sprint8CFocusedCleanEvidence -Document $wrongDatasetCleanup `
+                -ExpectedSource $source `
+                -ExpectedProof "response-owner-to-dataset-export-boundary" `
+                -MinimumExecutedTests 20
+        } catch { $wrongDatasetCleanupRejected = $true }
+        if (-not $wrongDatasetCleanupRejected) {
+            throw "Finalizer self-test admitted database-nested cleanup for Dataset export evidence."
+        }
+
         $duplicatedFailureProjection = New-Sprint8CSyntheticFailureEvidence -Source $source
         $duplicatedFailureProjection.failure_attempts[0].containment | Add-Member `
             -NotePropertyName containment -NotePropertyValue ([pscustomobject]@{
@@ -2573,6 +2645,8 @@ function Test-Sprint8CImplementationFinalizationContract {
             dirty_source_rejected = $dirtyRejected
             mutating_noop_rejected = $noOpRejected
             legacy_response_health_rejected = $legacyResponseHealthRejected
+            wrong_workflow_cleanup_shape_rejected = $wrongWorkflowCleanupRejected
+            wrong_dataset_cleanup_shape_rejected = $wrongDatasetCleanupRejected
             duplicated_failure_projection_rejected = $duplicatedFailureProjectionRejected
             evidence_tamper_rejected = $authenticationRejected
             foreign_publication_preserved = $foreignPublicationRejected
