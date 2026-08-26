@@ -414,6 +414,37 @@ function Assert-Sprint8CResponseProductProjection {
     }
 }
 
+function Assert-Sprint8CResponseDiagnosticsEnvelope {
+    param([Parameter(Mandatory)]$Diagnostics)
+
+    $expectedFields = @(
+        "contract_version", "facts", "findings", "health", "release",
+        "runtime_version", "schema_version", "ui_version"
+    )
+    $actualFields = @($Diagnostics.PSObject.Properties.Name | Sort-Object)
+    if (($actualFields -join "`n") -cne ($expectedFields -join "`n") -or
+        [uint16]$Diagnostics.schema_version -ne 1 -or
+        [string]$Diagnostics.release -cne "1.0.0" -or
+        [string]$Diagnostics.contract_version -cne "0.4.0" -or
+        [string]$Diagnostics.runtime_version -cne "0.3.0" -or
+        [string]$Diagnostics.ui_version -cne "0.3.0" -or
+        [string]$Diagnostics.health -cne "passing" -or
+        $null -eq $Diagnostics.facts -or
+        @($Diagnostics.findings).Count -ne 0) {
+        throw "Response diagnostics do not match the exact shared module-runtime envelope."
+    }
+
+    [pscustomobject][ordered]@{
+        state = "passed"
+        release = [string]$Diagnostics.release
+        contract_version = [string]$Diagnostics.contract_version
+        runtime_version = [string]$Diagnostics.runtime_version
+        ui_version = [string]$Diagnostics.ui_version
+        health = [string]$Diagnostics.health
+        finding_count = @($Diagnostics.findings).Count
+    }
+}
+
 function Get-Sprint8CSmokeTopologySnapshot {
     param([Parameter(Mandatory)][string]$ComposePath)
 
@@ -578,6 +609,26 @@ function Test-Sprint8CDeployedSmokeHarness {
         $identity.draft_response_id -cne "01980000-0088-7000-8000-000000000001" -or
         $identity.response_fixtures.response_count -ne 4) {
         throw "Deployed smoke fixture identity self-test failed."
+    }
+    $canonicalDiagnostics = [pscustomobject][ordered]@{
+        schema_version = 1
+        release = "1.0.0"
+        contract_version = "0.4.0"
+        runtime_version = "0.3.0"
+        ui_version = "0.3.0"
+        health = "passing"
+        facts = [pscustomobject]@{}
+        findings = @()
+    }
+    Assert-Sprint8CResponseDiagnosticsEnvelope -Diagnostics $canonicalDiagnostics | Out-Null
+    $datasetShapedDiagnostics = $canonicalDiagnostics | ConvertTo-Json -Depth 10 | ConvertFrom-Json -Depth 10
+    $datasetShapedDiagnostics.PSObject.Properties.Remove("contract_version")
+    $datasetShapedDiagnostics | Add-Member -NotePropertyName "module" -NotePropertyValue "tessara.responses"
+    try {
+        Assert-Sprint8CResponseDiagnosticsEnvelope -Diagnostics $datasetShapedDiagnostics | Out-Null
+        throw "Deployed smoke self-test accepted Dataset-shaped Response diagnostics."
+    } catch {
+        if ($_.Exception.Message -notmatch 'shared module-runtime envelope') { throw }
     }
     $responseList = @($identity.response_fixtures.response_ids.PSObject.Properties |
         ForEach-Object {
@@ -958,13 +1009,13 @@ try {
     if ($diagnosticsText -match '(?i)postgres(?:ql)?://|password|secret|signing[_-]?key|response\.initial') {
         throw "Dataset diagnostics disclosed a credential or product-row identity."
     }
+    $responseDiagnosticsContract = Assert-Sprint8CResponseDiagnosticsEnvelope `
+        -Diagnostics $responseDiagnostics.document
     if ([string]$responseManifest.definition_id -cne "tessara.responses" -or
         [string]$responseManifest.release_version -cne "1.0.0" -or
         @($responseValidatedConfiguration.document.findings).Count -ne 0 -or
         $null -eq $responseValidatedConfiguration.document.normalized -or
-        @($responseAppliedConfiguration.document.findings).Count -ne 0 -or
-        [string]$responseDiagnostics.document.module -cne "tessara.responses" -or
-        [string]$responseDiagnostics.document.release -cne "1.0.0") {
+        @($responseAppliedConfiguration.document.findings).Count -ne 0) {
         throw "Response manifest/configuration/diagnostics generic control contract failed."
     }
     $responseDiagnosticsText = $responseDiagnostics.document | ConvertTo-Json -Depth 100 -Compress
@@ -982,7 +1033,7 @@ try {
         response = [pscustomobject][ordered]@{
             manifest = "tessara.responses@1.0.0"
             configuration_round_trip = "exact"
-            diagnostics = "sanitized"
+            diagnostics = $responseDiagnosticsContract
         }
         dataset = [pscustomobject][ordered]@{
             manifest = "tessara.datasets@1.0.0"
