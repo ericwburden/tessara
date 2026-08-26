@@ -103,6 +103,14 @@ function Assert-TessaraValidationContractV3Semantics {
         foreach ($edge in @($target.fanout_edges)) {
             if (-not $edges.ContainsKey([string]$edge)) { throw "Target '$($target.id)' references unknown fanout edge '$edge'." }
         }
+        $claimKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $hasEvidenceClaim = $false
+        foreach ($claim in @($target.resource_claims)) {
+            $claimKey = "$([string]$claim.kind)/$([string]$claim.identity)"
+            if (-not $claimKeys.Add($claimKey)) { throw "Target '$($target.id)' has duplicate resource claim '$claimKey'." }
+            if ([string]$claim.kind -ceq "evidence-path") { $hasEvidenceClaim = $true }
+        }
+        if (-not $hasEvidenceClaim) { throw "Target '$($target.id)' must claim its exclusive evidence path." }
         $mappedImplementationLanes = @($Contract.requirements | Where-Object {
                 @($_.implementation_targets) -ccontains [string]$target.id
             } | ForEach-Object { @($_.validation_lanes) } | Where-Object {
@@ -128,6 +136,10 @@ function Assert-TessaraValidationContractV3Semantics {
             } | Sort-Object)
         if (($expectedLanePrerequisites -join "`n") -cne (@($lane.prerequisites | Sort-Object) -join "`n")) {
             throw "Implementation target '$($target.id)' prerequisites disagree with lane '$($lane.id)'."
+        }
+        if (([bool]$lane.touches_live_state -or [string]$target.continuation -ceq "unsafe-live-state") -and
+            @($target.resource_claims | Where-Object { [string]$_.kind -cne "evidence-path" }).Count -eq 0) {
+            throw "Live-state target '$($target.id)' must declare its exclusive topology, port, database, Docker, process, or service claims."
         }
     }
     Assert-TessaraGuardrailAcyclic $targets prerequisites "Implementation target prerequisites"
@@ -302,6 +314,23 @@ function Assert-TessaraImplementationReadinessV2Semantics {
         [string]$harvest.platform_identity.platform_fingerprint -cne [string]$identity.platform_fingerprint) {
         throw "Harvested defect batch does not bind the current contract, adapter, and platform."
     }
+    Assert-TessaraJsonSchema -Document $harvest -Kind implementation_defect_batch `
+        -Label "Harvested implementation defect batch"
+    $finalizationPath = Read-TessaraGuardrailReference $repositoryRoot `
+        $Result.coordinator_finalization "Implementation coordinator finalization"
+    $finalization = Get-Content -Raw -LiteralPath $finalizationPath | ConvertFrom-Json -Depth 100
+    Assert-TessaraJsonSchema -Document $finalization -Kind implementation_coordinator_finalization `
+        -Label "Implementation coordinator finalization"
+    if ([string]$finalization.state -cne "passed" -or
+        [int]$finalization.failed_count -ne 0 -or [int]$finalization.blocked_count -ne 0 -or
+        [int]$finalization.open_defect_count -ne 0 -or
+        [string]$finalization.validation_contract.sha256 -cne $contractSha -or
+        [string]$finalization.validation_adapter.sha256 -cne $adapterSha -or
+        [string]$finalization.platform_identity.platform_fingerprint -cne [string]$identity.platform_fingerprint -or
+        [string]$finalization.schedule_digest -cne [string]$harvest.schedule_digest -or
+        [string]$finalization.defect_batch.sha256 -cne [string]$Result.harvested_defects.sha256) {
+        throw "Implementation coordinator finalization is failed, stale, blocked, or unauthenticated."
+    }
     $targets = Get-TessaraGuardrailMap @($Result.targets) id "Implementation readiness targets"
     if ($targets.Count -ne @($Contract.implementation_targets).Count) { throw "Implementation readiness target inventory is not exact." }
     foreach ($target in @($Contract.implementation_targets)) {
@@ -314,7 +343,17 @@ function Assert-TessaraImplementationReadinessV2Semantics {
             [string]$receipt.adapter_sha256 -cne $adapterSha) {
             throw "Implementation target '$($target.id)' receipt is failed, stale, or bound to older source/contract."
         }
-        $null = Read-TessaraGuardrailReference $repositoryRoot $receipt.evidence "Implementation target '$($target.id)'"
+        $targetReceiptPath = Read-TessaraGuardrailReference $repositoryRoot $receipt.evidence "Implementation target '$($target.id)'"
+        $targetReceipt = Get-Content -Raw -LiteralPath $targetReceiptPath | ConvertFrom-Json -Depth 100
+        Assert-TessaraJsonSchema -Document $targetReceipt -Kind implementation_target_completion `
+            -Label "Implementation target '$($target.id)' completion"
+        if ([string]$targetReceipt.target -cne [string]$target.id -or
+            [string]$targetReceipt.state -cne "passed" -or
+            [string]$targetReceipt.schedule_digest -cne [string]$finalization.schedule_digest -or
+            ([string]$targetReceipt.disposition -ceq "reused" -and [bool]$targetReceipt.newly_executed) -or
+            ([string]$targetReceipt.disposition -ceq "executed" -and -not [bool]$targetReceipt.newly_executed)) {
+            throw "Implementation target '$($target.id)' completion misstates execution or reuse provenance."
+        }
     }
     $fanout = Get-TessaraGuardrailMap @($Result.fanout) edge "Fanout readiness results"
     if ($fanout.Count -ne @($Contract.controlled_artifact_edges).Count) { throw "Implementation readiness fanout inventory is not exact." }

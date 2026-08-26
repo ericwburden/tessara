@@ -154,6 +154,10 @@ try {
         )) {
         $target = Copy-Json $harvestContract.implementation_targets[0]
         $target.id = $spec.id; $target.prerequisites = @($spec.prerequisites); $target.continuation = $spec.continuation
+        $target.resource_claims = @([pscustomobject]@{ kind="evidence-path"; identity=$spec.id; mode="exclusive" })
+        if ($spec.continuation -eq "unsafe-live-state") {
+            $target.resource_claims += [pscustomobject]@{ kind="database"; identity="harvest-live-database"; mode="exclusive" }
+        }
         $harvestContract.implementation_targets += $target
         $harvestContract.implementation_slices[0].exit_targets += $spec.id
         $laneId = "$($spec.id)-lane"
@@ -173,20 +177,24 @@ try {
     }
     $harvestPair = Write-Pair $harvestContract $harvestAdapter "harvest"
     $invoker = { param($Target, $Lane) [pscustomobject]@{ state = if ($Target -eq "failure-a") { "failed" } else { "passed" }; cleanup_restoration = [pscustomobject]@{ state="passed" } } }
-    $harvest = Invoke-TessaraImplementationHarvest $harvestPair.adapter_relative ("0" * 64) (Join-Path $testRoot "evidence-one") -RepositoryRoot $repo -LaneInvoker $invoker
+    $harvestCandidate = [string](Get-TessaraValidationCandidateIdentity `
+        -AdapterPath $harvestPair.adapter -RepositoryRoot $repo).candidate_fingerprint
+    $harvest = Invoke-TessaraImplementationHarvest $harvestPair.adapter_relative $harvestCandidate (Join-Path $testRoot "evidence-one") -RepositoryRoot $repo -LaneInvoker $invoker
     $stateMap = @{}; foreach ($target in $harvest.batch.targets) { $stateMap[[string]$target.id] = [string]$target.state }
     Assert-True ($stateMap["failure-a"] -eq "failed" -and $stateMap["sibling-b"] -eq "passed") "Safe independent sibling did not continue after failure."
     Assert-True ($stateMap["dependent-c"] -eq "blocked" -and $stateMap["unsafe-d"] -eq "blocked") "Dependent or unsafe target did not block."
     $provenancePath = Join-Path $repo ([string]$harvest.batch.findings[0].provenance.path)
     Assert-True ($harvest.batch.findings.Count -eq 1 -and (Test-Path $provenancePath) -and (Test-Path $harvest.batch_path)) "Failure provenance or harvested batch was not retained."
-    $harvestAgain = Invoke-TessaraImplementationHarvest $harvestPair.adapter_relative ("0" * 64) (Join-Path $testRoot "evidence-one") -RepositoryRoot $repo -LaneInvoker $invoker
+    $harvestAgain = Invoke-TessaraImplementationHarvest $harvestPair.adapter_relative $harvestCandidate (Join-Path $testRoot "evidence-one") -RepositoryRoot $repo -LaneInvoker $invoker
     Assert-True ((($harvest.batch.targets | ConvertTo-Json -Depth 20 -Compress) -ceq ($harvestAgain.batch.targets | ConvertTo-Json -Depth 20 -Compress))) "Harvested target batch is not deterministic."
 
     $identity = Get-TessaraValidationPlatformIdentity
     $head = (& git -C $repo rev-parse HEAD).Trim(); $tree = (& git -C $repo rev-parse 'HEAD^{tree}').Trim()
     $fakePath = Join-Path $testRoot "fake.json"
+    $contractRef = [pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$contractAsset).Replace('\','/'); sha256=(Get-Sha $contractAsset) }
     $fakeDocument = [pscustomobject]@{
         schema_version=1; contract="tessara.validation.implementation-defect-batch"; policy_version="tessara-validation-v3"; sprint=$contractTemplate.sprint
+        schedule_digest=("1" * 64); coordinator_start=$contractRef
         source_identity=[pscustomobject]@{ commit=$head; tree=$tree; dirty=$false }
         validation_contract=[pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$contractAsset).Replace('\','/'); sha256=(Get-Sha $contractAsset) }
         validation_adapter=[pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$adapterAsset).Replace('\','/'); sha256=(Get-Sha $adapterAsset) }
@@ -195,6 +203,18 @@ try {
     }
     Write-Json $fakePath $fakeDocument
     $fakeRef = [pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$fakePath).Replace('\','/'); sha256=(Get-Sha $fakePath) }
+    $fakeFinalizationPath = Join-Path $testRoot "fake-finalization.json"
+    $fakeFinalization = [pscustomobject]@{
+        schema_version=1; contract="tessara.validation.implementation-coordinator-finalization"; policy_version="tessara-validation-v3"; sprint=$contractTemplate.sprint; state="passed"
+        schedule_digest=("1" * 64); context_fingerprint=("2" * 64); start=$contractRef; checkpoint=$fakeRef; defect_batch=$fakeRef
+        targets=@([pscustomobject]@{target="replace-focused-target";state="passed";disposition="executed";receipt=$fakeRef})
+        executed_count=1; reused_count=0; blocked_count=0; failed_count=0; open_defect_count=0; topology_restoration="not_applicable"
+        source_identity=[pscustomobject]@{commit=$head;tree=$tree;dirty=$false}; validation_contract=$contractRef
+        validation_adapter=[pscustomobject]@{path=[IO.Path]::GetRelativePath($repo,$adapterAsset).Replace('\','/');sha256=(Get-Sha $adapterAsset)}
+        platform_identity=[pscustomobject]@{release_version=$identity.release_version;platform_fingerprint=$identity.platform_fingerprint;execution_fingerprint=$identity.execution_fingerprint}
+    }
+    Write-Json $fakeFinalizationPath $fakeFinalization
+    $fakeFinalizationRef=[pscustomobject]@{path=[IO.Path]::GetRelativePath($repo,$fakeFinalizationPath).Replace('\','/');sha256=(Get-Sha $fakeFinalizationPath)}
     $state = [pscustomobject]@{ required=$false; state="not_applicable"; evidence=$null }
     $readiness = [pscustomobject]@{
         schema_version=2; contract="tessara.implementation-readiness-result"; policy_version="tessara-validation-v3"; sprint=$contractTemplate.sprint; state="passed"; authoritative=$false
@@ -205,8 +225,21 @@ try {
         affected_domains=@("product-source"); changed_paths=@(); fanout=@([pscustomobject]@{ edge="replace-fanout"; state="passed"; receipt=$fakeRef })
         targets=@([pscustomobject]@{ id="replace-focused-target"; state="passed"; source_identity=[pscustomobject]@{ commit=("0" * 40); tree=$tree; dirty=$false }; validation_contract_sha256=(Get-Sha $contractAsset); adapter_sha256=(Get-Sha $adapterAsset); clean_environment=$true; evidence=$fakeRef })
         slices=@([pscustomobject]@{ id="replace-slice"; state="passed"; exit_targets=@("replace-focused-target"); fanout_edges=@("replace-fanout") })
-        harvested_defects=$fakeRef; known_failure_count=0; materialization=[pscustomobject]@{ required=$false; first_apply=$state; semantic_no_op=$state; recovery=$state }; cleanup_restoration=$state; evidence_index=$fakeRef
+        coordinator_finalization=$fakeFinalizationRef; harvested_defects=$fakeRef; known_failure_count=0; materialization=[pscustomobject]@{ required=$false; first_apply=$state; semantic_no_op=$state; recovery=$state }; cleanup_restoration=$state; evidence_index=$fakeRef
     }
+    $missingFinalization = Copy-Json $readiness
+    $missingFinalization.PSObject.Properties.Remove("coordinator_finalization")
+    Assert-Throws { Assert-TessaraImplementationReadinessResult $missingFinalization $contractTemplate $contractAsset -AdapterPath $adapterAsset } "coordinator_finalization|Required properties|schema"
+    $unauthenticatedFinalization = Copy-Json $readiness
+    $unauthenticatedFinalization.coordinator_finalization.sha256 = ("f" * 64)
+    Assert-Throws { Assert-TessaraImplementationReadinessResult $unauthenticatedFinalization $contractTemplate $contractAsset -AdapterPath $adapterAsset } "authenticate|finalization"
+    $failedFinalizationPath = Join-Path $testRoot "failed-finalization.json"
+    $failedFinalization = Copy-Json $fakeFinalization
+    $failedFinalization.state = "failed"; $failedFinalization.blocked_count = 1; $failedFinalization.open_defect_count = 1
+    Write-Json $failedFinalizationPath $failedFinalization
+    $failedFinalizationReadiness = Copy-Json $readiness
+    $failedFinalizationReadiness.coordinator_finalization = [pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$failedFinalizationPath).Replace('\','/'); sha256=(Get-Sha $failedFinalizationPath) }
+    Assert-Throws { Assert-TessaraImplementationReadinessResult $failedFinalizationReadiness $contractTemplate $contractAsset -AdapterPath $adapterAsset } "failed|blocked|unauthenticated"
     Assert-Throws { Assert-TessaraImplementationReadinessResult $readiness $contractTemplate $contractAsset -AdapterPath $adapterAsset } "stale|older source"
 
     $efficiency = [pscustomobject]@{

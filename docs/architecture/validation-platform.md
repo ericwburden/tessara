@@ -193,10 +193,12 @@ entry point. Release `2.0.0` exports only:
 - `Get-TessaraValidationCandidateIdentity`;
 - `Get-TessaraValidationCompatibilityPlan`;
 - `Assert-TessaraValidationAdapter`; and
-- `Invoke-TessaraValidationLane`.
+- `Assert-TessaraFutureSprintPlanningPackage`;
+- `Invoke-TessaraValidationLane`; and
+- `Invoke-TessaraImplementationHarvest`.
 
-The aggregate identity binds the exact platform manifest, four public
-boundary inputs, and four components:
+The aggregate identity binds the exact platform manifest, its versioned public-
+boundary inventory, and four components:
 
 - public entry point, adapter schema, governing validation-contract schema, and
   phase-certificate-v2 schema;
@@ -622,6 +624,46 @@ siblings continue, failed dependents and unsafe live-state targets are blocked,
 cleanup/topology risk stops continuation, and every target receives a retained
 receipt. The deterministic defect batch is consumed by implementation-readiness
 schema 2 before formal Readiness.
+
+### Evidentiary-priority implementation scheduling
+
+Contract v3 activates `evidentiary-priority-v1` with
+`serial-resource-safe` execution. Each target declares exact prerequisites and
+exclusive claims for its evidence path and any process, topology, port,
+database, Docker, or external-service state. The sprint adapter continues to
+own only exact product actions; the shared platform owns admission, order,
+checkpoint recovery, cleanup enforcement, and aggregate accounting.
+
+Before assertions, the coordinator publishes one immutable schedule ordered by
+corrected prior failures with passing focused reproducers, never-run targets,
+dependency-affected or reuse-ineligible targets, authenticated unchanged
+targets, then finalization. Prerequisite closure may move an otherwise lower-
+priority target ahead of its dependent. An unclassified, open, blocked, or
+uncorrected prior failure is recorded as blocked by the provenance gate.
+Unknown dependency impact selects conservative execution.
+
+`authenticated-unchanged` reuse is an explicit contract choice. A prior target
+is reusable only when its completion and lane-result hashes, contract, adapter,
+platform execution, command, environment, dependency, compatibility, and
+recursive prerequisite identities all authenticate. Reuse emits a current
+completion with `disposition: reused` and `newly_executed: false`; it does not
+claim a new assertion run. Missing or challenged evidence executes normally.
+
+Execution is deliberately serial in this revision. That makes overlapping
+evidence paths and process/topology/port/database/Docker claims exclusive and
+forbids concurrent Docker-backed targets. Safe independent siblings still
+continue fail-late. Every live-state completion must authenticate cleanup and
+restoration after pass, failure, timeout, or interruption. Cleanup uncertainty
+halts unsafe continuation.
+
+The immutable start and per-target receipts are complemented by a resumable
+checkpoint. Recovery authenticates the original schedule and all completed
+receipts before continuing, and never relaunches an authenticated completed
+live-state target. Any source, fixture, contract, environment, command, adapter,
+dependency, or correction change produces a different context and requires a
+new plan. Formal Readiness requires the finalization receipt to prove every
+required target passed or was validly reused, no dependency or receipt is
+stale, no defect is open, and topology restoration passed.
 
 Formal v3 evidence uses phase-certificate schema 3 and evidence-chain schema 2.
 Both bind the current platform release/fingerprint and adapter path/hash. The

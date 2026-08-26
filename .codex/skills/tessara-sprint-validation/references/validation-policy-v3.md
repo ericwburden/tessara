@@ -29,11 +29,16 @@ projection to advance; unknown fanout expands the target cone. Target receipts
 bind current source, contract hash, adapter hash, and platform fingerprint.
 
 Implementation lanes execute through `Invoke-TessaraImplementationHarvest`.
-Safe independent siblings continue after a failure; dependents and unsafe
-live-state targets block. Cleanup/topology risk stops continuation. Every target
-retains a receipt, every failure publishes schema-v2
+Read [`implementation-target-coordinator.md`](implementation-target-coordinator.md)
+before planning or running them. The immutable evidentiary-priority schedule
+places corrected failures, never-run targets, affected targets, and authenticated
+unchanged targets in that order, subject to prerequisite closure. Safe
+independent siblings continue after a failure; dependents and unsafe live-state
+targets block. Cleanup/topology risk stops continuation. Every target retains
+start/completion receipts, every failure publishes schema-v2
 `tessara.validation.defect-provenance`, and those records form one deterministic
-defect batch before correction.
+defect batch before correction. A passing coordinator finalization receipt is
+mandatory before formal Readiness.
 
 Phase 8 additionally requires the complete authorization matrix and early real-
 boundary target, followed by standalone UI ownership before consumer cutover.

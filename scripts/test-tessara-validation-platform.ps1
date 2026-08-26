@@ -654,7 +654,7 @@ try {
     Assert-Equal $identity.contract "tessara.validation.platform" "Platform contract"
     Assert-Equal $identity.release_version "2.0.0" "Platform release"
     Assert-Equal $identity.components.Count 4 "Platform component count"
-    Assert-Equal $identity.boundary_inputs.Count 14 "Platform boundary-input count"
+    Assert-Equal $identity.boundary_inputs.Count 21 "Platform boundary-input count"
     if ([string]$identity.execution_fingerprint -cnotmatch '^[0-9a-f]{64}$') {
         throw "Platform did not publish a lane execution fingerprint."
     }

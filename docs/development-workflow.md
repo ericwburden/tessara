@@ -931,20 +931,25 @@ all retained v2 and legacy packages unchanged.
 
 1. Kickoff creates and tracks the contract plus one schema-v2 validation
    adapter, declares platform release `2.0.0`, explicit artifact-fanout edges,
-   per-slice exits, fixture/visual rules, and Phase 8 authorization/UI gates when
-   applicable.
+   per-slice exits, fixture/visual rules, exact target prerequisites and
+   exclusive resource claims, shared coordinator activation, and Phase 8
+   authorization/UI gates when applicable.
 2. Kickoff validates through `Assert-TessaraValidationAdapter` and
    `Assert-TessaraFutureSprintPlanningPackage`. Missing or uncertain mappings
    block implementation handoff.
 3. Implementation reconciles every declared projection in the touched cone,
    proves authorization at the real boundary and standalone UI ownership early,
    derives fixtures from signed owner read-back, and runs implementation lanes
-   through `Invoke-TessaraImplementationHarvest`.
+   through `Invoke-TessaraImplementationHarvest`. The coordinator publishes its
+   immutable evidentiary-priority plan before assertions, runs prerequisite
+   closure first, continues safe siblings fail-late, serializes resource claims,
+   and resumes authenticated checkpoints without duplicating completed work.
 4. Implementation-readiness schema 2 binds the current source, contract hash,
-   adapter hash, platform fingerprint, deterministic defect batch, fanout
-   receipts, and exact slice exits. Formal Readiness is not a discovery pass for
-   fixtures, environments, acceptance inventories, authorization, or generated
-   assets.
+   adapter hash, platform fingerprint, passing coordinator finalization,
+   deterministic defect batch, fanout receipts, and exact slice exits. Reused
+   targets remain labeled inherited/not newly executed. Formal Readiness is not
+   a discovery pass for fixtures, environments, acceptance inventories,
+   authorization, or generated assets.
 5. Every formal lane runs through `Invoke-TessaraValidationLane`. Phase
    certificates and the evidence chain authenticate platform and adapter
    provenance; missing provenance blocks rather than falling back.
@@ -956,3 +961,12 @@ Only adapter actions are sprint-specific. Phase orchestration, topology/ports,
 cleanup/restoration state, evidence publication, certificates, and fail-late
 coordination remain shared-platform responsibilities. An exception requires an
 explicit documented user or architecture authority in the contract.
+
+The coordinator's target order is corrected failures with passing focused
+reproducers, never-run targets, dependency-affected targets, authenticated
+unchanged targets, then finalization. Open or uncorrected provenance blocks.
+Reuse requires explicit policy permission plus matching evidence, command,
+contract, adapter, platform, environment, dependency, compatibility, and
+prerequisite-closure identities. Unknown impact executes. A source, fixture,
+contract, environment, command, adapter, dependency, or correction change
+requires a new immutable plan.

@@ -115,6 +115,11 @@ the current roadmap.
     focused exit targets. For Phase 8, also create the actor/action/route/
     capability authorization matrix and bind its early boundary target plus the
     independent UI ownership gate.
+    For every v3 sprint, select the shared implementation coordinator, declare
+    dependency-complete target prerequisites, and give each target an exclusive
+    evidence-path claim plus every process, topology, port, database, Docker,
+    or external-service claim it can touch. Read
+    `tessara-sprint-validation/references/implementation-target-coordinator.md`.
 11. Prepend the kickoff entry to `docs/progress-report.md`.
 12. Run the comprehensive planning audit below and correct planning gaps.
 13. Present the plan, unresolved decisions, and recommended first
@@ -230,6 +235,10 @@ Before declaring kickoff complete, verify that:
 - the tracked schema-v2 adapter passes `Assert-TessaraValidationAdapter`, names
   exactly the contract lanes and prerequisites, maps every required target with
   no extra action target, and the public planning-package audit passes
+- the contract selects `Invoke-TessaraImplementationHarvest`,
+  `evidentiary-priority-v1`, and `serial-resource-safe`; target prerequisites
+  agree with implementation lanes, and live-state topology/ports have matching
+  exclusive target claims
 - every slice declares its exact focused exit targets and fanout edges; every
   canonical producer has explicit projections and a reconciliation target
 - fixture identities are owner-read under logical keys with signed read-back,
@@ -311,6 +320,8 @@ Do not report kickoff complete unless:
 - the validation record was created and seeded from the roadmap
 - the policy-v3 validation contract and tracked schema-v2 adapter were created,
   validated through the public APIs, and passed the planning-package audit
+- the shared coordinator activation, deterministic prerequisites, and resource
+  claims can produce one immutable execution plan
 - the kickoff progress entry was prepended
 - blockers and decisions were surfaced
 - `main` remained clean and the sprint worktree contains only planning changes

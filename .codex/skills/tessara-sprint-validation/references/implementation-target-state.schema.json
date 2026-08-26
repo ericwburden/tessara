@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/implementation-target-state-v1.json",
+  "title": "Tessara implementation target evidentiary state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "validation_contract", "validation_adapter", "platform_identity", "targets"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.implementation-target-state" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "$ref": "#/$defs/id" },
+    "validation_contract": { "$ref": "#/$defs/ref" },
+    "validation_adapter": { "$ref": "#/$defs/ref" },
+    "platform_identity": { "$ref": "#/$defs/platform" },
+    "targets": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/target" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "ref": { "type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": { "path": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha" } } },
+    "platform": { "type": "object", "additionalProperties": false, "required": ["release_version", "platform_fingerprint"], "properties": { "release_version": { "const": "2.0.0" }, "platform_fingerprint": { "$ref": "#/$defs/sha" } } },
+    "reproducer": { "type": "object", "additionalProperties": false, "required": ["id", "state", "evidence"], "properties": { "id": { "$ref": "#/$defs/id" }, "state": { "enum": ["passed", "failed", "blocked", "not-run"] }, "evidence": { "oneOf": [{ "$ref": "#/$defs/ref" }, { "type": "null" }] } } },
+    "provenance": { "type": "object", "additionalProperties": false, "required": ["record", "status", "classification", "correction_identity", "focused_reproducers"], "properties": { "record": { "$ref": "#/$defs/ref" }, "status": { "enum": ["open", "classified", "corrected", "verified", "blocked", "superseded"] }, "classification": { "enum": ["product", "fixture", "harness", "environment", "implementation-process", "evidence-finalization", "flaky", "contract-ambiguity", "product-decision", "unresolved"] }, "correction_identity": { "oneOf": [{ "$ref": "#/$defs/sha" }, { "type": "null" }] }, "focused_reproducers": { "type": "array", "items": { "$ref": "#/$defs/reproducer" } } } },
+    "target": { "type": "object", "additionalProperties": false, "required": ["id", "previous_receipt", "provenance"], "properties": { "id": { "$ref": "#/$defs/id" }, "previous_receipt": { "oneOf": [{ "$ref": "#/$defs/ref" }, { "type": "null" }] }, "provenance": { "oneOf": [{ "$ref": "#/$defs/provenance" }, { "type": "null" }] } } }
+  }
+}

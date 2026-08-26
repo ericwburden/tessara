@@ -215,10 +215,21 @@ that cone instead of silently expanding scope.
   boundary. Do not silently reclassify a process defect as product or vice
   versa.
 - For policy v3, execute implementation lanes with
-  `Invoke-TessaraImplementationHarvest`. Continue safe independent siblings,
-  block failed dependents and unsafe live-state work, retain every target
+  `Invoke-TessaraImplementationHarvest` after reading
+  `../tessara-sprint-validation/references/implementation-target-coordinator.md`.
+  Supply the authenticated target-state document; do not write an ad hoc
+  `foreach` target loop. The immutable plan prioritizes corrected failures,
+  never-run targets, affected targets, then authenticated unchanged targets,
+  subject to prerequisite closure. Continue safe independent siblings, block
+  failed dependents and unsafe live-state work, retain every start/completion
   receipt, and correct only after the deterministic harvested defect batch is
   complete. Stop harvesting on cleanup/restoration or topology-integrity risk.
+- Reuse only when the contract explicitly permits it and the coordinator
+  authenticates dependency, compatibility, command, contract, adapter,
+  environment, evidence, and prerequisite-closure identities. A reused receipt
+  is inherited evidence with `newly_executed: false`, never a new execution.
+  Missing or uncertain identity executes normally; open or uncorrected failure
+  provenance blocks.
 - Record every changed test expectation in the provenance record and sprint
   test-change log with its approved authority, supersession rationale, and
   equal-or-stronger replacement coverage. An unrecorded assertion change is an
@@ -308,8 +319,9 @@ complete.
    environment.
    Under policy v3, write implementation-readiness schema 2. Bind the current
    source, contract, adapter, and platform identity; include the deterministic
-   harvested-defect batch, every fanout-edge receipt, every slice and exact exit
-   target, and zero stale/failed/blocked targets. Formal Readiness cannot be the
+   harvested-defect batch, passing coordinator finalization receipt, every
+   fanout-edge receipt, every slice and exact exit target, and zero stale/
+   failed/blocked targets. Formal Readiness cannot be the
    first execution of a fixture/environment/acceptance combination,
    authorization matrix, or generated-asset combination.
 8. Hand the clean implementation commit and passing implementation-readiness

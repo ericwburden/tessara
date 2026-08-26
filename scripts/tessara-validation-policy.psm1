@@ -27,6 +27,12 @@ $script:SchemaFiles = @{
     evidence_chain_v2 = "evidence-chain-v2.schema.json"
     defect_provenance = "defect-provenance.schema.json"
     defect_provenance_v2 = "defect-provenance-v2.schema.json"
+    implementation_target_state = "implementation-target-state.schema.json"
+    implementation_coordinator_start = "implementation-coordinator-start.schema.json"
+    implementation_target_start = "implementation-target-start.schema.json"
+    implementation_target_completion = "implementation-target-completion.schema.json"
+    implementation_coordinator_checkpoint = "implementation-coordinator-checkpoint.schema.json"
+    implementation_coordinator_finalization = "implementation-coordinator-finalization.schema.json"
 }
 
 function Get-TessaraValidationPolicyVersion {
@@ -66,7 +72,13 @@ function Get-TessaraValidationSchemaPath {
             "evidence_chain",
             "evidence_chain_v2",
             "defect_provenance",
-            "defect_provenance_v2"
+            "defect_provenance_v2",
+            "implementation_target_state",
+            "implementation_coordinator_start",
+            "implementation_target_start",
+            "implementation_target_completion",
+            "implementation_coordinator_checkpoint",
+            "implementation_coordinator_finalization"
         )]
         [string]$Kind
     )
@@ -168,7 +180,13 @@ function Assert-TessaraJsonSchema {
             "evidence_chain",
             "evidence_chain_v2",
             "defect_provenance",
-            "defect_provenance_v2"
+            "defect_provenance_v2",
+            "implementation_target_state",
+            "implementation_coordinator_start",
+            "implementation_target_start",
+            "implementation_target_completion",
+            "implementation_coordinator_checkpoint",
+            "implementation_coordinator_finalization"
         )]
         [string]$Kind,
         [string]$Label = $Kind

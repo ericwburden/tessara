@@ -8,6 +8,12 @@
     "adapter_path": ".codex/skills/tessara-sprint-validation/assets/sprint-validation-adapter.json",
     "supported_release": "2.0.0",
     "lane_entrypoint": "Invoke-TessaraValidationLane",
+    "implementation_coordinator": {
+      "entrypoint": "Invoke-TessaraImplementationHarvest",
+      "ordering": "evidentiary-priority-v1",
+      "execution_mode": "serial-resource-safe",
+      "reuse_policy": "authenticated-unchanged"
+    },
     "exception": null
   },
   "requirements": [{
@@ -27,6 +33,7 @@
     "required": true,
     "clean_environment": false,
     "prerequisites": [],
+    "resource_claims": [{ "kind": "evidence-path", "identity": "replace-focused-target", "mode": "exclusive" }],
     "continuation": "safe-independent",
     "slice": "replace-slice",
     "fanout_edges": ["replace-fanout"]

@@ -458,3 +458,19 @@ harvest. Each failed target retains its own receipt and provenance; safe
 independent siblings continue, while dependents and unsafe live-state work are
 blocked. Correction begins from one deterministic harvested batch. No
 extraction sprint may replace this with a sprint-specific lifecycle runner.
+
+The contract also declares exact target prerequisites and exclusive resource
+claims. The shared coordinator fixes one evidentiary-priority schedule before
+assertions: corrected failures with passing focused reproducers, never-run
+targets, affected targets, authenticated unchanged targets, then finalization.
+Prerequisite closure overrides raw priority. This replaces manual first-failure
+and `foreach` target sweeps without moving product policy into the platform.
+
+An unchanged extraction target may be reused only when policy v3 explicitly
+permits it and dependency, compatibility, command, contract, adapter,
+environment, evidence, and prerequisite-closure identities authenticate. A
+reused completion is labeled inherited and not newly executed. Any ambiguous
+fixture, generated asset, owner read-back, browser inventory, topology, or
+command dependency executes conservatively. Consumer cutover still requires
+current authorization and standalone UI gates; reuse cannot weaken their
+declared dependency closure.

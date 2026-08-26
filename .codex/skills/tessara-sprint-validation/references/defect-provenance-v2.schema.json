@@ -4,7 +4,7 @@
   "title": "Tessara implementation defect provenance v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "contract", "policy_version", "sprint", "record_id", "status", "target", "lane", "classification", "reason", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "failed_receipt"],
+  "required": ["schema_version", "contract", "policy_version", "sprint", "record_id", "status", "target", "lane", "classification", "reason", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "failed_receipt", "correction", "focused_reproducers"],
   "properties": {
     "schema_version": { "const": 2 },
     "contract": { "const": "tessara.validation.defect-provenance" },
@@ -20,7 +20,9 @@
     "validation_contract": { "$ref": "#/$defs/ref" },
     "validation_adapter": { "$ref": "#/$defs/ref" },
     "platform_identity": { "type": "object", "required": ["release_version", "platform_fingerprint"] },
-    "failed_receipt": { "$ref": "#/$defs/ref" }
+    "failed_receipt": { "$ref": "#/$defs/ref" },
+    "correction": { "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["identity", "changed_paths", "changed_domains"], "properties": { "identity": { "$ref": "#/$defs/sha" }, "changed_paths": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }, "changed_domains": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } }] },
+    "focused_reproducers": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "state", "evidence"], "properties": { "id": { "$ref": "#/$defs/id" }, "state": { "enum": ["not-run", "passed", "failed", "blocked"] }, "evidence": { "oneOf": [{ "$ref": "#/$defs/ref" }, { "type": "null" }] } } } }
   },
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },

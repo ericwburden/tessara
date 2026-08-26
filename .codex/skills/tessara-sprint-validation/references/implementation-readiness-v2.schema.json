@@ -4,7 +4,7 @@
   "title": "Tessara implementation readiness result v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "contract", "policy_version", "sprint", "state", "authoritative", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "affected_domains", "changed_paths", "fanout", "targets", "slices", "harvested_defects", "known_failure_count", "materialization", "cleanup_restoration", "evidence_index"],
+  "required": ["schema_version", "contract", "policy_version", "sprint", "state", "authoritative", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "affected_domains", "changed_paths", "fanout", "targets", "slices", "coordinator_finalization", "harvested_defects", "known_failure_count", "materialization", "cleanup_restoration", "evidence_index"],
   "properties": {
     "schema_version": { "const": 2 },
     "contract": { "const": "tessara.implementation-readiness-result" },
@@ -21,6 +21,7 @@
     "fanout": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["edge", "state", "receipt"], "properties": { "edge": { "$ref": "#/$defs/id" }, "state": { "enum": ["passed", "failed"] }, "receipt": { "$ref": "#/$defs/ref" } } } },
     "targets": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "state", "source_identity", "validation_contract_sha256", "adapter_sha256", "clean_environment", "evidence"], "properties": { "id": { "$ref": "#/$defs/id" }, "state": { "enum": ["passed", "failed", "blocked"] }, "source_identity": { "$ref": "#/$defs/source" }, "validation_contract_sha256": { "$ref": "#/$defs/sha" }, "adapter_sha256": { "$ref": "#/$defs/sha" }, "clean_environment": { "type": "boolean" }, "evidence": { "$ref": "#/$defs/ref" } } } },
     "slices": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "state", "exit_targets", "fanout_edges"], "properties": { "id": { "$ref": "#/$defs/id" }, "state": { "enum": ["passed", "failed", "blocked"] }, "exit_targets": { "$ref": "#/$defs/ids" }, "fanout_edges": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } } },
+    "coordinator_finalization": { "$ref": "#/$defs/ref" },
     "harvested_defects": { "$ref": "#/$defs/ref" },
     "known_failure_count": { "type": "integer", "minimum": 0 },
     "materialization": { "$ref": "#/$defs/materialization" },

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://tessara.local/schemas/implementation-coordinator-checkpoint-v1.json", "title": "Tessara implementation coordinator checkpoint",
+  "type": "object", "additionalProperties": false, "required": ["schema_version", "contract", "policy_version", "sprint", "schedule_digest", "context_fingerprint", "completed"],
+  "properties": { "schema_version": { "const": 1 }, "contract": { "const": "tessara.validation.implementation-coordinator-checkpoint" }, "policy_version": { "const": "tessara-validation-v3" }, "sprint": { "$ref": "#/$defs/id" }, "schedule_digest": { "$ref": "#/$defs/sha" }, "context_fingerprint": { "$ref": "#/$defs/sha" }, "completed": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["ordinal", "target", "receipt"], "properties": { "ordinal": { "type": "integer", "minimum": 1 }, "target": { "$ref": "#/$defs/id" }, "receipt": { "$ref": "#/$defs/ref" } } } } },
+  "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" }, "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "ref": { "type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "$ref": "#/$defs/sha" } } } }
+}

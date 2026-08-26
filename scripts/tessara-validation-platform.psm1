@@ -783,7 +783,14 @@ function Get-TessaraValidationPlatformIdentity {
         "evidence-chain-v2-schema",
         "phase-evidence-index-v2-schema",
         "closeout-efficiency-schema",
-        "defect-provenance-v2-schema"
+        "defect-provenance-v2-schema",
+        "implementation-coordinator",
+        "implementation-target-state-schema",
+        "implementation-coordinator-start-schema",
+        "implementation-target-start-schema",
+        "implementation-target-completion-schema",
+        "implementation-coordinator-checkpoint-schema",
+        "implementation-coordinator-finalization-schema"
     )
     if ((@($boundaryDeclarations.id) -join "`n") -cne ($expectedBoundaryIds -join "`n")) {
         throw "Validation-platform manifest does not declare the exact ordered public-boundary inventory."
@@ -802,7 +809,14 @@ function Get-TessaraValidationPlatformIdentity {
         ".codex/skills/tessara-sprint-validation/references/evidence-chain-v2.schema.json",
         ".codex/skills/tessara-sprint-validation/references/phase-evidence-index-v2.schema.json",
         ".codex/skills/tessara-sprint-validation/references/closeout-efficiency.schema.json",
-        ".codex/skills/tessara-sprint-validation/references/defect-provenance-v2.schema.json"
+        ".codex/skills/tessara-sprint-validation/references/defect-provenance-v2.schema.json",
+        "scripts/validation-platform/tessara-implementation-coordinator.ps1",
+        ".codex/skills/tessara-sprint-validation/references/implementation-target-state.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-start.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/implementation-target-start.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/implementation-target-completion.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-checkpoint.schema.json",
+        ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-finalization.schema.json"
     )
     if ((@($boundaryDeclarations.path) -join "`n") -cne ($expectedBoundaryPaths -join "`n")) {
         throw "Validation-platform manifest redirects a canonical public-boundary path."
@@ -1159,6 +1173,25 @@ function Assert-TessaraValidationAdapter {
                         [string]$_ -notin @($contractLane.dependency_domains)
                     }).Count -ne 0) {
                 throw "Validation adapter lane '$($lane.id)' cannot execute target '$targetId' outside the target dependency cone."
+            }
+            if ([int]$validationContract.schema_version -eq 3 -and
+                [string]$contractLane.phase -ceq "implementation") {
+                $claims = @($target.resource_claims)
+                $claimKeys = @($claims | ForEach-Object { "$([string]$_.kind)/$([string]$_.identity)" })
+                foreach ($port in $topologyPorts) {
+                    if ($claimKeys -cnotcontains "port/$([string]$port.name)") {
+                        throw "Implementation target '$targetId' does not claim adapter port '$([string]$port.name)'."
+                    }
+                }
+                if ([string]$lane.topology.provider -ceq "docker-compose" -and
+                    (@($claims | Where-Object { [string]$_.kind -ceq "docker" }).Count -eq 0 -or
+                     @($claims | Where-Object { [string]$_.kind -ceq "topology" }).Count -eq 0)) {
+                    throw "Docker implementation target '$targetId' must declare exclusive Docker and topology claims."
+                }
+                if ([string]$lane.topology.provider -ceq "local-process" -and
+                    @($claims | Where-Object { [string]$_.kind -in @("process", "topology") }).Count -eq 0) {
+                    throw "Local-process implementation target '$targetId' must declare an exclusive process or topology claim."
+                }
             }
         }
         if (-not $isHandoffProducer) {
@@ -1851,189 +1884,8 @@ function Invoke-TessaraValidationLane {
     }
 }
 
-function Publish-TessaraImplementationHarvestJson {
-    param([string]$Path, $Document)
-    $full = [IO.Path]::GetFullPath($Path)
-    $directory = Split-Path -Parent $full
-    $null = New-Item -ItemType Directory -Force -Path $directory
-    $temporary = "$full.$([guid]::NewGuid().ToString('N')).tmp"
-    try {
-        [IO.File]::WriteAllText($temporary, (($Document | ConvertTo-Json -Depth 100) + "`n"), [Text.UTF8Encoding]::new($false))
-        Move-Item -LiteralPath $temporary -Destination $full -Force
-    } finally {
-        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
-    }
-    [pscustomobject][ordered]@{
-        path = $full
-        sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant()
-    }
-}
 
-function Invoke-TessaraImplementationHarvest {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$AdapterPath,
-        [Parameter(Mandatory)][ValidatePattern("^[0-9a-f]{64}$")][string]$CandidateFingerprint,
-        [Parameter(Mandatory)][string]$EvidenceRoot,
-        [string]$RepositoryRoot = $script:RepositoryRoot,
-        [Parameter(DontShow)][scriptblock]$LaneInvoker
-    )
-    $root = [IO.Path]::GetFullPath($RepositoryRoot)
-    $validated = Assert-TessaraValidationAdapter -AdapterPath $AdapterPath -RepositoryRoot $root
-    if ([int]$validated.validation_contract.schema_version -ne 3) {
-        throw "The implementation harvest coordinator is available only to validation contract v3."
-    }
-    $identity = Get-TessaraValidationPlatformIdentity
-    $candidate = Get-TessaraPlatformCandidateIdentityFromValidation -ValidatedAdapter $validated -RepositoryRoot $root
-    $adapterRelative = [IO.Path]::GetRelativePath($root, [string]$validated.adapter_path).Replace('\', '/')
-    $contractRelative = [IO.Path]::GetRelativePath($root, [string]$validated.validation_contract_path).Replace('\', '/')
-    $CandidateFingerprint = [string]$candidate.candidate_fingerprint
-    $targets = @{}
-    foreach ($target in @($validated.validation_contract.implementation_targets)) { $targets[[string]$target.id] = $target }
-    $laneByTarget = @{}
-    foreach ($target in @($validated.validation_contract.implementation_targets)) {
-        $laneIds = @($validated.validation_contract.requirements | Where-Object {
-                @($_.implementation_targets) -ccontains [string]$target.id
-            } | ForEach-Object { @($_.validation_lanes) } | Where-Object {
-                $laneId = [string]$_
-                @($validated.validation_contract.lanes | Where-Object { [string]$_.id -ceq $laneId -and [string]$_.phase -ceq "implementation" }).Count -eq 1
-            } | Sort-Object -Unique)
-        if ($laneIds.Count -ne 1) { throw "Implementation target '$($target.id)' does not have exactly one implementation lane." }
-        $laneByTarget[[string]$target.id] = [string]$laneIds[0]
-    }
-    $harvestRoot = Join-Path ([IO.Path]::GetFullPath($EvidenceRoot)) "implementation-harvest"
-    $null = New-Item -ItemType Directory -Force -Path $harvestRoot
-    $states = @{}
-    $rawResults = @{}
-    $targetRecords = [Collections.Generic.List[object]]::new()
-    $findings = [Collections.Generic.List[object]]::new()
-    $pending = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($id in $targets.Keys) { $null = $pending.Add([string]$id) }
-    $unsafeHalt = $false
-    while ($pending.Count -gt 0) {
-        $progress = $false
-        foreach ($id in @($pending | Sort-Object)) {
-            $target = $targets[$id]
-            $unresolved = @($target.prerequisites | Where-Object { -not $states.ContainsKey([string]$_) })
-            if ($unresolved.Count -gt 0) { continue }
-            $progress = $true
-            $null = $pending.Remove($id)
-            $failedPrerequisite = @($target.prerequisites | Where-Object { [string]$states[[string]$_] -cne "passed" }).Count -gt 0
-            $state = "blocked"
-            $reason = $null
-            $laneResult = $null
-            if ($failedPrerequisite) {
-                $reason = "prerequisite-failed"
-            } elseif ($unsafeHalt -or ([string]$target.continuation -ceq "unsafe-live-state" -and @($states.Values | Where-Object { [string]$_ -ceq "failed" }).Count -gt 0)) {
-                $reason = "unsafe-after-failure"
-            } else {
-                try {
-                    $laneResult = if ($null -ne $LaneInvoker) {
-                        & $LaneInvoker $id $laneByTarget[$id]
-                    } else {
-                        $prerequisitePaths = @($target.prerequisites | ForEach-Object {
-                                [string]$rawResults[[string]$_].evidence_path
-                            })
-                        Invoke-TessaraValidationLane -AdapterPath $AdapterPath -LaneId $laneByTarget[$id] `
-                            -CandidateFingerprint $CandidateFingerprint -EvidenceRoot $EvidenceRoot `
-                            -RepositoryRoot $root -PrerequisiteResultPaths $prerequisitePaths
-                    }
-                    $state = if ([string]$laneResult.state -ceq "passed") { "passed" } else { "failed" }
-                    if ($state -ceq "failed") { $reason = "lane-$([string]$laneResult.state)" }
-                    if ($null -ne $laneResult.cleanup_restoration -and
-                        [string]$laneResult.cleanup_restoration.state -notin @("passed", "not_applicable")) {
-                        $state = "failed"
-                        $reason = "cleanup-restoration-failed"
-                        $unsafeHalt = $true
-                    }
-                } catch {
-                    $state = "failed"
-                    $reason = "lane-exception: $($_.Exception.Message)"
-                }
-                if ($null -ne $laneResult) { $rawResults[$id] = $laneResult }
-            }
-            $receiptDocument = [pscustomobject][ordered]@{
-                schema_version = 1
-                contract = "tessara.validation.implementation-target-receipt"
-                policy_version = "tessara-validation-v3"
-                sprint = [string]$validated.validation_contract.sprint
-                target = $id
-                lane = $laneByTarget[$id]
-                state = $state
-                reason = $reason
-                source_identity = $candidate.source_identity
-                validation_contract_sha256 = [string]$validated.validation_contract_sha256
-                adapter_sha256 = [string]$validated.adapter_fingerprint
-                platform_fingerprint = [string]$identity.platform_fingerprint
-                lane_result = $laneResult
-            }
-            $receiptPath = Join-Path $harvestRoot "$id.receipt.json"
-            $published = Publish-TessaraImplementationHarvestJson -Path $receiptPath -Document $receiptDocument
-            $relativeReceipt = [IO.Path]::GetRelativePath($root, $published.path).Replace('\', '/')
-            $reference = [pscustomobject][ordered]@{ path = $relativeReceipt; sha256 = [string]$published.sha256 }
-            $states[$id] = $state
-            $targetRecords.Add([pscustomobject][ordered]@{ id = $id; lane = $laneByTarget[$id]; state = $state; receipt = $reference })
-            if ($state -eq "failed") {
-                $provenance = [pscustomobject][ordered]@{
-                    schema_version = 2
-                    contract = "tessara.validation.defect-provenance"
-                    policy_version = "tessara-validation-v3"
-                    sprint = [string]$validated.validation_contract.sprint
-                    record_id = "implementation-$id"
-                    status = "open"
-                    target = $id
-                    lane = [string]$laneByTarget[$id]
-                    classification = "unresolved"
-                    reason = $reason
-                    source_identity = $candidate.source_identity
-                    validation_contract = [pscustomobject][ordered]@{ path = $contractRelative; sha256 = [string]$validated.validation_contract_sha256 }
-                    validation_adapter = [pscustomobject][ordered]@{ path = $adapterRelative; sha256 = [string]$validated.adapter_fingerprint }
-                    platform_identity = [pscustomobject][ordered]@{ release_version = [string]$identity.release_version; platform_fingerprint = [string]$identity.platform_fingerprint }
-                    failed_receipt = $reference
-                }
-                Assert-TessaraJsonSchema -Document $provenance -Kind defect_provenance_v2 `
-                    -Label "Implementation defect provenance '$id'"
-                $provenancePublication = Publish-TessaraImplementationHarvestJson `
-                    -Path (Join-Path $harvestRoot "$id.defect-provenance.json") `
-                    -Document $provenance
-                $provenanceReference = [pscustomobject][ordered]@{
-                    path = [IO.Path]::GetRelativePath($root, $provenancePublication.path).Replace('\', '/')
-                    sha256 = [string]$provenancePublication.sha256
-                }
-                $findings.Add([pscustomobject][ordered]@{
-                    id = "implementation-$id"
-                    target = $id
-                    classification = "unresolved"
-                    receipt = $reference
-                    provenance = $provenanceReference
-                    reason = $reason
-                })
-            }
-        }
-        if (-not $progress) { throw "Implementation target prerequisites contain a cycle or unresolved target." }
-    }
-    $batch = [pscustomobject][ordered]@{
-        schema_version = 1
-        contract = "tessara.validation.implementation-defect-batch"
-        policy_version = "tessara-validation-v3"
-        sprint = [string]$validated.validation_contract.sprint
-        source_identity = $candidate.source_identity
-        validation_contract = [pscustomobject][ordered]@{ path = $contractRelative; sha256 = [string]$validated.validation_contract_sha256 }
-        validation_adapter = [pscustomobject][ordered]@{ path = $adapterRelative; sha256 = [string]$validated.adapter_fingerprint }
-        platform_identity = [pscustomobject][ordered]@{ release_version = [string]$identity.release_version; platform_fingerprint = [string]$identity.platform_fingerprint }
-        targets = @($targetRecords | Sort-Object id)
-        findings = @($findings | Sort-Object id)
-    }
-    Assert-TessaraJsonSchema -Document $batch -Kind implementation_defect_batch `
-        -Label "Implementation defect batch"
-    $batchPublication = Publish-TessaraImplementationHarvestJson -Path (Join-Path $harvestRoot "defect-batch.json") -Document $batch
-    [pscustomobject][ordered]@{
-        state = if (@($targetRecords | Where-Object { [string]$_.state -ne "passed" }).Count -eq 0) { "passed" } else { "failed" }
-        batch = $batch
-        batch_path = [string]$batchPublication.path
-        batch_sha256 = [string]$batchPublication.sha256
-    }
-}
+. (Join-Path $script:PlatformRoot "tessara-implementation-coordinator.ps1")
 
 function Get-TessaraValidationCompatibilityPlan {
     [CmdletBinding()]

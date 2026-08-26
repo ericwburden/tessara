@@ -28,7 +28,9 @@ missing adapter, unsupported platform release, lane/prerequisite mismatch,
 extra or omitted lane/target, undocumented lifecycle exception, or uncertain
 provenance. Every implementation and formal lane executes through
 `Invoke-TessaraValidationLane`; implementation harvesting uses
-`Invoke-TessaraImplementationHarvest`.
+`Invoke-TessaraImplementationHarvest`. Read
+[`references/implementation-target-coordinator.md`](references/implementation-target-coordinator.md)
+and require its immutable schedule and recovery rules.
 
 Otherwise read
 [`references/validation-protocol.md`](references/validation-protocol.md)
@@ -155,9 +157,12 @@ For a v2 or v3 sprint:
    fixture, environment, and acceptance inventory to have passed through the
    selected implementation targets.
    For v3, additionally authenticate the current adapter hash and platform
-   fingerprint, consume the deterministic implementation defect batch, and
+   fingerprint, require the passing coordinator finalization receipt, consume
+   the deterministic implementation defect batch, and
    require every slice exit target and fanout edge to have a current passing
-   receipt. Reject browser/smoke if the early real-boundary authorization target
+   receipt. Authenticate reused target receipts as inherited evidence with
+   `newly_executed: false`; never count or describe them as new execution.
+   Reject browser/smoke if the early real-boundary authorization target
    did not pass and reject consumer cutover if standalone UI ownership did not
    pass. Formal Readiness is never first execution for these combinations.
 2. Run or recertify Validation Readiness from the impact-selected lanes and

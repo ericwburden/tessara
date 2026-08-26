@@ -58,6 +58,34 @@
     {
       "id": "defect-provenance-v2-schema",
       "path": ".codex/skills/tessara-sprint-validation/references/defect-provenance-v2.schema.json"
+    },
+    {
+      "id": "implementation-coordinator",
+      "path": "scripts/validation-platform/tessara-implementation-coordinator.ps1"
+    },
+    {
+      "id": "implementation-target-state-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-target-state.schema.json"
+    },
+    {
+      "id": "implementation-coordinator-start-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-start.schema.json"
+    },
+    {
+      "id": "implementation-target-start-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-target-start.schema.json"
+    },
+    {
+      "id": "implementation-target-completion-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-target-completion.schema.json"
+    },
+    {
+      "id": "implementation-coordinator-checkpoint-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-checkpoint.schema.json"
+    },
+    {
+      "id": "implementation-coordinator-finalization-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-coordinator-finalization.schema.json"
     }
   ],
   "components": [
