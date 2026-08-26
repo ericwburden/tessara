@@ -1002,20 +1002,16 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     let document_credentials = |action: &str, contract: &str, include_manage: bool| {
         let correlation_id = Uuid::new_v4();
         let now = Utc::now();
-        let mut bindings = vec![CapabilityScopeBindingV1 {
-            capability: SecurityCapabilityId::new("datasets:read")
-                .expect("Dataset read capability"),
+        let capability = if include_manage {
+            "datasets:manage"
+        } else {
+            "datasets:read"
+        };
+        let bindings = vec![CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(capability).expect("Dataset document capability"),
             organization_root_id: allowed_scope,
             authorized_organization_ids: Vec::new(),
         }];
-        if include_manage {
-            bindings.push(CapabilityScopeBindingV1 {
-                capability: SecurityCapabilityId::new("datasets:manage")
-                    .expect("Dataset manage capability"),
-                organization_root_id: allowed_scope,
-                authorized_organization_ids: Vec::new(),
-            });
-        }
         let authorization = authorization_signer
             .sign(AuthorizationGrantV3 {
                 schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
