@@ -677,6 +677,13 @@ test.describe("canonical module UI visual baselines", () => {
     await expect(page.locator(".top-app-bar__title")).toHaveText("Responses");
     await expectAcceptedResponseVisualFrame(page, "response-directory", {
       ignoreSelectors: [".responses-list time"],
+      // The immutable pre-extraction frame contains historical fixture rows.
+      // Retain pixel continuity across the complete current top bar and the
+      // stable Response heading, search, and table-header presentation.
+      comparisonRegions: [{ x: 288, y: 0, width: 1152, height: 278 }],
+      maxDiffPixelRatio: 0.025,
+      maxMeanColorDelta: 3,
+      minComparedPixelRatio: 0.22,
     });
     assertCleanRuntime();
   });
@@ -760,9 +767,9 @@ test.describe("canonical module UI visual baselines", () => {
     await expect(page.getByText("Independently deployed", { exact: true })).toBeVisible();
     await expect(page.getByText("Healthy and enabled", { exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "Dependencies" }).click();
-    await expect(page.locator(".module-detail-dependencies")).toContainText(
-      "tessara.forms.form-version-schema",
-    );
+    await expect(
+      page.locator('.module-detail-sections > [data-module-section="dependencies"]'),
+    ).toContainText("tessara.forms.form-version-schema");
     await expectAcceptedResponseVisualFrame(page, "module-management-response", {
       // Independent ownership deliberately changes the management content. The
       // accepted global shell and canvas header remain the pixel-continuity

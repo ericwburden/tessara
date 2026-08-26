@@ -12,13 +12,13 @@ pub const RESPONSE_CSS: &str = include_str!("../assets/response.css");
 pub const RESPONSE_JS: &str = include_str!("../assets/response.js");
 pub const RESPONSE_BINDINGS_JS: &str = include_str!("../assets/response-bindings.js");
 pub const RESPONSE_CSS_SHA256: &str =
-    "3fcd7ce4f86d78e21ebf973c5bd4d597c2c559adb50a9cc03e37f5fadd486aa6";
+    "e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7";
 pub const RESPONSE_JS_SHA256: &str =
-    "85caaa7f2b12a91ac71616c5d3bffc4cee40309000fb92aefd16427b2dccd45c";
+    "94d2bfc37e17ac26a0833a0bbcf4ba5f6f0dc17cf4e4862d4098927e24e5f530";
 pub const RESPONSE_BINDINGS_JS_SHA256: &str =
-    "67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf";
+    "d09a3596639d1ffeec5443f019c996cb160fbf935efc9c68c3531d8d3ffaa130";
 pub const RESPONSE_WASM_SHA256: &str =
-    "4c825e13ac052c01cdd9445b2a2868c6b0025571689a6cffb653f608b7b3169a";
+    "f46b5ad579bf45891d7fd8ceb408435859c91c26c82865fb6f84bc0b2d6b446b";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "route", rename_all = "snake_case", deny_unknown_fields)]

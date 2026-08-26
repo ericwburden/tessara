@@ -240,15 +240,6 @@ fn render_document_markup(
 ) -> String {
     let theme = theme_name(presentation.theme);
     let theme_bootstrap = theme_bootstrap_script(theme);
-    let top_bar_title = presentation
-        .navigation
-        .iter()
-        .flat_map(|group| &group.items)
-        .filter(|item| navigation_path_matches(&presentation.current_destination, &item.href))
-        .max_by_key(|item| item.href.len())
-        .map_or(presentation.document_title.as_str(), |item| {
-            item.label.as_str()
-        });
     let stylesheets = assets
         .stylesheets
         .iter()
@@ -283,7 +274,7 @@ fn render_document_markup(
         .collect::<Vec<_>>();
     let current_destination = presentation.current_destination.clone();
     let return_destination = presentation.return_destination.clone();
-    let shell_title = top_bar_title.to_string();
+    let shell_title = presentation.document_title.clone();
     let body_html = body_html.to_string();
     let shell = Owner::new().with(|| {
         let navigation_view = Arc::new(move || {
@@ -509,7 +500,7 @@ mod tests {
         assert!(html.contains("module-ui.css"));
         assert!(html.contains("<script src=\"/assets/shared.js\" defer></script>"));
         assert!(html.contains("module-scope--tessara-reference-module-sdk"));
-        assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
+        assert!(html.contains(r#"class="top-app-bar__title">Module SDK diagnostics</span>"#));
         assert_eq!(html.matches("sidebar-link is-active").count(), 2);
         assert!(html.contains("mobileNavigation?.classList.add('is-open')"));
         assert!(!html.contains("shell?.classList.add('mobile-nav-open')"));

@@ -1702,7 +1702,9 @@ test.describe.serial("Sprint 6A Module Management", () => {
     });
     expect(responseDetail.entry.findings).toEqual([]);
     await page.getByRole("tab", { name: "Dependencies" }).click();
-    const responseDependencies = page.locator(".module-detail-dependencies");
+    const responseDependencies = page.locator(
+      '.module-detail-sections > [data-module-section="dependencies"]',
+    );
     await expect(responseDependencies).toContainText("tessara.forms.form-version-schema");
     await expect(responseDependencies).toContainText("tessara.workflows.response-context");
     await expect(responseDependencies).toContainText(
