@@ -49,6 +49,7 @@ $suiteContracts = [ordered]@{
             "product_api::tests::fresh_gateway_grants_share_stable_mutation_identity_and_authority_changes_conflict",
             "product_api::tests::mutation_identity_binds_exact_wire_route_and_grant_identity",
             "product_api::tests::public_mutation_decode_is_strict_and_bounded",
+            "product_api::tests::read_authority_preserves_scoped_and_global_manage_bindings",
             "product_store::tests::access_is_exact_to_owner_delegation_or_managed_scope",
             "product_store::tests::field_validation_is_typed_and_option_bound",
             "provider_client::tests::provider_observation_is_sanitized_and_binding_specific",
@@ -58,6 +59,8 @@ $suiteContracts = [ordered]@{
             "reverse_provider::tests::reverse_scope_uses_only_the_required_capability_binding",
             "tests::configuration_normalizes_and_rejects_every_bound",
             "tests::fresh_baseline_is_response_owned_and_has_no_cross_database_constraints",
+            "tests::lifecycle_bootstrap_requires_the_versioned_accept_media_type",
+            "tests::lifecycle_projection_matches_response_manifest_routes_and_assets",
             "tests::manifest_is_semantically_valid_and_declares_independent_ownership",
             "validation_fault::tests::active_fault_is_unavailable_outside_validation_profile",
             "validation_fault::tests::disabled_and_unknown_faults_are_exact"
