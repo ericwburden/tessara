@@ -276,7 +276,7 @@ function Get-Sprint8CUpgradeAuthorizationProjection {
     $authorization.Value
 }
 
-function Normalize-Sprint8CResponseObservationTimestamps {
+function Normalize-Sprint8CResponseDiagnosticFacts {
     param([Parameter(Mandatory)]$Module)
 
     $diagnostics = $Module.PSObject.Properties["diagnostics"]
@@ -285,6 +285,10 @@ function Normalize-Sprint8CResponseObservationTimestamps {
     if ($null -eq $details -or $null -eq $details.Value) { return }
     $facts = $details.Value.PSObject.Properties["facts"]
     if ($null -eq $facts -or $null -eq $facts.Value) { return }
+    $release = $facts.Value.PSObject.Properties["release"]
+    if ($null -ne $release) {
+        $release.Value = "<transition-release>"
+    }
     foreach ($property in @($facts.Value.PSObject.Properties)) {
         if ([string]$property.Name -clike "*_last_stable_at") {
             $property.Value = "<observational-last-stable-at>"
@@ -319,7 +323,7 @@ function Assert-Sprint8CUpgradePreservation {
             $authorization.organization_revision = "<transition-organization-revision>"
             $authorization.updated_at = "<transition-authorization-updated-at>"
         }
-        Normalize-Sprint8CResponseObservationTimestamps -Module $snapshot.module
+        Normalize-Sprint8CResponseDiagnosticFacts -Module $snapshot.module
     }
     if ((ConvertTo-Sprint8CStableJson $expectedResponse) -cne
         (ConvertTo-Sprint8CStableJson $actualResponse)) {
@@ -1370,6 +1374,7 @@ function New-Sprint8CSelfTestSnapshot {
                     details = [pscustomobject]@{
                         release = $Release
                         facts = [pscustomobject]@{
+                            release = $Release
                             workflow_event_consumer_last_stable_at =
                                 "2026-08-24T00:00:00Z"
                             workflow_event_pending_count = "0"
