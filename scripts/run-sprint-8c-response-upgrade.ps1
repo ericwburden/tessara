@@ -44,10 +44,45 @@ function Copy-Sprint8CJsonValue {
     $Value | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
 }
 
+function ConvertTo-Sprint8CCanonicalJsonValue {
+    param([AllowNull()]$Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [System.Collections.IDictionary]) {
+        $names = [string[]]@($Value.Keys | ForEach-Object { [string]$_ })
+        [Array]::Sort($names, [StringComparer]::Ordinal)
+        $canonical = [ordered]@{}
+        foreach ($name in $names) {
+            $canonical[$name] = ConvertTo-Sprint8CCanonicalJsonValue -Value $Value[$name]
+        }
+        return [pscustomobject]$canonical
+    }
+    if ($Value -is [pscustomobject]) {
+        $names = [string[]]@($Value.PSObject.Properties | ForEach-Object { $_.Name })
+        [Array]::Sort($names, [StringComparer]::Ordinal)
+        $canonical = [ordered]@{}
+        foreach ($name in $names) {
+            $canonical[$name] = ConvertTo-Sprint8CCanonicalJsonValue `
+                -Value $Value.PSObject.Properties[$name].Value
+        }
+        return [pscustomobject]$canonical
+    }
+    if ($Value -is [System.Collections.IEnumerable] -and $Value -isnot [string]) {
+        $canonical = [System.Collections.Generic.List[object]]::new()
+        foreach ($item in $Value) {
+            $canonical.Add((ConvertTo-Sprint8CCanonicalJsonValue -Value $item))
+        }
+        Write-Output -NoEnumerate $canonical.ToArray()
+        return
+    }
+    $Value
+}
+
 function ConvertTo-Sprint8CStableJson {
     param([AllowNull()]$Value)
     if ($null -eq $Value) { return "null" }
-    $Value | ConvertTo-Json -Depth 100 -Compress
+    ConvertTo-Sprint8CCanonicalJsonValue -Value $Value |
+        ConvertTo-Json -Depth 100 -Compress
 }
 
 function Get-Sprint8CManifestBehaviorProjection {
@@ -1441,6 +1476,16 @@ function Test-Sprint8CResponseUpgradeHarness {
         -Contract $contract | Out-Null
     $fixedProjection = ConvertTo-Sprint8CStableJson `
         (Get-Sprint8CFixedLockfileProjection -Lockfile $fixedLockfile)
+    $reorderedFixedLockfile = Copy-Sprint8CJsonValue -Value $fixedLockfile
+    $reorderedFixedLockfile.core = [pscustomobject][ordered]@{
+        core_image = $digest
+        version = "0.1.0"
+    }
+    if ((ConvertTo-Sprint8CStableJson `
+        (Get-Sprint8CFixedLockfileProjection -Lockfile $reorderedFixedLockfile)) -cne
+        $fixedProjection) {
+        throw "Response upgrade self-test treated fixed projection property order as drift."
+    }
     $tamperedFixedLockfile = Copy-Sprint8CJsonValue -Value $fixedLockfile
     $tamperedFixedLockfile.modules[1].version = "9.9.9"
     $rejected = $false
