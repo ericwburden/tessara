@@ -34,10 +34,11 @@ use uuid::Uuid;
 
 use crate::{
     DatasetModuleError, DatasetModuleState,
-    provider_client::{self, ProviderAction},
+    provider_client::{self, ProviderAction, ProviderAudience},
 };
 
 const FORM_SCHEMA_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: FORM_VERSION_SCHEMA_BINDING_KEY,
     contract: FORM_VERSION_SCHEMA_CONTRACT_ID,
     action: FORM_VERSION_SCHEMA_ACTION,

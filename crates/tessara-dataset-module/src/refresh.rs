@@ -12,10 +12,10 @@ use tessara_responses_contract::{
     MAX_EXPORT_PAGE_SIZE, RESPONSE_EXPORT_BINDING_KEY, RESPONSE_EXPORT_CHECKPOINT_ACTION,
     RESPONSE_EXPORT_CHECKPOINT_PATH, RESPONSE_EXPORT_CONTRACT_ID, RESPONSE_EXPORT_MEDIA_TYPE,
     RESPONSE_EXPORT_PAGE_ACTION, RESPONSE_EXPORT_PAGE_PATH, RESPONSE_EXPORT_SCHEMA_VERSION,
-    RESPONSE_EXPORT_START_ACTION, RESPONSE_EXPORT_START_PATH, ResponseExportAction,
-    ResponseExportCheckpointRequest, ResponseExportCheckpointResponse, ResponseExportPageRequest,
-    ResponseExportPageResponse, ResponseExportPartition, ResponseExportStartRequest,
-    ResponseExportStartResponse,
+    RESPONSE_EXPORT_START_ACTION, RESPONSE_EXPORT_START_PATH, RESPONSE_MODULE_DEFINITION_ID,
+    ResponseExportAction, ResponseExportCheckpointRequest, ResponseExportCheckpointResponse,
+    ResponseExportPageRequest, ResponseExportPageResponse, ResponseExportPartition,
+    ResponseExportStartRequest, ResponseExportStartResponse,
 };
 use uuid::Uuid;
 
@@ -23,7 +23,7 @@ use crate::{
     DatasetModuleError, DatasetModuleState, MODULE_DEFINITION_ID,
     authoring::ValidatedDatasetSource,
     load_security_state,
-    provider_client::{self, ProviderAction},
+    provider_client::{self, ProviderAction, ProviderAudience},
     sync::{
         BeginAttempt, PromotionReceipt, SyncStoreError, begin_attempt_in_transaction,
         promote_in_transaction, stage_page_in_transaction,
@@ -31,6 +31,7 @@ use crate::{
 };
 
 const CHECKPOINT_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Module(RESPONSE_MODULE_DEFINITION_ID),
     binding: RESPONSE_EXPORT_BINDING_KEY,
     contract: RESPONSE_EXPORT_CONTRACT_ID,
     action: RESPONSE_EXPORT_CHECKPOINT_ACTION,
@@ -40,6 +41,7 @@ const CHECKPOINT_PROVIDER: ProviderAction = ProviderAction {
 };
 
 const START_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Module(RESPONSE_MODULE_DEFINITION_ID),
     binding: RESPONSE_EXPORT_BINDING_KEY,
     contract: RESPONSE_EXPORT_CONTRACT_ID,
     action: RESPONSE_EXPORT_START_ACTION,
@@ -49,6 +51,7 @@ const START_PROVIDER: ProviderAction = ProviderAction {
 };
 
 const PAGE_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Module(RESPONSE_MODULE_DEFINITION_ID),
     binding: RESPONSE_EXPORT_BINDING_KEY,
     contract: RESPONSE_EXPORT_CONTRACT_ID,
     action: RESPONSE_EXPORT_PAGE_ACTION,

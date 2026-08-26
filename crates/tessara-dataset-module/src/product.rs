@@ -59,11 +59,13 @@ use uuid::Uuid;
 
 use crate::{
     DatasetModuleError, DatasetModuleState, MANAGE_CAPABILITY, MODULE_DEFINITION_ID,
-    READ_CAPABILITY, load_security_state, provider_client::ProviderAction,
+    READ_CAPABILITY, load_security_state,
+    provider_client::{ProviderAction, ProviderAudience},
 };
 
 const CORE_DATASET_BINDING: &str = "tessara.core.datasets";
 const FORM_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: FORM_VERSION_SCHEMA_BINDING_KEY,
     contract: FORM_VERSION_SCHEMA_CONTRACT_ID,
     action: FORM_VERSION_CATALOG_ACTION,
@@ -72,6 +74,7 @@ const FORM_CATALOG_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const FORM_SCHEMA_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: FORM_VERSION_SCHEMA_BINDING_KEY,
     contract: FORM_VERSION_SCHEMA_CONTRACT_ID,
     action: FORM_VERSION_SCHEMA_ACTION,
@@ -80,6 +83,7 @@ const FORM_SCHEMA_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const SCOPE_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: SCOPE_CATALOG_BINDING_KEY,
     contract: SCOPE_CATALOG_CONTRACT_ID,
     action: SCOPE_CATALOG_ACTION,
@@ -88,6 +92,7 @@ const SCOPE_CATALOG_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const PRINCIPAL_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: PRINCIPAL_DISPLAY_BINDING_KEY,
     contract: PRINCIPAL_DISPLAY_CONTRACT_ID,
     action: PRINCIPAL_DISPLAY_ACTION,
