@@ -19,7 +19,7 @@
     "base_commit": "13eb6ffaa9479fa71f4270edb049d079495d1a79",
     "base_tree": "c99cf7e156dd157a705b8354d706f9b8be7baeb9",
     "patch_path": "deploy/sprint-8c/baselines/response-0.9.0.patch",
-    "patch_sha256": "7a3a54c0d5f9ef924425124b5398731e9259ea6f6af3334d3cad40ac884003ba",
+    "patch_sha256": "36071cdcf7080ff2e17e7911555b0c4659bcf7559eb58f6065fa610ccd6441a5",
     "cargo_package": "tessara-response-module",
     "cargo_features": [],
     "dockerfile": "deploy/sprint-8c/Dockerfile.response-upgrade-baseline",

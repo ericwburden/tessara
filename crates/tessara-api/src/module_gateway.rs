@@ -1663,6 +1663,58 @@ mod tests {
     }
 
     #[test]
+    fn response_resource_observation_reuses_the_manifest_owned_core_binding() {
+        let installation_id = Uuid::from_u128(105);
+        let module_instance_id = Uuid::from_u128(106);
+        let manifest: ModuleManifest =
+            serde_json::from_str(include_str!("../../tessara-response-module/manifest.json"))
+                .expect("Response manifest");
+        let installed = [InstalledModule {
+            instance_id: module_instance_id,
+            installation_id,
+            manifest,
+            serving: true,
+            system_job_reachable: true,
+        }];
+        let reference = tessara_responses_contract::ResponseReference::from_parts(
+            installation_id,
+            module_instance_id,
+            Uuid::from_u128(107),
+        )
+        .expect("canonical reference");
+
+        let ResourceObservationProviderLookup::Registered(route) =
+            resource_observation_provider_from_installed(&installed, reference.reference())
+        else {
+            panic!("Response resource observation route was not registered");
+        };
+        let body = tessara_responses_contract::ResponseResourceObservationRequest {
+            schema_version: 1,
+            reference: reference.reference().clone(),
+        };
+        let request = route.private_request(Uuid::from_u128(108), &body);
+
+        assert_eq!(
+            request.dependency_binding,
+            tessara_responses_contract::RESPONSE_RESOURCE_OBSERVATION_BINDING_KEY
+        );
+        assert_eq!(request.dependency_binding, "tessara.core.responses");
+        assert_eq!(
+            request.functional_contract,
+            tessara_responses_contract::RESPONSE_RESOURCE_OBSERVATION_CONTRACT_ID
+        );
+        assert_eq!(
+            request.authorization_action,
+            tessara_responses_contract::RESPONSE_RESOLVE_ACTION
+        );
+        assert_eq!(
+            request.path,
+            tessara_responses_contract::RESPONSE_RESOLVE_PATH
+        );
+        assert_eq!(request.actor_capability, "submissions:read_own");
+    }
+
+    #[test]
     fn generic_resource_observation_rejects_wrong_owner_type_id_and_contract_before_dispatch() {
         let installation_id = Uuid::from_u128(111);
         let module_instance_id = Uuid::from_u128(112);

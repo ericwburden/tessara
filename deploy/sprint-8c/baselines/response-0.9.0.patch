@@ -6025,6 +6025,19 @@ index 2da58ea24b5a21cc4a425b19b6665ce0ec189cb1..2740950cb301f5ec25a4efb5b59bff46
          managed_node_ids: BTreeSet::new(),
          manage_all: false,
      };
+diff --git a/crates/tessara-responses-contract/src/boundary.rs b/crates/tessara-responses-contract/src/boundary.rs
+index cc31a19c61c97bed36dafbeff0564a4f867d1813..42dc9b63d815f2210d8bdbf66fea0a7d3dd8be0b 100644
+--- a/crates/tessara-responses-contract/src/boundary.rs
++++ b/crates/tessara-responses-contract/src/boundary.rs
+@@ -52,7 +52,7 @@ pub const RESPONSE_REVERSE_SCHEMA_VERSION: u16 = 1;
+ pub const RESPONSE_FORM_VERSION_USAGE_BINDING_KEY: &str = "tessara.forms.response-usage";
+ pub const RESPONSE_SUMMARY_BINDING_KEY: &str = "tessara.core.response-summary";
+ pub const RESPONSE_OPERATIONS_STATUS_BINDING_KEY: &str = "tessara.core.response-operations";
+-pub const RESPONSE_RESOURCE_OBSERVATION_BINDING_KEY: &str = "tessara.core.response-observation";
++pub const RESPONSE_RESOURCE_OBSERVATION_BINDING_KEY: &str = "tessara.core.responses";
+ pub const RESPONSE_FORM_VERSION_USAGE_ACTION: &str = "responses.form_version_usage";
+ pub const RESPONSE_SUMMARY_ACTION: &str = "responses.summary";
+ pub const RESPONSE_OPERATIONS_STATUS_ACTION: &str = "responses.operations_status";
 diff --git a/crates/tessara-responses-contract/src/lib.rs b/crates/tessara-responses-contract/src/lib.rs
 index 7e25f4391810a5c9faf97336854c486b20d67e4e..f6d561c551c0cb1566916ba1f97a04f35855d98b 100644
 --- a/crates/tessara-responses-contract/src/lib.rs
