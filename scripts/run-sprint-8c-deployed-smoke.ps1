@@ -932,10 +932,11 @@ try {
         -Path "/api/manifest" -ControlKey).document
     $responseCurrentConfiguration = Invoke-Sprint8CInternalModuleRequest `
         -ComposePath $composePath -Service "responses" -Port 8094 `
-        -ModuleLabel "Response" -Path "/api/configuration"
+        -ModuleLabel "Response" -Path "/api/configuration" -ControlKey
     $responseValidatedConfiguration = Invoke-Sprint8CInternalModuleRequest `
         -ComposePath $composePath -Service "responses" -Port 8094 `
         -ModuleLabel "Response" -Path "/api/configuration/validate" -Method POST `
+        -ControlKey `
         -Body ($responseCurrentConfiguration.document | ConvertTo-Json -Depth 30 -Compress)
     $responseAppliedConfiguration = Invoke-Sprint8CInternalModuleRequest `
         -ComposePath $composePath -Service "responses" -Port 8094 `
