@@ -741,7 +741,28 @@ function Assert-Sprint8CMaterializationEvidence {
         "core", "tessara.responses", "tessara.datasets", "tessara.components",
         "tessara.dashboards", "tessara.reference.scoped-records"
     )
+    $expectedResponseHealthProperties = @("checks", "schema_version", "status")
+    $expectedResponseReadinessCodes = @(
+        "response.database",
+        "response.configuration",
+        "response.security_state",
+        "response.provider.forms",
+        "response.provider.workflow",
+        "response.events.publication",
+        "response.export.publication"
+    )
     $firstOwners = @($Document.first_apply.owner_order | ForEach-Object { [string]$_ })
+    $responseLive = $Document.health.response_live
+    $responseReady = $Document.health.response_ready
+    $responseLiveProperties = @($responseLive.PSObject.Properties.Name | Sort-Object)
+    $responseReadyProperties = @($responseReady.PSObject.Properties.Name | Sort-Object)
+    $responseReadyChecks = @($responseReady.checks)
+    $invalidResponseReadyChecks = @($responseReadyChecks | Where-Object {
+        (@($_.PSObject.Properties.Name | Sort-Object) -join "`n") -cne
+            ((@("code", "message", "passing") | Sort-Object) -join "`n") -or
+        -not [bool]$_.passing -or
+        [string]::IsNullOrWhiteSpace([string]$_.message)
+    })
     if ([int]$Document.schema_version -ne 1 -or [string]$Document.sprint -cne "sprint-8c" -or
         [string]$Document.proof -cne $expectedProof -or [string]$Document.state -cne "passed" -or
         [string]$Document.target -cne $ExpectedTarget -or
@@ -758,10 +779,19 @@ function Assert-Sprint8CMaterializationEvidence {
         [string]$Document.first_apply.operation_state -cne "succeeded" -or
         -not [bool]$Document.first_apply.changed -or [bool]$Document.first_apply.no_op -or
         [string]$Document.gateway_start_boundary.post_start_health -cne "passed" -or
-        [string]$Document.health.response_live.module_definition_id -cne "tessara.responses" -or
-        [string]$Document.health.response_live.module_release_version -cne "1.0.0" -or
-        [string]$Document.health.response_live.status -cne "live" -or
-        [string]$Document.health.response_ready.status -cne "ready" -or
+        ($responseLiveProperties -join "`n") -cne
+            ($expectedResponseHealthProperties -join "`n") -or
+        ($responseReadyProperties -join "`n") -cne
+            ($expectedResponseHealthProperties -join "`n") -or
+        [int]$responseLive.schema_version -ne 1 -or
+        [string]$responseLive.status -cne "passing" -or
+        @($responseLive.checks).Count -ne 0 -or
+        [int]$responseReady.schema_version -ne 1 -or
+        [string]$responseReady.status -cne "passing" -or
+        $responseReadyChecks.Count -ne $expectedResponseReadinessCodes.Count -or
+        (@($responseReadyChecks.code | ForEach-Object { [string]$_ }) -join "`n") -cne
+            ($expectedResponseReadinessCodes -join "`n") -or
+        $invalidResponseReadyChecks.Count -ne 0 -or
         [string]$Document.cleanup_restoration.state -cne "passed" -or
         [string]$Document.cleanup_restoration.mode -cne "exact-project-teardown" -or
         [string]::IsNullOrWhiteSpace([string]$Document.fixture_receipt_path) -or
@@ -1796,10 +1826,31 @@ function New-Sprint8CSyntheticMaterializationEvidence {
         gateway_start_boundary = [pscustomobject][ordered]@{ post_start_health = "passed" }
         health = [pscustomobject][ordered]@{
             response_live = [pscustomobject][ordered]@{
-                module_definition_id = "tessara.responses"
-                module_release_version = "1.0.0"; status = "live"
+                schema_version = 1
+                status = "passing"
+                checks = @()
             }
-            response_ready = [pscustomobject][ordered]@{ status = "ready" }
+            response_ready = [pscustomobject][ordered]@{
+                schema_version = 1
+                status = "passing"
+                checks = @(
+                    @(
+                        "response.database",
+                        "response.configuration",
+                        "response.security_state",
+                        "response.provider.forms",
+                        "response.provider.workflow",
+                        "response.events.publication",
+                        "response.export.publication"
+                    ) | ForEach-Object {
+                        [pscustomobject][ordered]@{
+                            code = $_
+                            passing = $true
+                            message = "synthetic passing check"
+                        }
+                    }
+                )
+            }
         }
         fixture_receipt_path = "target/sprint-8c-finalizer-selftest/fixture.json"
         fixture_receipt_sha256 = "d" * 64
@@ -2276,6 +2327,23 @@ function Test-Sprint8CImplementationFinalizationContract {
         } catch { $noOpRejected = $true }
         if (-not $noOpRejected) { throw "Finalizer self-test admitted a mutating semantic no-op." }
 
+        $legacyResponseHealth = New-Sprint8CSyntheticMaterializationEvidence `
+            -TargetName Reference -Source $source
+        $legacyResponseHealth.health.response_live = [pscustomobject][ordered]@{
+            schema_version = 1
+            module_definition_id = "tessara.responses"
+            module_release_version = "1.0.0"
+            status = "live"
+        }
+        $legacyResponseHealthRejected = $false
+        try {
+            Assert-Sprint8CMaterializationEvidence -Document $legacyResponseHealth `
+                -ExpectedTarget Reference -ExpectedSource $source
+        } catch { $legacyResponseHealthRejected = $true }
+        if (-not $legacyResponseHealthRejected) {
+            throw "Finalizer self-test admitted retired Dataset-shaped Response health evidence."
+        }
+
         $duplicatedFailureProjection = New-Sprint8CSyntheticFailureEvidence -Source $source
         $duplicatedFailureProjection.failure_attempts[0].containment | Add-Member `
             -NotePropertyName containment -NotePropertyValue ([pscustomobject]@{
@@ -2504,6 +2572,7 @@ function Test-Sprint8CImplementationFinalizationContract {
             missing_target_rejected = $missingRejected
             dirty_source_rejected = $dirtyRejected
             mutating_noop_rejected = $noOpRejected
+            legacy_response_health_rejected = $legacyResponseHealthRejected
             duplicated_failure_projection_rejected = $duplicatedFailureProjectionRejected
             evidence_tamper_rejected = $authenticationRejected
             foreign_publication_preserved = $foreignPublicationRejected
