@@ -314,10 +314,10 @@ failure recovery, fixture/runner proof, deployed smoke, and upgrade/rollback
 all complete before formal Readiness. The `ui-sdk-conformance` proof is also
 mandatory: establish the accepted visual/interaction baseline, map UI
 ownership, build typed SDK views before cutover, and prove direct/lifecycle
-visual and semantic parity. Do not fork Sprint 8A's large lifecycle
-runners or evidence lineage into the next sprint; extract only genuinely
-policy-neutral helpers and keep the future sprint runner a thin profile over
-current shared contracts.
+visual and semantic parity. Do not fork a historical lifecycle runner or its
+evidence lineage into a later sprint. Extract only genuinely policy-neutral
+helpers; under contract v3, the sprint profile is the tracked adapter and every
+lifecycle responsibility remains in the shared validation platform.
 
 Sprint closeout for a module-affecting change must run both focused module tests
 and the resolved application's integration, browser, and conformance suites.
@@ -923,3 +923,36 @@ rejects reparse-point path chains, keeps prior bytes recoverable through final
 hash/result construction and cleanup, and restores the complete prior pair
 after any pre-commit failure. Archive old evidence and record the reason before
 any intentional replacement option is used.
+
+## Future-sprint contract-v3 sequence
+
+New kickoff packages use validation contract schema 3 / policy v3 and preserve
+all retained v2 and legacy packages unchanged.
+
+1. Kickoff creates and tracks the contract plus one schema-v2 validation
+   adapter, declares platform release `2.0.0`, explicit artifact-fanout edges,
+   per-slice exits, fixture/visual rules, and Phase 8 authorization/UI gates when
+   applicable.
+2. Kickoff validates through `Assert-TessaraValidationAdapter` and
+   `Assert-TessaraFutureSprintPlanningPackage`. Missing or uncertain mappings
+   block implementation handoff.
+3. Implementation reconciles every declared projection in the touched cone,
+   proves authorization at the real boundary and standalone UI ownership early,
+   derives fixtures from signed owner read-back, and runs implementation lanes
+   through `Invoke-TessaraImplementationHarvest`.
+4. Implementation-readiness schema 2 binds the current source, contract hash,
+   adapter hash, platform fingerprint, deterministic defect batch, fanout
+   receipts, and exact slice exits. Formal Readiness is not a discovery pass for
+   fixtures, environments, acceptance inventories, authorization, or generated
+   assets.
+5. Every formal lane runs through `Invoke-TessaraValidationLane`. Phase
+   certificates and the evidence chain authenticate platform and adapter
+   provenance; missing provenance blocks rather than falling back.
+6. Closeout validates the chain, reports target/attempt efficiency and finding
+   hotspots from retained receipts, and extracts reusable process lessons
+   without changing accepted product behavior.
+
+Only adapter actions are sprint-specific. Phase orchestration, topology/ports,
+cleanup/restoration state, evidence publication, certificates, and fail-late
+coordination remain shared-platform responsibilities. An exception requires an
+explicit documented user or architecture authority in the contract.

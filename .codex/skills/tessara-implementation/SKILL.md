@@ -35,6 +35,12 @@ validation skills.
    lane/scenario, also read
    `../tessara-sprint-validation/references/defect-provenance.md` and consume
    its validated `defect-provenance.json` before editing.
+   When it declares `policy_version: tessara-validation-v3`, also require the
+   complete `../tessara-sprint-validation/references/validation-policy-v3.md`,
+   tracked schema-v2 adapter named by `validation_platform.adapter_path` and
+   validate it with `Assert-TessaraValidationAdapter`. Treat contract schema 3,
+   adapter schema 2, implementation-readiness schema 2, and platform release
+   2.0.0 as one forward-only boundary; never rewrite a retained v2 artifact.
 7. When that contract declares
    `implementation_profile.kind: phase8-module-extraction`, read
    `docs/architecture/module-extraction-playbook.md` completely. Treat its
@@ -70,6 +76,23 @@ mapping. Identify changed paths and affected dependency domains before editing,
 then select every required or intersecting implementation target from that
 contract. An unmapped path or uncertain consumer expands the implementation
 verification cone; it is not deferred to formal validation.
+
+Under policy v3, reconcile every changed canonical producer through the
+contract's explicit `controlled_artifact_edges`. A changed migration advances
+its checksum and baseline patch; a changed contract, manifest, or browser asset
+advances every declared client, catalog, or digest. An undeclared relationship
+or unknown changed path expands the verification cone to all implementation
+targets. Each slice is complete only when every declared exit target has a
+passing current-source receipt bound to the current contract hash, adapter hash,
+and authenticated platform identity.
+
+The adapter/action boundary is strict. Sprint-specific product commands,
+focused test scripts, and harness assertions are adapter actions. The shared
+validation platform alone owns phase scheduling, topology and port lifecycle,
+cleanup/restoration state machines, evidence publication, certificates, and
+dependency-aware fail-late coordination. Do not create or invoke a sprint-owned
+lifecycle engine. A deviation requires documented user or architecture
+authority in the contract; absence or uncertain provenance blocks the work.
 
 For a Phase 8 module extraction, maintain the plan's owner/consumer/subtraction
 inventories as code moves. Do not declare the slice complete until each
@@ -176,6 +199,12 @@ that cone instead of silently expanding scope.
   acceptance-contract, and evidence-schema change. Do not leave validation
   consumers to discover an already-known producer/contract mismatch during a
   full candidate run.
+- Derive physical fixture identities and values by signed owner read-back under
+  logical keys. Do not predict IDs, copy inventories, preserve historical demo
+  counts, use reduced DTO replicas, or write across owner boundaries.
+- Compare whole frames only with invariant fixture content. With current
+  owner-controlled content, compare declared stable regions and independently
+  assert the current semantic content.
 - Treat formal validation as certification of a completed implementation, not
   as the ordinary debugging loop. Reproduce and resolve every known failure in
   the implementation phase. Do not launch Readiness or Rehearsal merely to find
@@ -185,6 +214,11 @@ that cone instead of silently expanding scope.
   the coordinator-issued record and follow its owner, invalidation, and rerun
   boundary. Do not silently reclassify a process defect as product or vice
   versa.
+- For policy v3, execute implementation lanes with
+  `Invoke-TessaraImplementationHarvest`. Continue safe independent siblings,
+  block failed dependents and unsafe live-state work, retain every target
+  receipt, and correct only after the deterministic harvested defect batch is
+  complete. Stop harvesting on cleanup/restoration or topology-integrity risk.
 - Record every changed test expectation in the provenance record and sprint
   test-change log with its approved authority, supersession rationale, and
   equal-or-stronger replacement coverage. An unrecorded assertion change is an
@@ -210,6 +244,11 @@ Before handoff, answer from the diff and repository rather than intention:
   proof for every affected clause?
 - For module UI, does the focused visual reproducer show continuity with the
   accepted baseline, and does `ui-sdk-conformance` pass without exceptions?
+- Did every changed producer advance every declared controlled projection?
+- Did the early real-boundary authorization target pass before browser/smoke,
+  and did standalone UI ownership pass before consumer cutover?
+- Are every slice receipt, contract hash, adapter hash, platform fingerprint,
+  owner fixture read-back, and visual-stability declaration current?
 
 Resolve findings inside the touched cone before declaring implementation
 complete.
@@ -239,7 +278,9 @@ complete.
    `scripts/verify-module-sdk-boundaries.ps1`, or
    `scripts/verify-module-sdk-compatibility.ps1` when their contracts are
    affected.
-   For every module UI or Phase 8 extraction change, also run
+   For every module UI or Phase 8 extraction change, first run the actor/action/
+   route/capability matrix through the real process/gateway boundary, then the
+   standalone-module UI ownership target, and then
    `pwsh -NoProfile -File scripts/ui-sdk-conformance.ps1` and focused
    direct-load versus lifecycle-navigation visual/semantic checks before
    formal validation.
@@ -265,6 +306,12 @@ complete.
    is represented by a required passing target and that the three clean-
    environment classes were actually executed from the declared disposable
    environment.
+   Under policy v3, write implementation-readiness schema 2. Bind the current
+   source, contract, adapter, and platform identity; include the deterministic
+   harvested-defect batch, every fanout-edge receipt, every slice and exact exit
+   target, and zero stale/failed/blocked targets. Formal Readiness cannot be the
+   first execution of a fixture/environment/acceptance combination,
+   authorization matrix, or generated-asset combination.
 8. Hand the clean implementation commit and passing implementation-readiness
    result to `tessara-sprint-validation` when formal sprint validation is
    requested. Let `tessara-sprint-validation`,

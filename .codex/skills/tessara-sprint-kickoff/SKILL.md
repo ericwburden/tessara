@@ -19,9 +19,12 @@ or harness changes during kickoff.
   implementation slices, and verification coverage.
 - Create the `tessara-sprint-validation` record as a planned acceptance
   inventory; do not execute validation gates.
-- Create the tracked machine-readable sprint validation contract and select
-  `policy_version: tessara-validation-v2`. This policy first applies after
-  Sprint 8A; never retrofit an older sprint's receipts.
+- Create the tracked machine-readable sprint validation contract and schema-v2
+  `tessara.validation.adapter`. New kickoffs select contract schema 3 and
+  `policy_version: tessara-validation-v3`; retained contracts continue under
+  the version they declare and are never retrofitted.
+- Read `tessara-sprint-validation/references/validation-policy-v3.md` after its
+  v2 base before writing a new kickoff package.
 - Prepend a kickoff entry to `docs/progress-report.md`.
 - Audit the planning package for completeness and stop at the implementation
   handoff boundary.
@@ -71,6 +74,8 @@ Example: `Sprint 2A: Workflow Assignment And Response Start (Next)` produces:
   `docs/sprints/sprint-2a-verification.md`
 - validation contract in the sprint worktree:
   `docs/sprints/sprint-2a-validation-contract.json`
+- validation adapter in the sprint worktree:
+  `docs/sprints/sprint-2a-validation-adapter.json`
 
 Abort if the branch, worktree path, plan, validation record, or validation
 contract already exists, unless the user explicitly asks to resume or revise an
@@ -93,18 +98,26 @@ the current roadmap.
 7. Write `docs/sprints/<slug>-plan.md` as the execution contract.
 8. Use `tessara-sprint-validation` and its record template to create
    `docs/sprints/<slug>-verification.md` as a planned acceptance inventory.
-9. Create `docs/sprints/<slug>-validation-contract.json`, validate it with
-   `scripts/tessara-validation-policy.psm1`, starting from
-   `tessara-sprint-validation/assets/sprint-validation-contract.json`, and
-   ensure every placeholder is replaced and every requirement,
+9. Create `docs/sprints/<slug>-validation-contract.json` and
+   `docs/sprints/<slug>-validation-adapter.json`, starting from both assets in
+   `tessara-sprint-validation/assets/`. Select schema 3 / policy v3, record the
+   canonical adapter path and supported platform release, validate the contract
+   with `scripts/tessara-validation-policy.psm1`, validate
+   the adapter through public `Assert-TessaraValidationAdapter`, then run
+   `Assert-TessaraFutureSprintPlanningPackage`. Ensure every placeholder is
+   replaced and every requirement,
    target, lane, prerequisite, dependency domain, environment section, and
    evidence policy is complete. Select `implementation_profile.kind` as
    `phase8-module-extraction` for a Phase 8 extraction, bind the canonical
    playbook and exact module/transition identities, and map required exact
    commands to every playbook proof class.
-10. Prepend the kickoff entry to `docs/progress-report.md`.
-11. Run the comprehensive planning audit below and correct planning gaps.
-12. Present the plan, unresolved decisions, and recommended first
+10. Declare explicit producer-to-projection fanout edges and each slice's exact
+    focused exit targets. For Phase 8, also create the actor/action/route/
+    capability authorization matrix and bind its early boundary target plus the
+    independent UI ownership gate.
+11. Prepend the kickoff entry to `docs/progress-report.md`.
+12. Run the comprehensive planning audit below and correct planning gaps.
+13. Present the plan, unresolved decisions, and recommended first
    implementation slice, then stop. Do not begin implementation.
 
 ## Comprehensive sprint plan
@@ -121,7 +134,8 @@ Write the plan in Markdown with these sections:
   acceptance criteria, implementation slices, automated checks, and manual UAT
 - acceptance criteria with observable pass conditions and negative cases
 - ordered implementation slices with prerequisites, expected file/component
-  touchpoints, tests changed in the same slice, and slice completion criteria
+  touchpoints, exact focused exit targets, controlled-artifact fanout edges,
+  tests changed in the same slice, and receipt-bound completion criteria
 - automated, integration, deployed-smoke, and manual UAT plans
 - validation, evidence, candidate-freeze, failure-restart, and closeout-
   authorization plan
@@ -135,7 +149,13 @@ command matrix. Include an accepted pre-extraction visual and interaction
 baseline plus a UI ownership inventory for markup, SDK primitives, styles,
 assets, SSR/hydration, lifecycle behavior, navigation title/state, and
 responsive behavior. Map a focused visual reproducer and
-`ui-sdk-conformance` target before consumer cutover. Reusing the architecture
+`ui-sdk-conformance` target before consumer cutover. Add the complete eight-
+boundary authorization matrix with exact positive, negative, replay,
+nondisclosure, revision, and outage cases; exercise it through the real process/
+gateway boundary before browser or smoke. Require standalone-module UI proof
+for CSS and shared-shell ownership, generated assets/digests, responsive and
+navigation parity, route identity, bootstrap media types, SSR, hydration,
+accessibility, and a clean console. Reusing the architecture
 without these delivery details is not an implementation-ready plan.
 
 Use repository evidence to make the plan concrete, but do not make speculative
@@ -148,6 +168,14 @@ maps every clause to exact implementation targets and formal lanes, maps every
 target/lane to dependency domains, and maps each domain to tracked path
 patterns. Unknown paths must select conservative validation rather than being
 silently ignored.
+
+For policy v3, it also owns one explicit producer-to-projection edge for every
+controlled artifact relationship (migrations/checksums, contracts/generated
+clients, manifests/catalogs, browser assets/digests, baselines, fixtures,
+acceptance inventories, and evidence schemas), owner-read fixture rules, visual
+stability declarations, and per-slice exit targets. Unknown fanout expands the
+verification cone. Predicted identities, copied inventories, historical demo
+counts, reduced DTO replicas, and cross-owner fixture writes are prohibited.
 
 ## Validation and closeout readiness
 
@@ -197,8 +225,15 @@ Before declaring kickoff complete, verify that:
 
 - every roadmap scope and exit-condition clause has end-to-end traceability
 - the machine-readable validation contract agrees with the plan and record,
-  validates against `validation-contract.schema.json`, and contains no
+  validates against `validation-contract-v3.schema.json`, and contains no
   unmapped requirement, target, lane, dependency, or tracked path category
+- the tracked schema-v2 adapter passes `Assert-TessaraValidationAdapter`, names
+  exactly the contract lanes and prerequisites, maps every required target with
+  no extra action target, and the public planning-package audit passes
+- every slice declares its exact focused exit targets and fanout edges; every
+  canonical producer has explicit projections and a reconciliation target
+- fixture identities are owner-read under logical keys with signed read-back,
+  and mutable visual content uses stable regions plus semantic assertions
 - a Phase 8 extraction selects `phase8-module-extraction`, instantiates the
   canonical playbook, and covers every required proof class with a required
   exact implementation target; clean materialization, semantic no-op, and
@@ -208,6 +243,8 @@ Before declaring kickoff complete, verify that:
 - happy paths, negative paths, boundary cases, nondisclosure, recovery, and
   rollback are covered where applicable
 - implementation slices have a dependency-valid order and testable boundaries
+- browser, smoke, and consumer-cutover targets depend on passing early
+  authorization and independent UI ownership targets where Phase 8 applies
 - required harness and fixture changes are paired with their product slices
 - every extracted UI has an accepted baseline, canonical SDK ownership map,
   namespaced product-style inventory, direct/lifecycle parity target, and
@@ -272,7 +309,8 @@ Do not report kickoff complete unless:
 - the sprint branch and worktree were created
 - the comprehensive plan was written and passed the planning audit
 - the validation record was created and seeded from the roadmap
-- the policy-v2 validation contract was created and validated
+- the policy-v3 validation contract and tracked schema-v2 adapter were created,
+  validated through the public APIs, and passed the planning-package audit
 - the kickoff progress entry was prepended
 - blockers and decisions were surfaced
 - `main` remained clean and the sprint worktree contains only planning changes

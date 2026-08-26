@@ -14,10 +14,21 @@ Own validation policy and authorization. Delegate phase execution to:
 ## Policy selection
 
 Inspect the tracked sprint validation contract before loading a protocol. When
-it declares `policy_version: tessara-validation-v2`, read
+it declares `policy_version: tessara-validation-v2` or
+`policy_version: tessara-validation-v3`, read
 [`references/validation-policy-v2.md`](references/validation-policy-v2.md)
-completely and validate the contract with
+completely. For v3, then read
+[`references/validation-policy-v3.md`](references/validation-policy-v3.md)
+completely. Validate the contract with
 `scripts/tessara-validation-policy.psm1`.
+
+For v3, also require the tracked schema-v2 adapter at the contract's canonical
+path. Validate it through public `Assert-TessaraValidationAdapter` and reject a
+missing adapter, unsupported platform release, lane/prerequisite mismatch,
+extra or omitted lane/target, undocumented lifecycle exception, or uncertain
+provenance. Every implementation and formal lane executes through
+`Invoke-TessaraValidationLane`; implementation harvesting uses
+`Invoke-TessaraImplementationHarvest`.
 
 Otherwise read
 [`references/validation-protocol.md`](references/validation-protocol.md)
@@ -26,16 +37,17 @@ completely. Before creating a legacy candidate, also read
 completely. Those references remain authoritative for Sprint 8A and earlier
 sprint-specific runners.
 
-The v2 reference overrides the legacy full-rerun, two-wave deferral, embedded-
+The v2 reference, plus v3's stricter platform and implementation-exit rules,
+overrides the legacy full-rerun, two-wave deferral, embedded-
 lineage, and global-manifest rules below. All other safety, authority,
 classification, fail-late, candidate-freeze, and candidate-bound SIT/UAT rules
-continue to apply. When the contract is absent or selects another policy, use
+continue to apply. When the contract is absent or selects a legacy policy, use
 the legacy protocol unchanged. Never add v2 fields to legacy evidence, convert
 it into v2 certificates, or use this policy change to reopen a completed
 lifecycle.
 
 For every failed implementation target or formal validation lane/scenario in
-a v2 sprint, read
+a v2 or v3 sprint, read
 [`references/defect-provenance.md`](references/defect-provenance.md)
 completely and validate `defect-provenance.json` against
 [`references/defect-provenance.schema.json`](references/defect-provenance.schema.json).
@@ -129,7 +141,7 @@ stale.
 
 ## Full-regime execution
 
-For a v2 sprint:
+For a v2 or v3 sprint:
 
 1. Validate the contract's implementation profile and require the passing
    non-authoritative implementation-readiness result for the current clean
@@ -142,6 +154,12 @@ For a v2 sprint:
    blocked, or missing its required focused proof. Require the exact formal
    fixture, environment, and acceptance inventory to have passed through the
    selected implementation targets.
+   For v3, additionally authenticate the current adapter hash and platform
+   fingerprint, consume the deterministic implementation defect batch, and
+   require every slice exit target and fanout edge to have a current passing
+   receipt. Reject browser/smoke if the early real-boundary authorization target
+   did not pass and reject consumer cutover if standalone UI ownership did not
+   pass. Formal Readiness is never first execution for these combinations.
 2. Run or recertify Validation Readiness from the impact-selected lanes and
    authenticated unaffected lane certificates. Fall back to complete Readiness
    when any mapping, fingerprint, or prior certificate is uncertain.
@@ -270,7 +288,7 @@ Examples:
 
 Never choose a narrower scope merely to avoid expensive work.
 
-For v2, determine scope from the tracked dependency map and authenticated
+For v2 and v3, determine scope from the tracked dependency map and authenticated
 domain fingerprints. Preserve a closed upstream certificate when its complete
 dependency set is unchanged. Recertify only intersecting Readiness or Rehearsal
 lanes, including their prerequisite closure. An unknown path, missing digest,
@@ -286,7 +304,11 @@ defect in the same attempt; use `mixed` and apply the union cone.
 
 ## Result collection and recovery
 
-- Prefer repository-owned phase runners over ad hoc compound commands.
+- Under v3, invoke only the shared validation-platform entry points. Repository-
+  owned focused product scripts remain adapter actions; they are not authority
+  to implement phase orchestration, topology/port lifecycle, cleanup state,
+  evidence publication, or certificates. Under retained v2/legacy contracts,
+  use only the runner named by that historical contract.
 - Run independent sibling checks fail-late within a lane or isolated scenario
   set and aggregate their results.
 - Retain start/completion receipts, append-only logs, heartbeats, durations,
@@ -324,6 +346,11 @@ For v2, replace the growing evidence-manifest prerequisite with the compact
 certificates and sealed phase-local indexes remain the ordinary downstream
 trust boundary; raw artifacts are cold evidence.
 
+For v3, require evidence-chain schema 2 and phase-certificate schema 3. Every
+formal receipt must authenticate the current platform release/fingerprint and
+adapter hash. Missing or ambiguous provenance blocks closeout; it never falls
+back to a custom runner.
+
 If closeout discovers missing coverage or executable evidence, reopen at the
 boundary chosen by this coordinator. Documentation-only corrections may stay
 in closeout when they cannot alter executable behavior or test interpretation.
@@ -333,5 +360,6 @@ in closeout when they cannot alter executable behavior or test interpretation.
 Do not report validation complete unless the receipt chain parses and hashes,
 all authoritative phases passed, failure invalidations are satisfied, the
 defect-provenance chronology is resolved, the verification record explicitly
-authorizes closeout, and the application is in the intended healthy handoff
-state.
+authorizes closeout, required v3 platform/adapter provenance and implementation-
+exit coverage authenticate, and the application is in the intended healthy
+handoff state.

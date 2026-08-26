@@ -7,15 +7,26 @@ $script:PolicyModuleSha256AtImport = (
     Get-FileHash -Algorithm SHA256 -LiteralPath $script:PolicyModulePath
 ).Hash.ToLowerInvariant()
 $script:SchemaRoot = Join-Path (Split-Path -Parent $PSScriptRoot) ".codex/skills/tessara-sprint-validation/references"
+$script:FutureGuardrailsModulePath = Join-Path $PSScriptRoot "validation-platform/tessara-future-sprint-guardrails.psm1"
+Import-Module $script:FutureGuardrailsModulePath -Force -DisableNameChecking
 $script:SchemaFiles = @{
     validation_contract = "validation-contract.schema.json"
+    validation_contract_v3 = "validation-contract-v3.schema.json"
     implementation_readiness = "implementation-readiness.schema.json"
+    implementation_readiness_v2 = "implementation-readiness-v2.schema.json"
     phase_certificate = "phase-certificate.schema.json"
     phase_certificate_v2 = "phase-certificate-v2.schema.json"
+    phase_certificate_v3 = "phase-certificate-v3.schema.json"
+    authorization_matrix = "authorization-matrix.schema.json"
+    implementation_defect_batch = "implementation-defect-batch.schema.json"
+    closeout_efficiency = "closeout-efficiency.schema.json"
     correction_impact = "correction-impact-assessment-v2.schema.json"
     phase_evidence_index = "phase-evidence-index.schema.json"
+    phase_evidence_index_v2 = "phase-evidence-index-v2.schema.json"
     evidence_chain = "evidence-chain.schema.json"
+    evidence_chain_v2 = "evidence-chain-v2.schema.json"
     defect_provenance = "defect-provenance.schema.json"
+    defect_provenance_v2 = "defect-provenance-v2.schema.json"
 }
 
 function Get-TessaraValidationPolicyVersion {
@@ -29,6 +40,7 @@ function Get-TessaraValidationPolicyIdentity {
         schema_version = 1
         contract = "tessara.validation-policy"
         release_version = $script:PolicyVersion
+        supported_policy_versions = @("tessara-validation-v2", "tessara-validation-v3")
         module_sha256 = $script:PolicyModuleSha256AtImport
     }
 }
@@ -39,13 +51,22 @@ function Get-TessaraValidationSchemaPath {
         [Parameter(Mandatory)]
         [ValidateSet(
             "validation_contract",
+            "validation_contract_v3",
             "implementation_readiness",
+            "implementation_readiness_v2",
             "phase_certificate",
             "phase_certificate_v2",
+            "phase_certificate_v3",
+            "authorization_matrix",
+            "implementation_defect_batch",
+            "closeout_efficiency",
             "correction_impact",
             "phase_evidence_index",
+            "phase_evidence_index_v2",
             "evidence_chain",
-            "defect_provenance"
+            "evidence_chain_v2",
+            "defect_provenance",
+            "defect_provenance_v2"
         )]
         [string]$Kind
     )
@@ -132,13 +153,22 @@ function Assert-TessaraJsonSchema {
         [Parameter(Mandatory)]
         [ValidateSet(
             "validation_contract",
+            "validation_contract_v3",
             "implementation_readiness",
+            "implementation_readiness_v2",
             "phase_certificate",
             "phase_certificate_v2",
+            "phase_certificate_v3",
+            "authorization_matrix",
+            "implementation_defect_batch",
+            "closeout_efficiency",
             "correction_impact",
             "phase_evidence_index",
+            "phase_evidence_index_v2",
             "evidence_chain",
-            "defect_provenance"
+            "evidence_chain_v2",
+            "defect_provenance",
+            "defect_provenance_v2"
         )]
         [string]$Kind,
         [string]$Label = $Kind
@@ -1103,6 +1133,10 @@ function Assert-TessaraValidationContract {
     [CmdletBinding()]
     param([Parameter(Mandatory)]$Contract)
 
+    if ([int]$Contract.schema_version -eq 3) {
+        Assert-TessaraJsonSchema -Document $Contract -Kind validation_contract_v3 -Label "Validation contract v3"
+        return Assert-TessaraValidationContractV3Semantics -Contract $Contract
+    }
     Assert-TessaraJsonSchema -Document $Contract -Kind validation_contract -Label "Validation contract"
 
     $domains = Get-TessaraNamedItems -Items @($Contract.dependency_domains) -Property name -Label "Dependency domains"
@@ -1341,10 +1375,19 @@ function Assert-TessaraImplementationReadinessResult {
     param(
         [Parameter(Mandatory)]$Result,
         [Parameter(Mandatory)]$Contract,
-        [Parameter(Mandatory)][string]$ContractPath
+        [Parameter(Mandatory)][string]$ContractPath,
+        [string]$AdapterPath
     )
 
     $null = Assert-TessaraValidationContract -Contract $Contract
+    if ([int]$Result.schema_version -eq 2) {
+        if ([int]$Contract.schema_version -ne 3 -or [string]::IsNullOrWhiteSpace($AdapterPath)) {
+            throw "Implementation readiness v2 requires a validation contract v3 and the tracked adapter path."
+        }
+        Assert-TessaraJsonSchema -Document $Result -Kind implementation_readiness_v2 -Label "Implementation readiness result v2"
+        return Assert-TessaraImplementationReadinessV2Semantics -Result $Result -Contract $Contract `
+            -ContractPath $ContractPath -AdapterPath $AdapterPath
+    }
     Assert-TessaraJsonSchema -Document $Result -Kind implementation_readiness -Label "Implementation readiness result"
 
     if ([string]$Result.sprint -cne [string]$Contract.sprint) {
@@ -1410,6 +1453,14 @@ function Assert-TessaraImplementationReadinessResult {
     return $true
 }
 
+function Assert-TessaraCloseoutEfficiencyReport {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Report)
+    Assert-TessaraJsonSchema -Document $Report -Kind closeout_efficiency `
+        -Label "Closeout efficiency report"
+    return Assert-TessaraCloseoutEfficiencySemantics -Report $Report
+}
+
 function Assert-TessaraCorrectionImpactAssessment {
     [CmdletBinding()]
     param(
@@ -1464,11 +1515,15 @@ function Assert-TessaraPhaseCertificate {
     $certificateSchema = switch ($schemaVersion) {
         1 { "phase_certificate" }
         2 { "phase_certificate_v2" }
+        3 { "phase_certificate_v3" }
         default { throw "Unsupported phase certificate schema version '$schemaVersion'." }
     }
     Assert-TessaraJsonSchema -Document $Certificate -Kind $certificateSchema -Label "Phase certificate"
     if ($schemaVersion -eq 2) {
-        throw "Phase certificate v2 requires the not-yet-adopted platform certifier to authenticate its compatibility plan, lane receipts, prior certificate, prerequisites, and evidence indexes; structural validation alone cannot authorize reuse."
+        throw "Phase certificate v2 requires the platform certifier to authenticate its compatibility plan, lane receipts, prior certificate, prerequisites, and evidence indexes; structural validation alone cannot authorize reuse."
+    }
+    if ($schemaVersion -eq 3) {
+        throw "Phase certificate v3 requires Assert-TessaraPlatformPhaseCertificate to authenticate platform, adapter, plan, lane receipts, prerequisites, and evidence indexes."
     }
     $phase = [string]$Certificate.phase
     $preFreeze = $phase -in @("validation-readiness", "candidate-rehearsal")
@@ -1652,7 +1707,8 @@ function Assert-TessaraPlatformPhaseCertificate {
         [string[]]$DockerCommand = @("docker"),
         [AllowEmptyCollection()][string[]]$DockerCommandInputPaths = @()
     )
-    Assert-TessaraJsonSchema -Document $Certificate -Kind phase_certificate_v2 `
+    $certificateKind = if ([int]$Certificate.schema_version -eq 3) { "phase_certificate_v3" } else { "phase_certificate_v2" }
+    Assert-TessaraJsonSchema -Document $Certificate -Kind $certificateKind `
         -Label "Platform phase certificate"
     $platformPlanCommand = Get-Command Get-TessaraValidationCompatibilityPlan `
         -CommandType Function -ErrorAction SilentlyContinue
@@ -1665,6 +1721,18 @@ function Assert-TessaraPlatformPhaseCertificate {
         -RepositoryRoot $RepositoryRoot -DockerCommand $DockerCommand `
         -DockerCommandInputPaths $DockerCommandInputPaths
     $platformIdentity = & $platformIdentityCommand
+    if ([int]$Certificate.schema_version -eq 3) {
+        $adapterFull = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $AdapterPath -ErrorAction Stop).Path)
+        $adapterRelative = [IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepositoryRoot), $adapterFull).Replace('\', '/')
+        $adapterSha = Get-TessaraValidationSha256 -Path $adapterFull
+        if ([string]$Certificate.policy_version -cne "tessara-validation-v3" -or
+            [string]$Certificate.platform_identity.release_version -cne [string]$platformIdentity.release_version -or
+            [string]$Certificate.platform_identity.platform_fingerprint -cne [string]$platformIdentity.platform_fingerprint -or
+            [string]$Certificate.validation_adapter.path -cne $adapterRelative -or
+            [string]$Certificate.validation_adapter.sha256 -cne $adapterSha) {
+            throw "The phase certificate does not authenticate the current platform identity and adapter hash."
+        }
+    }
     $planReference = Read-TessaraPlatformCertificateReference `
         -RepositoryRoot $RepositoryRoot -Reference $Certificate.compatibility_plan `
         -Label "Compatibility plan"
@@ -1788,8 +1856,19 @@ function Assert-TessaraPlatformPhaseCertificate {
                 -RepositoryRoot $RepositoryRoot `
                 -Reference $lane.inheritance.prior_certificate `
                 -Label "Prior phase certificate for '$($lane.name)'"
+            $priorKind = if ([int]$priorCertificate.document.schema_version -eq 3) {
+                "phase_certificate_v3"
+            } else { "phase_certificate_v2" }
             Assert-TessaraJsonSchema -Document $priorCertificate.document `
-                -Kind phase_certificate_v2 -Label "Prior platform phase certificate"
+                -Kind $priorKind -Label "Prior platform phase certificate"
+            if ([int]$Certificate.schema_version -eq 3 -and
+                ([int]$priorCertificate.document.schema_version -ne 3 -or
+                 [string]$priorCertificate.document.platform_identity.platform_fingerprint -cne
+                    [string]$Certificate.platform_identity.platform_fingerprint -or
+                 [string]$priorCertificate.document.validation_adapter.sha256 -cne
+                    [string]$Certificate.validation_adapter.sha256)) {
+                throw "Inherited lane prior certificate lacks matching authenticated platform and adapter provenance."
+            }
             $priorLane = @($priorCertificate.document.lanes | Where-Object {
                 [string]$_.name -ceq [string]$lane.name
             })
@@ -2022,10 +2101,13 @@ function New-TessaraPlatformPhaseCertificate {
             }
         })
     $sealedAt = [datetimeoffset]::UtcNow.ToString("o")
+    $certificatePolicyVersion = if ([int]$validated.validation_contract.schema_version -eq 3) {
+        "tessara-validation-v3"
+    } else { "tessara-validation-v2" }
     $index = [pscustomobject][ordered]@{
-        schema_version = 1
+        schema_version = if ($certificatePolicyVersion -ceq "tessara-validation-v3") { 2 } else { 1 }
         contract = "tessara.validation.phase-evidence-index"
-        policy_version = "tessara-validation-v2"
+        policy_version = $certificatePolicyVersion
         sprint = [string]$plan.body.sprint
         phase = $Phase
         attempt = $Attempt
@@ -2045,10 +2127,10 @@ function New-TessaraPlatformPhaseCertificate {
         tree = [string]$plan.body.source_identity.tree
         dirty = [bool]$plan.body.source_identity.dirty
     }
-    $certificate = [pscustomobject][ordered]@{
-        schema_version = 2
+    $certificate = [ordered]@{
+        schema_version = if ([int]$validated.validation_contract.schema_version -eq 3) { 3 } else { 2 }
         contract = "tessara.validation.phase-certificate"
-        policy_version = "tessara-validation-v2"
+        policy_version = $certificatePolicyVersion
         sprint = [string]$plan.body.sprint
         phase = $Phase
         attempt = $Attempt
@@ -2078,6 +2160,18 @@ function New-TessaraPlatformPhaseCertificate {
         }
         evidence_index = $indexReference
     }
+    if ([int]$validated.validation_contract.schema_version -eq 3) {
+        $adapterFull = [IO.Path]::GetFullPath($validated.adapter_path)
+        $certificate.platform_identity = [pscustomobject][ordered]@{
+            release_version = [string]$platformIdentity.release_version
+            platform_fingerprint = [string]$platformIdentity.platform_fingerprint
+        }
+        $certificate.validation_adapter = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($root, $adapterFull).Replace('\', '/')
+            sha256 = [string]$validated.adapter_fingerprint
+        }
+    }
+    $certificate = [pscustomobject]$certificate
     $null = Assert-TessaraPlatformPhaseCertificate -Certificate $certificate `
         -AdapterPath $AdapterPath -RepositoryRoot $root `
         -DockerCommand $DockerCommand -DockerCommandInputPaths $DockerCommandInputPaths
@@ -2100,7 +2194,8 @@ function Assert-TessaraPhaseEvidenceIndex {
         [switch]$AuditFiles
     )
 
-    Assert-TessaraJsonSchema -Document $Index -Kind phase_evidence_index -Label "Phase evidence index"
+    $indexKind = if ([int]$Index.schema_version -eq 2) { "phase_evidence_index_v2" } else { "phase_evidence_index" }
+    Assert-TessaraJsonSchema -Document $Index -Kind $indexKind -Label "Phase evidence index"
     if ([int]$Index.entry_count -ne @($Index.entries).Count) {
         throw "Phase evidence-index entry count does not match its inventory."
     }
@@ -2141,11 +2236,39 @@ function Assert-TessaraEvidenceChain {
     param(
         [Parameter(Mandatory)]$Chain,
         [Parameter(Mandatory)][string]$RepositoryRoot,
+        [string]$AdapterPath,
+        [string]$ContractPath,
         [switch]$FinalAudit
     )
 
-    Assert-TessaraJsonSchema -Document $Chain -Kind evidence_chain -Label "Evidence chain"
+    $futureChain = [int]$Chain.schema_version -eq 2
+    Assert-TessaraJsonSchema -Document $Chain -Kind $(if ($futureChain) { "evidence_chain_v2" } else { "evidence_chain" }) -Label "Evidence chain"
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
+    $futureContract = $null
+    if ($futureChain) {
+        if ([string]::IsNullOrWhiteSpace($AdapterPath) -or [string]::IsNullOrWhiteSpace($ContractPath)) {
+            throw "Evidence chain v2 requires the current adapter and validation contract paths."
+        }
+        $adapterCandidate = if ([IO.Path]::IsPathRooted($AdapterPath)) { $AdapterPath } else { Join-Path $root $AdapterPath }
+        $contractCandidate = if ([IO.Path]::IsPathRooted($ContractPath)) { $ContractPath } else { Join-Path $root $ContractPath }
+        $adapterFull = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $adapterCandidate -ErrorAction Stop).Path)
+        $contractFull = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $contractCandidate -ErrorAction Stop).Path)
+        $adapterRelative = [IO.Path]::GetRelativePath($root, $adapterFull).Replace('\', '/')
+        $contractRelative = [IO.Path]::GetRelativePath($root, $contractFull).Replace('\', '/')
+        $identityCommand = Get-Command Get-TessaraValidationPlatformIdentity -CommandType Function -ErrorAction SilentlyContinue
+        if ($null -eq $identityCommand) { throw "Evidence chain v2 requires the loaded validation platform." }
+        $identity = & $identityCommand
+        if ([string]$Chain.validation_adapter.path -cne $adapterRelative -or
+            [string]$Chain.validation_contract.path -cne $contractRelative -or
+            [string]$Chain.validation_adapter.sha256 -cne (Get-TessaraValidationSha256 $adapterFull) -or
+            [string]$Chain.validation_contract.sha256 -cne (Get-TessaraValidationSha256 $contractFull) -or
+            [string]$Chain.platform_identity.release_version -cne [string]$identity.release_version -or
+            [string]$Chain.platform_identity.platform_fingerprint -cne [string]$identity.platform_fingerprint) {
+            throw "Evidence chain v2 platform, adapter, or contract provenance cannot be authenticated."
+        }
+        $futureContract = Get-Content -Raw -LiteralPath $contractFull | ConvertFrom-Json -Depth 100
+        $null = Assert-TessaraValidationContract $futureContract
+    }
     $indexReferences = [Collections.Generic.List[object]]::new()
     foreach ($reference in @($Chain.certificates) + @($Chain.corrections)) {
         $relative = ConvertTo-TessaraRepositoryPath -Path ([string]$reference.path)
@@ -2159,9 +2282,17 @@ function Assert-TessaraEvidenceChain {
         if ($reference.PSObject.Properties.Name -contains "phase") {
             $document = Get-Content -LiteralPath $full -Raw | ConvertFrom-Json
             if ([string]$reference.phase -ceq "implementation-readiness") {
-                Assert-TessaraJsonSchema -Document $document -Kind implementation_readiness -Label "Implementation readiness certificate"
+                if ($futureChain) {
+                    $null = Assert-TessaraImplementationReadinessResult -Result $document -Contract $futureContract `
+                        -ContractPath $contractFull -AdapterPath $adapterFull
+                } else {
+                    Assert-TessaraJsonSchema -Document $document -Kind implementation_readiness -Label "Implementation readiness certificate"
+                }
             } else {
-                $null = Assert-TessaraPhaseCertificate -Certificate $document
+                if ($futureChain) {
+                    $null = Assert-TessaraPlatformPhaseCertificate -Certificate $document `
+                        -AdapterPath $adapterFull -RepositoryRoot $root
+                } else { $null = Assert-TessaraPhaseCertificate -Certificate $document }
             }
             $indexReferences.Add($document.evidence_index)
         }
@@ -2203,8 +2334,11 @@ Export-ModuleMember -Function @(
     "Get-TessaraDefectProvenanceChronology",
     "Assert-TessaraDefectProvenanceChronology",
     "Assert-TessaraValidationContract",
+    "Assert-TessaraAuthorizationMatrixSemantics",
+    "Assert-TessaraControlledArtifactFanout",
     "Get-TessaraValidationImpact",
     "Assert-TessaraImplementationReadinessResult",
+    "Assert-TessaraCloseoutEfficiencyReport",
     "Assert-TessaraCorrectionImpactAssessment",
     "Assert-TessaraPhaseCertificate",
     "Assert-TessaraPlatformPhaseCertificate",

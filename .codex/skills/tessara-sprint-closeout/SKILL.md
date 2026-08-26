@@ -10,9 +10,19 @@ Treat `docs/roadmap.md` as the authoritative scope and the sprint plan and
 verification record as supporting inputs.
 
 When the tracked sprint validation contract declares
-`policy_version: tessara-validation-v2`, read
+`policy_version: tessara-validation-v2` or
+`policy_version: tessara-validation-v3`, read
 [`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
 completely before auditing authorization.
+
+When it declares v3, then read
+[`../tessara-sprint-validation/references/validation-policy-v3.md`](../tessara-sprint-validation/references/validation-policy-v3.md)
+completely.
+
+For v3, also validate evidence-chain schema 2 and every phase-certificate schema
+3 through the current adapter and platform. Require authenticated platform
+release/fingerprint and adapter hash; absence or uncertainty returns to
+validation and never authorizes a custom runner or reconstructed evidence.
 
 When retained history contains a candidate-invalidating post-SIT failure,
 read
@@ -20,7 +30,7 @@ read
 completely and validate its records against
 [`../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json`](../tessara-sprint-validation/references/post-sit-defect-convergence.schema.json).
 
-When any v2 target, lane, or scenario failed, read
+When any v2 or v3 target, lane, or scenario failed, read
 [`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
 and validate the complete provenance chronology against its schema.
 
@@ -79,11 +89,14 @@ certificate is challenged.
    validation status, next focus, handoff instructions, and acceptance mapping.
 7. Update the sprint plan and verification file to reflect final completion
    without rewriting source-exact test results.
-8. Commit closeout-only documentation separately. Do not rebuild images for a
+8. For policy v3, produce `closeout-efficiency.json`, validate it with
+   `Assert-TessaraCloseoutEfficiencyReport`, and summarize reusable process
+   lessons without reopening accepted product behavior.
+9. Commit closeout-only documentation separately. Do not rebuild images for a
    documentation-only commit.
-9. Verify clean Git state, active route, application health, and documentation
+10. Verify clean Git state, active route, application health, and documentation
    links after the closeout commit.
-10. Leave the application running and reviewer-testable unless the user asks
+11. Leave the application running and reviewer-testable unless the user asks
     to stop it.
 
 ## Closeout authorization audit
@@ -150,6 +163,14 @@ Prepend a dated closeout entry containing:
 - next sprint
 - `Sprint Handoff / Demo Instructions`
 - `Acceptance Mapping`
+
+For policy v3, also report target count and attempt count, first-pass pass rate,
+findings by classification and target, repeated-failure hotspots,
+implementation-exit gaps, cleanup/restoration failures, and formal phases
+avoided because implementation discovered the defect first. Derive these from
+retained receipts and provenance; do not estimate or rewrite historical
+findings. Record only reusable workflow/platform lessons, not sprint-specific
+product policy.
 
 ## Sprint Handoff / Demo Instructions
 
@@ -242,6 +263,8 @@ Do not finalize closeout if:
   restarting SIT; under v2, a changed certificate dependency lacks its required
   invalidation/recertification, or a successor candidate lacks complete SIT
 - any v2 failure lacks a resolved, schema-valid defect-provenance record
+- a v3 closeout lacks a schema-valid efficiency report or authenticated
+  platform/adapter evidence chain
 - the closeout documentation commit is not distinguished from the evidence
   source commit
 - the intended application route is unhealthy or not left reviewer-testable

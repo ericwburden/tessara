@@ -18,6 +18,46 @@
     {
       "id": "phase-certificate-v2-schema",
       "path": ".codex/skills/tessara-sprint-validation/references/phase-certificate-v2.schema.json"
+    },
+    {
+      "id": "future-guardrails",
+      "path": "scripts/validation-platform/tessara-future-sprint-guardrails.psm1"
+    },
+    {
+      "id": "validation-contract-v3-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/validation-contract-v3.schema.json"
+    },
+    {
+      "id": "implementation-readiness-v2-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-readiness-v2.schema.json"
+    },
+    {
+      "id": "authorization-matrix-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/authorization-matrix.schema.json"
+    },
+    {
+      "id": "phase-certificate-v3-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/phase-certificate-v3.schema.json"
+    },
+    {
+      "id": "implementation-defect-batch-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/implementation-defect-batch.schema.json"
+    },
+    {
+      "id": "evidence-chain-v2-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/evidence-chain-v2.schema.json"
+    },
+    {
+      "id": "phase-evidence-index-v2-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/phase-evidence-index-v2.schema.json"
+    },
+    {
+      "id": "closeout-efficiency-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/closeout-efficiency.schema.json"
+    },
+    {
+      "id": "defect-provenance-v2-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/defect-provenance-v2.schema.json"
     }
   ],
   "components": [

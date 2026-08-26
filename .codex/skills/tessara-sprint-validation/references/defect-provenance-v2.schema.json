@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/defect-provenance-v2.json",
+  "title": "Tessara implementation defect provenance v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "record_id", "status", "target", "lane", "classification", "reason", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "failed_receipt"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "contract": { "const": "tessara.validation.defect-provenance" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "record_id": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["open", "classified", "corrected", "verified", "blocked", "superseded"] },
+    "target": { "$ref": "#/$defs/id" },
+    "lane": { "$ref": "#/$defs/id" },
+    "classification": { "enum": ["product", "fixture", "harness", "environment", "implementation-process", "evidence-finalization", "flaky", "contract-ambiguity", "product-decision", "unresolved"] },
+    "reason": { "type": "string", "minLength": 1 },
+    "source_identity": { "type": "object" },
+    "validation_contract": { "$ref": "#/$defs/ref" },
+    "validation_adapter": { "$ref": "#/$defs/ref" },
+    "platform_identity": { "type": "object", "required": ["release_version", "platform_fingerprint"] },
+    "failed_receipt": { "$ref": "#/$defs/ref" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ref": { "type": "object", "required": ["path", "sha256"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "$ref": "#/$defs/sha" } } }
+  }
+}

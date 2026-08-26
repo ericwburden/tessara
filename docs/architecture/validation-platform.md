@@ -217,9 +217,9 @@ against repository code running under the caller's OS token.
 
 ## Declarative adapter contract
 
-Future sprint adapters use schema-v2 `tessara.validation.adapter` JSON. Before
+Sprint adapters use schema-v2 `tessara.validation.adapter` JSON. Before
 accepting an adapter, the platform runs the canonical validation-policy
-validator over its governing `tessara-validation-v2` contract. The adapter must
+validator over its governing contract's declared v2 or v3 policy. The adapter must
 then exactly cover the contract's lane inventory and declare the exact
 prerequisites for every lane. This prevents a syntactically valid private
 contract or a weakened adapter graph from defining a smaller validation cone.
@@ -584,3 +584,47 @@ back to that affected lane/closure, phase, or candidate rather than authorizing
 narrower reuse. Diversion closeout is based only on the frozen diversion
 candidate and its own evidence. A later sprint may consume the closed release,
 but its adapter results neither complete nor reopen this diversion.
+
+## Mandatory future-sprint adoption (validation contract v3)
+
+Validation contract schema 3 and `policy_version: tessara-validation-v3` are the
+forward-only activation boundary. Contracts that already declare v2 or a legacy
+policy remain historical artifacts and continue to validate under that policy;
+they are not migrated, reissued, or invalidated by this section.
+
+Every v3 sprint tracks one schema-v2 `tessara.validation.adapter`. The contract
+records its canonical repository path, supported platform release `2.0.0`, and
+the public lane entry point `Invoke-TessaraValidationLane`. Kickoff calls
+`Assert-TessaraValidationAdapter` and
+`Assert-TessaraFutureSprintPlanningPackage`. Contract and adapter lane sets,
+prerequisites, dependency domains, required target mappings, and action proof
+classes agree exactly. Missing, extra, malformed, or uncertain mappings fail
+closed.
+
+| Sprint adapter actions own | Shared validation platform owns |
+| --- | --- |
+| Product commands and focused test scripts | Phase and dependency scheduling |
+| Product-specific assertions | Topology and port allocation/lifecycle |
+| Focused harness actions | Cleanup/restoration state machines |
+| Declared product input files | Evidence publication and integrity indexes |
+| Nothing outside one action | Compatibility plans and certificates |
+| | Dependency-aware implementation harvesting |
+
+A sprint-owned phase runner, topology/port manager, cleanup engine, evidence
+publisher, or certificate generator is prohibited. A deviation carries a
+documented user or architecture authority reference and rationale in the v3
+contract. An absent adapter or unauthenticated execution provenance blocks
+validation; it never triggers a fallback runner.
+
+Implementation targets are implementation-phase adapter lanes.
+`Invoke-TessaraImplementationHarvest` schedules them fail-late: safe independent
+siblings continue, failed dependents and unsafe live-state targets are blocked,
+cleanup/topology risk stops continuation, and every target receives a retained
+receipt. The deterministic defect batch is consumed by implementation-readiness
+schema 2 before formal Readiness.
+
+Formal v3 evidence uses phase-certificate schema 3 and evidence-chain schema 2.
+Both bind the current platform release/fingerprint and adapter path/hash. The
+strict certifier re-authenticates those values, the compatibility plan, lane
+receipts, prerequisites, source, and evidence indexes. Structural JSON validity
+alone cannot authorize a result.

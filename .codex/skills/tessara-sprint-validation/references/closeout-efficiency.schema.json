@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/closeout-efficiency-v1.json",
+  "title": "Tessara sprint closeout efficiency report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "target_count", "attempt_count", "first_pass_pass_count", "first_pass_pass_rate", "findings_by_classification", "findings_by_target", "repeated_failure_hotspots", "implementation_exit_gaps", "cleanup_restoration_failures", "formal_phases_avoided", "reusable_process_lessons"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.closeout-efficiency" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "target_count": { "type": "integer", "minimum": 1 },
+    "attempt_count": { "type": "integer", "minimum": 1 },
+    "first_pass_pass_count": { "type": "integer", "minimum": 0 },
+    "first_pass_pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+    "findings_by_classification": { "$ref": "#/$defs/counts" },
+    "findings_by_target": { "$ref": "#/$defs/counts" },
+    "repeated_failure_hotspots": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+    "implementation_exit_gaps": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+    "cleanup_restoration_failures": { "type": "integer", "minimum": 0 },
+    "formal_phases_avoided": { "type": "array", "uniqueItems": true, "items": { "enum": ["validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] } },
+    "reusable_process_lessons": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "counts": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "count"], "properties": { "name": { "$ref": "#/$defs/id" }, "count": { "type": "integer", "minimum": 0 } } } }
+  }
+}

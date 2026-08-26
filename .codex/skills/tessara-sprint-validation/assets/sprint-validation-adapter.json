@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "contract": "tessara.validation.adapter",
+  "adapter_id": "sprint-template",
+  "validation_contract_path": ".codex/skills/tessara-sprint-validation/assets/sprint-validation-contract.json",
+  "acceptance_inputs": [{
+    "path": "docs/development-workflow.md",
+    "lanes": ["replace-implementation", "replace-readiness", "replace-rehearsal", "replace-preflight", "replace-sit", "replace-uat"]
+  }],
+  "fixture_inputs": [],
+  "execution_inputs": [{
+    "path": "scripts/verify-markdown-links.ps1",
+    "lanes": ["replace-implementation", "replace-readiness", "replace-rehearsal", "replace-preflight", "replace-sit", "replace-uat"]
+  }],
+  "execution_policy": { "max_parallel_lanes": 4, "max_attempts_per_lane": 32, "max_evidence_bytes": 1073741824 },
+  "lanes": [
+    {
+      "id": "replace-implementation", "prerequisites": [], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-implementation-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    },
+    {
+      "id": "replace-readiness", "prerequisites": ["replace-implementation"], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-readiness-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    },
+    {
+      "id": "replace-rehearsal", "prerequisites": ["replace-readiness"], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-rehearsal-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    },
+    {
+      "id": "replace-preflight", "prerequisites": ["replace-rehearsal"], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-preflight-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    },
+    {
+      "id": "replace-sit", "prerequisites": ["replace-preflight"], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-sit-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    },
+    {
+      "id": "replace-uat", "prerequisites": ["replace-sit"], "environment": [], "blocked_environment": ["DATABASE_URL"], "deadline_seconds": 300,
+      "topology": { "mode": "none", "provider": "none", "on_success": "destroy" },
+      "actions": [{ "id": "replace-uat-action", "stage": "assertion", "implementation_target": "replace-focused-target", "proof_classes": ["static-quality"], "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "timeout_seconds": 240, "tools": [] }]
+    }
+  ]
+}
