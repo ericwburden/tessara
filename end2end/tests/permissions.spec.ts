@@ -2540,12 +2540,8 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     await expect(page.locator(`a[href="/datasets/${linkedDataset.dataset_id}"]`)).not.toHaveCount(0);
 
     await signInPage(page, `${RUN_ID}-no-access@tessara.local`);
-    await assertNativeRouteGuard.whileExpectedForbiddenGets([
-      { path: "/api/workflow-assignments/pending", count: 2 },
-    ], async () => {
-      await expectHydratedRoute(page, { path: "/", expectedText: "Home" });
-      await expect(page.getByRole("link", { name: "Operations" })).toHaveCount(0);
-    });
+    await expectHydratedRoute(page, { path: "/", expectedText: "Home" });
+    await expect(page.getByRole("link", { name: "Operations" })).toHaveCount(0);
     await expectStatus(fixtures.noAccess, "get", "/api/operations/status", [403]);
     await assertNativeRouteGuard();
   });
