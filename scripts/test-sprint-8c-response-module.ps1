@@ -50,6 +50,7 @@ $suiteContracts = [ordered]@{
             "product_api::tests::mutation_identity_binds_exact_wire_route_and_grant_identity",
             "product_api::tests::public_mutation_decode_is_strict_and_bounded",
             "product_api::tests::read_authority_preserves_scoped_and_global_manage_bindings",
+            "product_api::tests::response_start_accepts_only_respond_or_manage_authority",
             "product_store::tests::access_is_exact_to_owner_delegation_or_managed_scope",
             "product_store::tests::field_validation_is_typed_and_option_bound",
             "provider_client::tests::provider_observation_is_sanitized_and_binding_specific",
