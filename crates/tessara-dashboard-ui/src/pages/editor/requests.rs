@@ -2,7 +2,7 @@ use leptos::prelude::*;
 
 use crate::types::{
     DashboardComposition, DashboardMetadataRequest, EditorPlacement,
-    ReconcileDashboardCompositionRequest, SessionAccount, VisibilityNodeOption,
+    ReconcileDashboardCompositionRequest, VisibilityNodeOption,
 };
 
 use super::operation::EditorOperation;
@@ -11,7 +11,6 @@ use super::operation::{finish_operation, try_begin_operation};
 
 pub(super) struct CompositionLoadContext {
     pub(super) composition: RwSignal<Option<DashboardComposition>>,
-    pub(super) account: RwSignal<Option<SessionAccount>>,
     pub(super) placements: RwSignal<Vec<EditorPlacement>>,
     pub(super) loading: RwSignal<bool>,
     pub(super) error: RwSignal<Option<String>>,
@@ -20,7 +19,6 @@ pub(super) struct CompositionLoadContext {
 pub(super) fn load_composition(dashboard_id: String, context: CompositionLoadContext) {
     let CompositionLoadContext {
         composition,
-        account,
         placements,
         loading,
         error,
@@ -29,14 +27,6 @@ pub(super) fn load_composition(dashboard_id: String, context: CompositionLoadCon
     leptos::task::spawn_local(async move {
         loading.set(true);
         error.set(None);
-        match crate::api::fetch_account().await {
-            Ok(payload) => account.set(Some(payload)),
-            Err(message) => {
-                error.set(Some(message));
-                loading.set(false);
-                return;
-            }
-        }
         match crate::api::fetch_composition(&dashboard_id).await {
             Ok(payload) => {
                 placements.set(
@@ -55,14 +45,18 @@ pub(super) fn load_composition(dashboard_id: String, context: CompositionLoadCon
         loading.set(false);
     });
     #[cfg(not(feature = "hydrate"))]
-    let _ = (
-        dashboard_id,
-        composition,
-        account,
-        placements,
-        loading,
-        error,
-    );
+    let _ = (dashboard_id, composition, placements, loading, error);
+}
+
+pub(super) fn load_reader_access(dashboard_id: String, reader_access: RwSignal<bool>) {
+    #[cfg(feature = "hydrate")]
+    leptos::task::spawn_local(async move {
+        if crate::api::fetch_dashboard(&dashboard_id).await.is_ok() {
+            reader_access.set(true);
+        }
+    });
+    #[cfg(not(feature = "hydrate"))]
+    let _ = (dashboard_id, reader_access);
 }
 
 pub(super) struct LayoutSaveContext {
