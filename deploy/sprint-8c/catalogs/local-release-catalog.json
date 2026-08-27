@@ -31,7 +31,7 @@
     {
       "definition_id": "tessara.responses",
       "version": "1.0.0",
-      "manifest_digest": "sha256:e9981502b4974b09d0ba8bbec4dfbc3150bca12fa9bee96492fcae563687fbbd",
+      "manifest_digest": "sha256:717cae1252c34a2eb98c3742bcbfdfc2bfdd5f304fc06800010e19c968a75789",
       "runtime_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile": "tessara-oci-v1",
       "configuration_schema_version": "tessara.io/response-configuration/v1",

@@ -118,7 +118,7 @@ pub(crate) async fn authorize_core_provider(
                 action,
                 path,
                 body,
-                required_capability: declaration.required_capability,
+                required_capabilities_any_of: declaration.required_capabilities_any_of,
                 restricted_message,
             },
         )
@@ -142,7 +142,11 @@ pub(crate) async fn authorize_core_provider(
             .payload
             .capability_scope_bindings
             .iter()
-            .any(|binding| binding.capability.as_str() == declaration.required_capability)
+            .any(|binding| {
+                declaration
+                    .required_capabilities_any_of
+                    .contains(&binding.capability.as_str())
+            })
     {
         return Err(restricted());
     }
@@ -208,7 +212,7 @@ struct BootstrapCoreProviderExpectation<'a> {
     action: &'a str,
     path: &'a str,
     body: &'a [u8],
-    required_capability: &'a str,
+    required_capabilities_any_of: &'a [&'a str],
     restricted_message: &'static str,
 }
 
@@ -262,7 +266,11 @@ async fn authorize_bootstrap_core_provider(
             .payload
             .capability_scope_bindings
             .iter()
-            .any(|binding| binding.capability.as_str() == expectation.required_capability)
+            .any(|binding| {
+                expectation
+                    .required_capabilities_any_of
+                    .contains(&binding.capability.as_str())
+            })
     {
         return Err(restricted());
     }

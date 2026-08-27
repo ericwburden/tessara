@@ -1078,7 +1078,7 @@ async fn issue_bootstrap_dependency_authorization(
     };
     let required_capabilities = provider_actions
         .iter()
-        .map(|(capability, _)| capability.as_str())
+        .flat_map(|(capabilities, _)| capabilities.iter().map(String::as_str))
         .collect::<BTreeSet<_>>();
     let mut capability_scope_bindings = Vec::new();
     for required_capability in required_capabilities {
@@ -1245,7 +1245,7 @@ fn resolve_owner_bootstrap_provider_actions(
     owner: &tessara_composition::ResolvedModuleReleaseV1,
     owner_manifest: &ModuleManifest,
     provider_manifests: &BTreeMap<String, ModuleManifest>,
-) -> Result<Vec<(String, OwnerBootstrapProviderActionV1)>, &'static str> {
+) -> Result<Vec<(Vec<String>, OwnerBootstrapProviderActionV1)>, &'static str> {
     let mut resolved = Vec::with_capacity(owner_manifest.consumed_service_actions.len());
     for action in &owner_manifest.consumed_service_actions {
         let binding = owner
@@ -1255,7 +1255,7 @@ fn resolve_owner_bootstrap_provider_actions(
         if binding.contract_id != action.functional_contract.as_str() {
             return Err("provider_action_contract");
         }
-        let (required_capability, method, path, audience) = if binding.provider == "core" {
+        let (required_capabilities, method, path, audience) = if binding.provider == "core" {
             let declaration = crate::core_service_providers::resolve_service_action(
                 action.functional_contract.as_str(),
                 &action.authorization_action,
@@ -1267,7 +1267,11 @@ fn resolve_owner_bootstrap_provider_actions(
                 return Err("provider_action_version");
             }
             (
-                declaration.required_capability.to_string(),
+                declaration
+                    .required_capabilities_any_of
+                    .iter()
+                    .map(|capability| (*capability).to_string())
+                    .collect(),
                 declaration.method,
                 declaration.path.to_string(),
                 AuthorizationAudienceV1::CoreInstallation { installation_id },
@@ -1301,7 +1305,7 @@ fn resolve_owner_bootstrap_provider_actions(
                 })
                 .ok_or("provider_action_declaration")?;
             (
-                declaration.required_capability.to_string(),
+                vec![declaration.required_capability.to_string()],
                 declaration.method,
                 declaration.path.clone(),
                 AuthorizationAudienceV1::ModuleInstance {
@@ -1314,7 +1318,7 @@ fn resolve_owner_bootstrap_provider_actions(
             )
         };
         resolved.push((
-            required_capability,
+            required_capabilities,
             OwnerBootstrapProviderActionV1 {
                 dependency_binding: action.dependency_binding.to_string(),
                 functional_contract: action.functional_contract.to_string(),
@@ -2773,8 +2777,8 @@ mod tests {
         )
         .expect("module provider actions");
         assert_eq!(actions.len(), 3);
-        assert!(actions.iter().all(|(capability, action)| {
-            capability == "submissions:manage"
+        assert!(actions.iter().all(|(capabilities, action)| {
+            capabilities == &["submissions:manage"]
                 && action.functional_contract == "tessara.responses.submitted-response-export"
                 && action.audience
                     == (AuthorizationAudienceV1::ModuleInstance {

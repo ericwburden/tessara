@@ -944,6 +944,22 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["submissions:respond", "submissions:manage"]
         );
+        let start = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| {
+                route.method == tessara_module_contract::PublicApiMethod::Post
+                    && route.path_template == "/api/responses"
+            })
+            .expect("Response start route");
+        assert_eq!(
+            start
+                .required_capabilities_any_of
+                .iter()
+                .map(tessara_module_contract::SecurityCapabilityId::as_str)
+                .collect::<Vec<_>>(),
+            ["submissions:respond", "submissions:manage"]
+        );
     }
 
     #[test]

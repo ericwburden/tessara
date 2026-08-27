@@ -48,6 +48,7 @@ use crate::{
 
 const CORE_RESPONSE_BINDING: &str = "tessara.core.responses";
 const RESPONSE_READ_CAPABILITIES: &[&str] = &["submissions:read_own", "submissions:manage"];
+const RESPONSE_START_CAPABILITIES: &[&str] = &["submissions:respond", "submissions:manage"];
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -231,7 +232,7 @@ pub(crate) async fn start_response(
             "responses.start",
             AuthorizationGrantOperationV1::Mutation,
             RESPONSE_LIFECYCLE_CONTRACT_ID,
-            &["submissions:respond"],
+            RESPONSE_START_CAPABILITIES,
         )
         .await?;
         let idempotency_key_digest = idempotency_key_digest(&headers)?;
@@ -1028,6 +1029,14 @@ mod tests {
         let global = response_access(&grant).unwrap();
         assert!(global.manage_all);
         assert!(global.managed_node_ids.is_empty());
+    }
+
+    #[test]
+    fn response_start_accepts_only_respond_or_manage_authority() {
+        assert_eq!(
+            RESPONSE_START_CAPABILITIES,
+            &["submissions:respond", "submissions:manage"]
+        );
     }
 
     #[test]

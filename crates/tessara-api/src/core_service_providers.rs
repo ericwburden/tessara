@@ -27,7 +27,7 @@ pub(crate) struct CoreServiceAction {
     pub(crate) method: ServiceActionMethod,
     pub(crate) authorization_action: &'static str,
     pub(crate) operation: AuthorizationGrantOperationV1,
-    pub(crate) required_capability: &'static str,
+    pub(crate) required_capabilities_any_of: &'static [&'static str],
     pub(crate) functional_contract: &'static str,
 }
 
@@ -37,7 +37,7 @@ const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_forms_contract::FORM_VERSION_CATALOG_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
     CoreServiceAction {
@@ -45,7 +45,7 @@ const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_forms_contract::FORM_VERSION_SCHEMA_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
     CoreServiceAction {
@@ -53,7 +53,7 @@ const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "submissions:respond",
+        required_capabilities_any_of: &["submissions:respond", "submissions:manage"],
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
 ];
@@ -64,7 +64,7 @@ const CONTROL_PLANE_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_control_plane_contract::SCOPE_CATALOG_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: SCOPE_CATALOG_CONTRACT,
     },
     CoreServiceAction {
@@ -72,7 +72,7 @@ const CONTROL_PLANE_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_control_plane_contract::PRINCIPAL_DISPLAY_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: PRINCIPAL_DISPLAY_CONTRACT,
     },
 ];
@@ -83,7 +83,7 @@ const WORKFLOW_RESPONSE_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "submissions:respond",
+        required_capabilities_any_of: &["submissions:respond", "submissions:manage"],
         functional_contract: WORKFLOW_RESPONSE_CONTEXT_CONTRACT,
     },
     CoreServiceAction {
@@ -92,7 +92,7 @@ const WORKFLOW_RESPONSE_ACTIONS: [CoreServiceAction; 2] = [
         authorization_action:
             tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "submissions:respond",
+        required_capabilities_any_of: &["submissions:respond"],
         functional_contract: WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT,
     },
 ];
@@ -163,8 +163,32 @@ mod tests {
             assert_eq!(declaration.path, path);
             assert_eq!(declaration.method, ServiceActionMethod::Post);
             assert_eq!(declaration.operation, AuthorizationGrantOperationV1::Read);
-            assert_eq!(declaration.required_capability, "datasets:manage");
+            assert_eq!(
+                declaration.required_capabilities_any_of,
+                &["datasets:manage"]
+            );
             assert_eq!(contract_version(contract).unwrap(), Version::new(1, 0, 0));
+        }
+    }
+
+    #[test]
+    fn response_start_providers_accept_respond_or_manage_authority() {
+        for (contract, action) in [
+            (
+                FORM_VERSION_SCHEMA_CONTRACT,
+                tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+            ),
+            (
+                WORKFLOW_RESPONSE_CONTEXT_CONTRACT,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+            ),
+        ] {
+            assert_eq!(
+                resolve_service_action(contract, action)
+                    .expect("Response start provider action")
+                    .required_capabilities_any_of,
+                &["submissions:respond", "submissions:manage"]
+            );
         }
     }
 

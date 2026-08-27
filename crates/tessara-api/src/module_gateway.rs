@@ -1488,6 +1488,26 @@ mod tests {
             &[],
             &[binding("submissions:manage")]
         ));
+
+        let start = manifest
+            .public_api_routes
+            .iter()
+            .find(|route| {
+                route.method == PublicApiMethod::Post && route.path_template == "/api/responses"
+            })
+            .expect("Response start route");
+        assert_eq!(
+            start
+                .required_capabilities_any_of
+                .iter()
+                .map(SecurityCapabilityId::as_str)
+                .collect::<Vec<_>>(),
+            ["submissions:respond", "submissions:manage"]
+        );
+        assert!(has_required_authorization_binding(
+            &start.required_capabilities_any_of,
+            &[binding("submissions:manage")]
+        ));
     }
 
     #[test]
