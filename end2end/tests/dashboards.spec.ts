@@ -1340,15 +1340,15 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         return { width: style.width, height: style.height };
       });
       expect(symbolSize).toEqual({ width: "31px", height: "31px" });
+      await page
+        .getByRole("dialog", { name: "Components" })
+        .getByRole("button", { name: "Close Components" })
+        .click();
       await expect(page.getByRole("button", { name: "Save layout" })).toBeEnabled();
       await expect(
         page.getByRole("button", { name: "Preview Dashboard" }),
       ).toBeDisabled();
       expect(executionPaths).toEqual([]);
-      await page
-        .getByRole("dialog", { name: "Components" })
-        .getByRole("button", { name: "Close Components" })
-        .click();
 
       const pointerRow = editorOption!.default_grid_height + 1;
       const directRow = pointerRow + 1;
@@ -1441,14 +1441,14 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
 
       await page.getByRole("button", { name: "Remove placement" }).click();
       await expect(tile).toHaveCount(0);
-      await expect(
-        page.getByRole("button", { name: "Preview Dashboard" }),
-      ).toBeDisabled();
-      await expect(page.getByRole("button", { name: "Save layout" })).toBeEnabled();
       await placementDetails
         .getByRole("button", { name: "Close Placement details" })
         .click();
       await expect(placementDetails).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: "Preview Dashboard" }),
+      ).toBeDisabled();
+      await expect(page.getByRole("button", { name: "Save layout" })).toBeEnabled();
       await page.getByRole("button", { name: "Save layout" }).click();
       await expect(page.locator(".dashboard-editor__status")).toContainText(
         "Dashboard layout saved. Preview Dashboard is now available.",

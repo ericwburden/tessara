@@ -2479,10 +2479,17 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       await expect(page.getByRole("heading", { level: 1, name: "Dataset Revisions" })).toBeVisible();
       await expect(page.locator("tbody")).toContainText("Published current");
       await expect(page.locator("tbody")).not.toContainText("Draft");
-      await assertNativeRouteGuard.whileExpectedForbiddenGets([{
-        path: `/api/admin/datasets/${dataset.id}/revisions/${draft.revision_id}`,
-        count: 2,
-      }], async () => {
+      await assertNativeRouteGuard.whileExpectedForbiddenGets([
+        {
+          path: `/api/admin/datasets/${dataset.id}/revisions/${draft.revision_id}`,
+          count: 2,
+        },
+        {
+          path: `/api/datasets/${dataset.id}/revisions/${draft.revision_id}`,
+          count: 2,
+          status: 404,
+        },
+      ], async () => {
         await expectHydratedRoute(page, {
           path: `/datasets/${dataset.id}/revisions/${draft.revision_id}`,
           expectedText: "Revision unavailable",
