@@ -182,8 +182,7 @@ async fn response_context(
     };
     let assignee_account_id: Uuid = row.get("assignee_account_id");
     let node_id: Uuid = row.get("node_id");
-    if !can_act_for(&grant, assignee_account_id)
-        || !scope_authorizes(&grant, node_id)
+    if !can_start_assignment(&grant, assignee_account_id, node_id)
         || !row.get::<bool, _>("is_active")
         || !matches!(
             row.get::<String, _>("workflow_status").as_str(),
@@ -555,18 +554,38 @@ fn can_act_for(grant: &CoreProviderAuthorizationV1, assignee_account_id: Uuid) -
 }
 
 fn scope_authorizes(grant: &CoreProviderAuthorizationV1, node_id: Uuid) -> bool {
+    capability_scope_authorizes(grant, node_id, "submissions:respond")
+        || capability_scope_authorizes(grant, node_id, "submissions:manage")
+}
+
+fn manage_scope_authorizes(grant: &CoreProviderAuthorizationV1, node_id: Uuid) -> bool {
+    capability_scope_authorizes(grant, node_id, "submissions:manage")
+}
+
+fn capability_scope_authorizes(
+    grant: &CoreProviderAuthorizationV1,
+    node_id: Uuid,
+    capability: &str,
+) -> bool {
     grant
         .payload
         .capability_scope_bindings
         .iter()
         .any(|binding| {
-            matches!(
-                binding.capability.as_str(),
-                "submissions:respond" | "submissions:manage"
-            ) && (binding.organization_root_id == grant.payload.installation_id
-                || binding.organization_root_id == node_id
-                || binding.authorized_organization_ids.contains(&node_id))
+            binding.capability.as_str() == capability
+                && (binding.organization_root_id == grant.payload.installation_id
+                    || binding.organization_root_id == node_id
+                    || binding.authorized_organization_ids.contains(&node_id))
         })
+}
+
+fn can_start_assignment(
+    grant: &CoreProviderAuthorizationV1,
+    assignee_account_id: Uuid,
+    node_id: Uuid,
+) -> bool {
+    scope_authorizes(grant, node_id)
+        && (can_act_for(grant, assignee_account_id) || manage_scope_authorizes(grant, node_id))
 }
 
 fn delegation_label(
@@ -666,5 +685,25 @@ mod tests {
             Some(format!("delegation:{}", Uuid::from_u128(9)))
         );
         assert!(!scope_authorizes(&delegated, Uuid::from_u128(99)));
+    }
+
+    #[test]
+    fn scoped_management_can_start_another_assignees_work_without_broadening_respond() {
+        let actor = Uuid::from_u128(2);
+        let assignee = Uuid::from_u128(3);
+        let node = Uuid::from_u128(4);
+        let mut respondent = grant(actor, assignee, node);
+        respondent.payload.delegation_basis.clear();
+        assert!(!can_start_assignment(&respondent, assignee, node));
+
+        let mut manager = respondent;
+        manager.payload.capability_scope_bindings[0].capability =
+            SecurityCapabilityId::new("submissions:manage").unwrap();
+        assert!(can_start_assignment(&manager, assignee, node));
+        assert!(!can_start_assignment(
+            &manager,
+            assignee,
+            Uuid::from_u128(99)
+        ));
     }
 }
