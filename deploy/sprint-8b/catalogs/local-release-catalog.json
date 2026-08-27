@@ -44,7 +44,7 @@
     },
     {
       "definition_id":"tessara.dashboards","version":"3.0.2",
-      "manifest_digest":"sha256:662e48951ac826db7a1acc0e8bd0b4973575a2b71978e77ec7d26bf7ab04cf32",
+      "manifest_digest":"sha256:7332e9a917a15a184ac0978ea3e8c63bb0dba6a40b30df91ea6b6bc30fcac1b6",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000005",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dashboard-configuration/v1",
