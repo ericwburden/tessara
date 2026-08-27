@@ -2341,8 +2341,10 @@ function Invoke-Sprint8CFormalLane {
         $candidateFingerprint = if ($Phase -in @("validation-preflight", "sit", "uat")) {
             [string]$result.candidate_fingerprint
         } else { $null }
+        $completePhaseCommand = Get-Command Complete-Sprint8CPhase `
+            -CommandType Function -ErrorAction Stop
         $phaseCompletionAction = {
-            Complete-Sprint8CPhase -Contract $contract -Phase $Phase `
+            & $completePhaseCommand -Contract $contract -Phase $Phase `
                 -Source $sourceAfter -CandidateFingerprint $candidateFingerprint
         }.GetNewClosure()
     }
@@ -2394,8 +2396,15 @@ function Test-Sprint8CChronologyPublicationLifecycle {
     }
 
     $invalidProvenancePath = Join-Path $root "provenance/defect-provenance.json"
+    $writeNewUtf8FileCommand = Get-Command Write-Sprint8CNewUtf8File `
+        -CommandType Function -ErrorAction Stop
+    $writeNewJsonFileCommand = Get-Command Write-Sprint8CNewJsonFile `
+        -CommandType Function -ErrorAction Stop
+    $assertChronologyCommand = Get-Command Assert-Sprint8CDefectProvenanceChronology `
+        -CommandType Function -ErrorAction Stop
     $insertInvalidProvenance = {
-        Write-Sprint8CNewUtf8File -Path $invalidProvenancePath -Text "{ invalid chronology"
+        & $writeNewUtf8FileCommand -Path $invalidProvenancePath `
+            -Text "{ invalid chronology"
     }.GetNewClosure()
     try {
         [IO.Directory]::CreateDirectory($root) | Out-Null
@@ -2561,8 +2570,9 @@ function Test-Sprint8CChronologyPublicationLifecycle {
         Remove-Item -LiteralPath $invalidProvenancePath -Force
 
         $phaseCompletionInsertion = {
-            Write-Sprint8CNewUtf8File -Path $invalidProvenancePath -Text "{ invalid chronology"
-            Assert-Sprint8CDefectProvenanceChronology -Contract $Contract `
+            & $writeNewUtf8FileCommand -Path $invalidProvenancePath `
+                -Text "{ invalid chronology"
+            & $assertChronologyCommand -Contract $Contract `
                 -EvidenceRootPath $root | Out-Null
         }.GetNewClosure()
         $phaseCompletionRollbackPassed = $false
@@ -2594,7 +2604,7 @@ function Test-Sprint8CChronologyPublicationLifecycle {
         $syntheticTeardown = {
             param($evidencePath)
             $failureLifecycleState.teardown++
-            Write-Sprint8CNewJsonFile -Path $evidencePath -Document ([ordered]@{
+            & $writeNewJsonFileCommand -Path $evidencePath -Document ([ordered]@{
                 schema_version = 1
                 state = "passed"
             })
@@ -2709,7 +2719,7 @@ function Test-Sprint8CChronologyPublicationLifecycle {
 
         $latePhaseEvidencePath = Join-Path $phaseEvidenceRoot "late-unindexed-evidence.txt"
         $insertLatePhaseEvidence = {
-            Write-Sprint8CNewUtf8File -Path $latePhaseEvidencePath -Text "late evidence`n"
+            & $writeNewUtf8FileCommand -Path $latePhaseEvidencePath -Text "late evidence`n"
         }.GetNewClosure()
         $phaseInventoryRejected = $false
         try {

@@ -282,7 +282,8 @@ function Invoke-CheckedPowerShellSelfTest {
     param(
         [Parameter(Mandatory)][string]$ScriptName,
         [Parameter(Mandatory)][string]$OutputPath,
-        [AllowEmptyCollection()][string[]]$AdditionalArguments = @()
+        [AllowEmptyCollection()][string[]]$AdditionalArguments = @(),
+        [switch]$DirectInvocation
     )
 
     $scriptPath = Join-Path $PSScriptRoot $ScriptName
@@ -291,12 +292,28 @@ function Invoke-CheckedPowerShellSelfTest {
     }
     $arguments = @("-NoProfile", "-File", $scriptPath, "-SelfTest") + $AdditionalArguments
     $lines = [Collections.Generic.List[string]]::new()
-    & pwsh @arguments 2>&1 | ForEach-Object {
-        $line = [string]$_
-        $lines.Add($line)
-        Write-Host $line
+    $invocationError = $null
+    try {
+        if ($DirectInvocation) {
+            & $scriptPath -SelfTest @AdditionalArguments 2>&1 | ForEach-Object {
+                $line = [string]$_
+                $lines.Add($line)
+                Write-Host $line
+            }
+        } else {
+            & pwsh @arguments 2>&1 | ForEach-Object {
+                $line = [string]$_
+                $lines.Add($line)
+                Write-Host $line
+            }
+        }
+    } catch {
+        $invocationError = $_
     }
-    $exitCode = $LASTEXITCODE
+    if ($null -ne $invocationError) {
+        throw "Sprint 8C self-test '$ScriptName' failed during $(if ($DirectInvocation) { 'direct PowerShell invocation' } else { 'pwsh -File invocation' }): $($invocationError.Exception.Message)"
+    }
+    $exitCode = if ($DirectInvocation) { 0 } else { $LASTEXITCODE }
     if ($exitCode -ne 0) {
         throw "Sprint 8C self-test '$ScriptName' exited $exitCode."
     }
@@ -3009,6 +3026,10 @@ try {
                 $receiptName = ([IO.Path]::GetFileNameWithoutExtension($formalWrapper)) + "-selftest.json"
                 Invoke-CheckedPowerShellSelfTest -ScriptName $formalWrapper `
                     -OutputPath (Join-Path $script:TargetAttemptRoot $receiptName) | Out-Null
+                $directReceiptName = ([IO.Path]::GetFileNameWithoutExtension($formalWrapper)) +
+                    "-direct-invocation-selftest.json"
+                Invoke-CheckedPowerShellSelfTest -ScriptName $formalWrapper -DirectInvocation `
+                    -OutputPath (Join-Path $script:TargetAttemptRoot $directReceiptName) | Out-Null
             }
         }
         default {
