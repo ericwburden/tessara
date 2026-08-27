@@ -1208,11 +1208,17 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     )
     .expect("canonical unavailable Dataset revision lifecycle response");
     assert_eq!(projection.destination.as_str(), "datasets.revision_detail");
-    assert_eq!(projection.payload["route"], "revision_unavailable");
+    assert_eq!(projection.payload["route"], "revision_deferred");
     assert_eq!(
-        projection.payload["message"],
-        "Dataset revision was not found."
+        projection.payload["dataset_id"],
+        visible_dataset.to_string()
     );
+    assert_eq!(
+        projection.payload["revision_id"],
+        unavailable_revision.to_string()
+    );
+    assert_eq!(projection.payload["can_manage"], true);
+    assert!(projection.payload.get("message").is_none());
     assert_eq!(owner_write_fingerprint(&pool).await, before_document_gets);
 
     let hidden = app
