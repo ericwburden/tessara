@@ -1729,9 +1729,16 @@ test.describe.serial("Sprint 6A Module Management", () => {
         fixtures.reader.context,
         `/api/admin/modules/${definitionId}`,
       );
-      expect(detail.entry, `${definitionId} detail must match its inventory entry`).toEqual(
-        inventoryEntry,
-      );
+      const stableInventoryEntry = structuredClone(inventoryEntry);
+      const stableDetailEntry = structuredClone(detail.entry);
+      delete stableInventoryEntry.operational.details
+        .workflow_event_consumer_last_stable_at;
+      delete stableDetailEntry.operational.details
+        .workflow_event_consumer_last_stable_at;
+      expect(
+        stableDetailEntry,
+        `${definitionId} detail must match its inventory entry apart from the live consumer observation timestamp`,
+      ).toEqual(stableInventoryEntry);
 
       await gotoHydrated(page, `/administration/modules/${definitionId}`);
       const detailBootstrap = await moduleBootstrap(page);

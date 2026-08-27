@@ -78,18 +78,6 @@ type WorkflowAssignmentSummary = {
   has_submitted: boolean;
 };
 
-type PendingWorkflowWork = {
-  workflow_assignment_id: string;
-  workflow_id: string;
-  workflow_name: string;
-  form_id: string;
-  form_name: string;
-  node_id: string;
-  node_name: string;
-  account_id: string;
-  account_display_name: string;
-};
-
 type ResponseDetail = {
   id: string;
   form_id: string;
@@ -271,8 +259,16 @@ async function assignWorkflowToDelegate(
     "/api/workflow-assignment-candidates",
   );
   const candidate =
-    candidates.find((item) => item.workflow_version_id === workflowVersionId) ??
-    candidates.find((item) => item.workflow_id === workflowId);
+    candidates.find(
+      (item) =>
+        item.workflow_version_id === workflowVersionId &&
+        item.node_name === "Reference Organization",
+    ) ??
+    candidates.find(
+      (item) =>
+        item.workflow_id === workflowId &&
+        item.node_name === "Reference Organization",
+    );
   expect(candidate, "generated workflow should be assignable to at least one node").toBeTruthy();
 
   const assignees = await apiGet<WorkflowAssigneeOption[]>(
@@ -408,13 +404,15 @@ test.describe("workflow-mediated form shortcuts", () => {
     });
 
     await signInAsDelegate(page);
-    const pending = await apiGet<PendingWorkflowWork[]>(
+    const pending = await apiGet<ResponseStartOptions>(
       page,
-      "/api/workflow-assignments/pending",
+      "/api/responses/start-options",
     );
     expect(
-      pending.some((item) => item.workflow_assignment_id === assignment.assignmentId),
-      "delegate pending work should include the workflow assignment",
+      pending.assignments.some(
+        (item) => item.workflow_assignment_id === assignment.assignmentId,
+      ),
+      "Response-owned start options should include the workflow assignment",
     ).toBe(true);
 
     await page.goto("/");

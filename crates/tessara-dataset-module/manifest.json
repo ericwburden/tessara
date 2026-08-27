@@ -929,7 +929,7 @@
     },
     {
       "path": "/dataset.js",
-      "digest": "sha256:7e003907bab7f99a2fd262dff698493a7f8e296efe712aa88202b102ca733f48",
+      "digest": "sha256:e243e30f9ef3c56bb59d41a58568b401405165a550784a091858d4174dcb0776",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -939,7 +939,7 @@
     },
     {
       "path": "/dataset.wasm",
-      "digest": "sha256:429539c19b4fbf04af154fb143bab3d6a857ddd8beb9788c2e7a537a3cc6e910",
+      "digest": "sha256:4013f3e9d814864db9df2623ed21ac010263be78451e1f81a8e50f683eb9c5ff",
       "content_type": "application/wasm"
     }
   ]

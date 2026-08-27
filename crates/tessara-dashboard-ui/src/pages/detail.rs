@@ -28,9 +28,7 @@ pub fn DashboardDetailContent(dashboard_id: String) -> impl IntoView {
     Effect::new({
         let dashboard_id = dashboard_id.clone();
         move |_| {
-            if !bootstrapped {
-                load_detail(dashboard_id.clone(), dashboard, loading, error);
-            }
+            load_detail(dashboard_id.clone(), dashboard, loading, error);
         }
     });
 
@@ -188,7 +186,10 @@ fn load_detail(
         loading.set(true);
         error.set(None);
         match crate::api::fetch_dashboard(&dashboard_id).await {
-            Ok(payload) => dashboard.set(Some(payload)),
+            Ok(mut payload) => {
+                payload.can_manage = crate::api::fetch_composition(&dashboard_id).await.is_ok();
+                dashboard.set(Some(payload));
+            }
             Err(message) => error.set(Some(message)),
         }
         loading.set(false);

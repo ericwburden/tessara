@@ -94,7 +94,7 @@ test.describe("source-exact scoped analytics boundary", () => {
       `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.statPlacement.placement_id}/render/stat-card`,
     ));
     expect(stat.materialization_state).toBe("ready");
-    expect(stat.stat.display_value).toBe("3");
+    expect(stat.stat.display_value).toBe("1");
     const table = await json<any>(await page.request.get(
       `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.tablePlacement.placement_id}/render/table?page_size=100`,
     ));

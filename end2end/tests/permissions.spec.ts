@@ -1402,7 +1402,6 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       "/api/workflows",
       "/api/workflow-assignment-candidates",
       "/api/workflow-assignments",
-      "/api/workflow-assignments/pending",
       "/api/responses",
       "/api/operations/status",
       "/api/datasets",
@@ -1412,6 +1411,12 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     ]) {
       await expectStatus(fixtures.noAccess, "get", url, [403]);
     }
+    await expectStatus(
+      fixtures.noAccess,
+      "get",
+      "/api/workflow-assignments/pending",
+      [405],
+    );
   });
 
   test("non-admin shell contains only eligible configured destinations", async ({ page }) => {

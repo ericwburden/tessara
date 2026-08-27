@@ -22,7 +22,7 @@ const PW_DATASET_PREFIX = "pw-dataset-authoring-";
 type DatasetFixture = {
   form_id: string;
   form_version_id: string;
-  scope_node_id: string;
+  scope_node_ids: string[];
 };
 
 type DatasetEditorFormOption = {
@@ -367,13 +367,17 @@ async function referenceDatasetFixture(page: Page): Promise<DatasetFixture> {
   const scopes = await expectJson<DatasetEditorScopeOption[]>(
     await page.request.get("/api/admin/datasets/editor-options/scopes"),
   );
-  const scope = scopes.find((candidate) => candidate.name === "Reference Organization");
-  expect(scope, "Reference Organization should be available through Dataset editor options").toBeTruthy();
+  const scopeNames = ["Reference Organization", "Restricted Division"];
+  const scopeNodeIds = scopeNames.map((name) => {
+    const scope = scopes.find((candidate) => candidate.name === name);
+    expect(scope, `${name} should be available through Dataset editor options`).toBeTruthy();
+    return scope!.id;
+  });
 
   return {
     form_id: form!.id,
     form_version_id: version!.id,
-    scope_node_id: scope!.id,
+    scope_node_ids: scopeNodeIds,
   };
 }
 
@@ -672,7 +676,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     name: datasetName,
     slug: `${PW_DATASET_PREFIX}native-route-${runId}`,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form",
       alias: "program",
@@ -690,7 +694,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
   try {
     await expectShellRouteDirectLoadAndRefresh(page, {
       path: "/datasets/new",
-      shellTitle: "Datasets",
+      shellTitle: "Create Dataset",
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
@@ -708,7 +712,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     datasetId = await createDataset(page, payload);
     await expectShellRouteDirectLoadAndRefresh(page, {
       path: `/datasets/${datasetId}/preview`,
-      shellTitle: "Datasets",
+      shellTitle: "Dataset Preview",
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
@@ -745,7 +749,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
     });
     await expectShellRouteDirectLoadAndRefresh(page, {
       path: `/datasets/${datasetId}/revisions/${draft.revision_id}/edit`,
-      shellTitle: "Datasets",
+      shellTitle: "Edit Revision",
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
@@ -806,7 +810,7 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1167,7 +1171,7 @@ test("admin can UAT Sprint 3B advanced dataset authoring", async ({ page }) => {
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1493,7 +1497,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     name: datasetName,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1523,7 +1527,7 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
       name: `Playwright Revision Dependent ${runId}`,
       slug: `${PW_DATASET_PREFIX}revision-dependent-${runId}`,
       grain: "submission",
-      visibility_node_ids: [seed.scope_node_id],
+      visibility_node_ids: seed.scope_node_ids,
       initial_source: {
         kind: "dataset",
         alias: "upstream",
@@ -1730,7 +1734,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: upstreamName,
       slug: upstreamSlug,
       grain: "submission",
-      visibility_node_ids: [seed.scope_node_id],
+      visibility_node_ids: seed.scope_node_ids,
       initial_source: {
         kind: "form",
         alias: "program",
@@ -1748,7 +1752,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: `${upstreamName} v2`,
       slug: upstreamSlug,
       grain: "submission",
-      visibility_node_ids: [seed.scope_node_id],
+      visibility_node_ids: seed.scope_node_ids,
       initial_source: {
         kind: "form",
         alias: "program",
@@ -1773,7 +1777,7 @@ test("dataset source picker keeps Version N major-line fields after a newer majo
       name: `Playwright Version One Consumer ${runId}`,
       slug: `${PW_DATASET_PREFIX}version-one-consumer-${runId}`,
       grain: "submission",
-      visibility_node_ids: [seed.scope_node_id],
+      visibility_node_ids: seed.scope_node_ids,
       initial_source: {
         kind: "dataset_major",
         alias: "upstream",
@@ -1845,7 +1849,7 @@ test("dataset revision navigation handles repeated detail and error states", asy
     name: `Playwright Revision Navigation ${runId}`,
     slug: `${PW_DATASET_PREFIX}revision-navigation-${runId}`,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form",
       alias: "program",
@@ -1926,7 +1930,7 @@ test("dataset SQL preview uses pre-projection join keys and stable field identit
         name: "Playwright Joined Dataset",
         slug: `${PW_DATASET_PREFIX}sql-preview`,
         grain: "submission",
-        visibility_node_ids: [seed.scope_node_id],
+        visibility_node_ids: seed.scope_node_ids,
         initial_source: {
           kind: "form",
           alias: "left_source",
@@ -2010,7 +2014,7 @@ test("dataset SQL preview renders ordered QuerySpec operations as sequential CTE
         name: "Playwright Ordered Operations Dataset",
         slug: `${PW_DATASET_PREFIX}ordered-operations`,
         grain: "submission",
-        visibility_node_ids: [seed.scope_node_id],
+        visibility_node_ids: seed.scope_node_ids,
         initial_source: {
           kind: "form",
           alias: "program",
@@ -2139,7 +2143,7 @@ test("dataset SQL preview merges unioned source fields under the union step alia
         name: "Playwright Union Merge Dataset",
         slug: `${PW_DATASET_PREFIX}union-merge`,
         grain: "submission",
-        visibility_node_ids: [seed.scope_node_id],
+        visibility_node_ids: seed.scope_node_ids,
         initial_source: {
           kind: "form",
           alias: "source_1",
@@ -2210,7 +2214,7 @@ test("dataset operations keep operation-local state through reorder, save, and r
     name: `Playwright Operation Local UAT ${runId}`,
     slug,
     grain: "submission",
-    visibility_node_ids: [seed.scope_node_id],
+    visibility_node_ids: seed.scope_node_ids,
     initial_source: {
       kind: "form" as const,
       alias: "program",
