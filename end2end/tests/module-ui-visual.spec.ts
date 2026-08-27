@@ -424,6 +424,13 @@ async function pinScopedRecordsVisualFacts(page: Page) {
   await page.locator("tbody tr td:nth-child(3)").evaluate((cell) => {
     cell.textContent = "Pinned fixture time";
   });
+  const recordIds = page.locator(".scoped-records-table tbody code");
+  await expect.poll(() => recordIds.count()).toBeGreaterThan(0);
+  await recordIds.evaluateAll((identifiers) => {
+    identifiers.forEach((identifier) => {
+      identifier.textContent = "Pinned record ID";
+    });
+  });
 }
 
 test.describe("canonical module UI visual baselines", () => {

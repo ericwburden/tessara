@@ -1574,7 +1574,9 @@ test("admin can review and publish a dataset draft revision", async ({ page }) =
     await expect(page.locator("tbody")).toContainText("Draft");
 
     const draftDetail = await expectJson<DatasetRevisionDetail>(
-      await page.request.get(`/api/datasets/${datasetId}/revisions/${draft.revision_id}`),
+      await page.request.get(
+        `/api/admin/datasets/${datasetId}/revisions/${draft.revision_id}`,
+      ),
     );
     expect(draftDetail.status).toBe("draft");
     expect(draftDetail.metadata.name).toBe(`${datasetName} Draft`);

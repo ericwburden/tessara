@@ -1731,13 +1731,18 @@ test.describe.serial("Sprint 6A Module Management", () => {
       );
       const stableInventoryEntry = structuredClone(inventoryEntry);
       const stableDetailEntry = structuredClone(detail.entry);
-      if (stableInventoryEntry.operational.details) {
-        delete stableInventoryEntry.operational.details
-          .workflow_event_consumer_last_stable_at;
-      }
-      if (stableDetailEntry.operational.details) {
-        delete stableDetailEntry.operational.details
-          .workflow_event_consumer_last_stable_at;
+      for (const stableEntry of [stableInventoryEntry, stableDetailEntry]) {
+        if ("diagnostics" in stableEntry) {
+          const diagnosticFacts = stableEntry.diagnostics.details.facts;
+          if (
+            diagnosticFacts &&
+            typeof diagnosticFacts === "object" &&
+            !Array.isArray(diagnosticFacts)
+          ) {
+            delete (diagnosticFacts as Record<string, unknown>)
+              .workflow_event_consumer_last_stable_at;
+          }
+        }
       }
       expect(
         stableDetailEntry,

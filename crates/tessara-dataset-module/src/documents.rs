@@ -233,10 +233,9 @@ async fn dataset_document(
                         &headers,
                         &format!("/datasets/{dataset_id}/revisions/{revision_id}"),
                         "Dataset Revision",
-                        DatasetRouteBootstrap::RevisionUnavailable {
+                        DatasetRouteBootstrap::RevisionDeferred {
                             dataset_id,
                             revision_id,
-                            message: "Dataset revision was not found.".into(),
                             can_manage,
                         },
                     )
@@ -467,6 +466,7 @@ fn destination(value: &DatasetRouteBootstrap) -> &'static str {
         DatasetRouteBootstrap::Revisions { .. } => "datasets.revisions",
         DatasetRouteBootstrap::RevisionDetail { .. } => "datasets.revision_detail",
         DatasetRouteBootstrap::RevisionUnavailable { .. } => "datasets.revision_detail",
+        DatasetRouteBootstrap::RevisionDeferred { .. } => "datasets.revision_detail",
         DatasetRouteBootstrap::RevisionEdit { .. } => "datasets.revision_edit",
     }
 }

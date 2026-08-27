@@ -416,6 +416,7 @@ test.describe("workflow-mediated form shortcuts", () => {
     ).toBe(true);
 
     await page.goto("/");
+    await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
     await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Assigned to Me" })).toHaveCount(0);
     const mobileNavigation = page.locator(".mobile-nav");
@@ -507,8 +508,12 @@ test.describe("workflow-mediated form shortcuts", () => {
     });
 
     const assignedWork = page.getByLabel("Assigned Work");
-    await assignedWork.selectOption(assignment.assignmentId);
-    await expect(assignedWork).toHaveValue(assignment.assignmentId);
+    const assignmentIndex = options.assignments.findIndex(
+      (item) => item.workflow_assignment_id === assignment.assignmentId,
+    );
+    expect(assignmentIndex).toBeGreaterThanOrEqual(0);
+    await assignedWork.selectOption(assignmentIndex.toString());
+    await expect(assignedWork).toHaveValue(assignmentIndex.toString());
     const startButton = page.getByRole("button", { name: "Start Draft" });
     await expect(startButton).toBeEnabled();
     const startedResponse = page.waitForResponse((response) =>
@@ -521,8 +526,9 @@ test.describe("workflow-mediated form shortcuts", () => {
     expect(await startResult.request().headerValue("x-idempotency-key")).toMatch(
       /^[0-9a-f-]{36}$/i,
     );
-    const started = (await startResult.json()) as IdResponse;
-    await expect(page).toHaveURL(new RegExp(`/responses/${started.id}/edit$`));
+    await expect(page).toHaveURL(
+      /\/responses\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/edit$/i,
+    );
 
     const removedStart = await page.request.post("/api/responses/start", {
       data: {

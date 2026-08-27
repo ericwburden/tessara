@@ -85,6 +85,17 @@ pub(crate) fn dataset_content(bootstrap: &DatasetRouteBootstrap) -> leptos::prel
             </section>
         }
         .into_any(),
+        DatasetRouteBootstrap::RevisionDeferred {
+            dataset_id,
+            revision_id,
+            ..
+        } => view! {
+            <DatasetRevisionDetailContent
+                dataset_id=dataset_id.clone()
+                revision_id=revision_id.clone()
+            />
+        }
+        .into_any(),
         DatasetRouteBootstrap::RevisionEdit {
             dataset_id,
             revision_id,
