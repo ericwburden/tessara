@@ -528,12 +528,9 @@ test.describe("canonical module UI visual baselines", () => {
         .first(),
     ).toBeVisible();
     const viewerRows = page.locator(".component-table-viewer__table tbody tr");
-    await expect(viewerRows).toHaveCount(2);
+    await expect(viewerRows).toHaveCount(1);
     await viewerRows.evaluateAll((rows) => {
-      const pinnedRows = [
-        ["Pinned row A", "10"],
-        ["Pinned row B", "20"],
-      ];
+      const pinnedRows = [["Pinned row", "20"]];
       rows.forEach((row, rowIndex) => {
         Array.from(row.querySelectorAll("td")).forEach((cell, columnIndex) => {
           cell.textContent = pinnedRows[rowIndex]?.[columnIndex] ?? "Pinned value";
@@ -621,7 +618,7 @@ test.describe("canonical module UI visual baselines", () => {
     await expect(page.locator(".dataset-preview-page")).toBeVisible();
     await page.getByRole("button", { name: "Sort and filter Label" }).click();
     await page.getByRole("menuitem", { name: "Sort ascending" }).click();
-    await expect(page.locator("tbody tr").first()).toContainText("Corrected complete values");
+    await expect(page.locator("tbody tr").first()).toContainText("Submitted owner");
     await expect(page).toHaveScreenshot("datasets-preview-light-1440.png", {
       animations: "disabled",
     });

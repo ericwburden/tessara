@@ -1731,10 +1731,14 @@ test.describe.serial("Sprint 6A Module Management", () => {
       );
       const stableInventoryEntry = structuredClone(inventoryEntry);
       const stableDetailEntry = structuredClone(detail.entry);
-      delete stableInventoryEntry.operational.details
-        .workflow_event_consumer_last_stable_at;
-      delete stableDetailEntry.operational.details
-        .workflow_event_consumer_last_stable_at;
+      if (stableInventoryEntry.operational.details) {
+        delete stableInventoryEntry.operational.details
+          .workflow_event_consumer_last_stable_at;
+      }
+      if (stableDetailEntry.operational.details) {
+        delete stableDetailEntry.operational.details
+          .workflow_event_consumer_last_stable_at;
+      }
       expect(
         stableDetailEntry,
         `${definitionId} detail must match its inventory entry apart from the live consumer observation timestamp`,

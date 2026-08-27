@@ -672,17 +672,17 @@
     },
     {
       "path": "/component.js",
-      "digest": "sha256:4e508915e5e3c7cba69865ddca2ed21573ee54cd266a27e2483e37f2c6076065",
+      "digest": "sha256:29ff9915a290c492f45bdbac100f5acce5c07934dd54d77dd65bdd9ac7dd6f60",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component-bindings.js",
-      "digest": "sha256:04103fd5b9b289e247995759d91e3fe5cd0d522f7295f1e482d81965a50244f2",
+      "digest": "sha256:eda4dbf4c50504041f4966d809ceb80afaaf5c713544b332ac9618d22e5b5039",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:946527a711baed290fbb9e1a3b9da9408fefcbf4202af5ac041dd887f1fd37e0",
+      "digest": "sha256:0a26e247986e233430da02b89dba36fdf101496824df5aa901b7dd5a4c8e7287",
       "content_type": "application/wasm"
     }
   ]

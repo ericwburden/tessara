@@ -50,9 +50,16 @@ pub(crate) fn component_content(bootstrap: &ComponentRouteBootstrap) -> leptos::
         ComponentRouteBootstrap::Versions { component, .. } => {
             view! { <ComponentVersionsContent component_ref=component.slug.clone()/> }.into_any()
         }
+        ComponentRouteBootstrap::DeferredVersions { component_ref } => {
+            view! { <ComponentVersionsContent component_ref=component_ref.clone()/> }.into_any()
+        }
         ComponentRouteBootstrap::Detail { component, .. }
         | ComponentRouteBootstrap::View { component, .. } => {
             view! { <ComponentViewerContent component_ref=component.slug.clone()/> }.into_any()
+        }
+        ComponentRouteBootstrap::DeferredDetail { component_ref }
+        | ComponentRouteBootstrap::DeferredView { component_ref } => {
+            view! { <ComponentViewerContent component_ref=component_ref.clone()/> }.into_any()
         }
     }
 }

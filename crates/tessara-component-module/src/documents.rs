@@ -143,7 +143,18 @@ async fn component_document(
         AuthorizationGrantOperationV1::Read,
     )
     .await?;
-    let component_id = product::resolve_component_id(&state, &component_ref).await?;
+    let component_id = match product::resolve_component_id(&state, &component_ref).await {
+        Ok(component_id) => component_id,
+        Err(ComponentModuleError::NotFound(_)) if route != "edit" => {
+            // Reader documents cannot decide whether a missing public
+            // projection is a manageable draft, an out-of-scope Component, or
+            // an unknown reference. Defer all three through the same bootstrap
+            // so hydration can try the manager projection without disclosing
+            // existence in the server response.
+            return deferred_component_document(&state, &headers, component_ref, route).await;
+        }
+        Err(error) => return Err(error),
+    };
     let (component, manageable) = match route {
         "edit" => (
             product::get_manageable_definition_by_id(&state, &grant.payload, component_id).await?,
@@ -154,10 +165,22 @@ async fn component_document(
                 .await
             {
                 Ok(component) => (component, true),
-                Err(ComponentModuleError::NotFound(_)) => (
-                    product::get_definition_by_id(&state, &grant.payload, component_id).await?,
-                    false,
-                ),
+                Err(ComponentModuleError::NotFound(_)) => {
+                    match product::get_definition_by_id(&state, &grant.payload, component_id).await
+                    {
+                        Ok(component) => (component, false),
+                        Err(ComponentModuleError::NotFound(_)) => {
+                            return deferred_component_document(
+                                &state,
+                                &headers,
+                                component_ref,
+                                route,
+                            )
+                            .await;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                }
                 Err(error) => return Err(error),
             }
         }
@@ -216,6 +239,32 @@ async fn component_document(
         bootstrap
     };
     document(&state, &headers, &path, title, bootstrap).await
+}
+
+async fn deferred_component_document(
+    state: &ComponentModuleState,
+    headers: &HeaderMap,
+    component_ref: String,
+    route: &str,
+) -> Result<Response, ComponentModuleError> {
+    let (path, title, bootstrap) = match route {
+        "versions" => (
+            format!("/components/{component_ref}/versions"),
+            "Component Versions",
+            ComponentRouteBootstrap::DeferredVersions { component_ref },
+        ),
+        "view" => (
+            format!("/components/{component_ref}/view"),
+            "View Component",
+            ComponentRouteBootstrap::DeferredView { component_ref },
+        ),
+        _ => (
+            format!("/components/{component_ref}"),
+            "Component Detail",
+            ComponentRouteBootstrap::DeferredDetail { component_ref },
+        ),
+    };
+    document(state, headers, &path, title, bootstrap).await
 }
 
 async fn resilient_datasets(
@@ -392,10 +441,15 @@ fn destination(value: &ComponentRouteBootstrap) -> &'static str {
     match value {
         ComponentRouteBootstrap::Directory { .. } => "components.directory",
         ComponentRouteBootstrap::Create { .. } => "components.create",
-        ComponentRouteBootstrap::Detail { .. } => "components.detail",
+        ComponentRouteBootstrap::Detail { .. } | ComponentRouteBootstrap::DeferredDetail { .. } => {
+            "components.detail"
+        }
         ComponentRouteBootstrap::Edit { .. } => "components.edit",
-        ComponentRouteBootstrap::Versions { .. } => "components.versions",
-        ComponentRouteBootstrap::View { .. } => "components.view",
+        ComponentRouteBootstrap::Versions { .. }
+        | ComponentRouteBootstrap::DeferredVersions { .. } => "components.versions",
+        ComponentRouteBootstrap::View { .. } | ComponentRouteBootstrap::DeferredView { .. } => {
+            "components.view"
+        }
     }
 }
 fn accepts_lifecycle_bootstrap(headers: &HeaderMap) -> bool {

@@ -716,7 +716,7 @@ test("frozen Dataset document routes preserve direct-load and refresh ownership"
       activeHref: "/datasets",
       ready: async (routePage) => {
         await expect(
-          routePage.getByText("Dataset Preview", { exact: true }),
+          routePage.locator("#module-content").getByText("Dataset Preview", { exact: true }),
         ).toBeVisible();
         await expect(
           routePage.getByRole("heading", {
@@ -1006,11 +1006,11 @@ test("admin can author, edit, save, and view a Sprint 3A dataset", async ({
       .locator("label.form-field")
       .nth(1)
       .locator("input");
-    await restrictionArgument.fill("0");
+    await restrictionArgument.fill("1000000");
     await restrictionArgument.press("Tab");
     await expect(
       restrictionCalculation.locator(".dataset-calculation-preview"),
-    ).toContainText("greater_than_or_equal(0)");
+    ).toContainText("greater_than_or_equal(1000000)");
 
     const restrictions = await openEditorSection(page, "View Restrictions");
     await restrictions.getByLabel("Restricted flag enabled").check();

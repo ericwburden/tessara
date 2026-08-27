@@ -1426,7 +1426,7 @@ mod tests {
         assert_eq!(deployment.migration_identity, MIGRATION_IDENTITY);
         assert_eq!(deployment.readiness_path, READINESS_PATH);
         assert_eq!(deployment.liveness_path, LIVENESS_PATH);
-        assert_eq!(manifest.public_api_routes.len(), 21);
+        assert_eq!(manifest.public_api_routes.len(), 23);
         assert_eq!(manifest.browser_routes.len(), 8);
         assert_eq!(manifest.provided_service_actions.len(), 10);
         assert_eq!(manifest.consumed_service_actions.len(), 7);
@@ -1499,6 +1499,8 @@ mod tests {
                 "GET /api/datasets/{dataset_id}/table datasets.preview_table",
                 "GET /api/datasets/{dataset_id}/distinct-values datasets.distinct_values",
                 "POST /api/admin/datasets datasets.create",
+                "GET /api/admin/datasets/{dataset_id}/revisions datasets.list_manageable_revisions",
+                "GET /api/admin/datasets/{dataset_id}/revisions/{revision_id} datasets.get_manageable_revision",
                 "DELETE /api/admin/datasets/{dataset_id} datasets.delete",
                 "PATCH /api/admin/datasets/{dataset_id}/tags datasets.update_tags",
                 "POST /api/admin/datasets/{dataset_id}/draft-revision datasets.save_draft_revision",

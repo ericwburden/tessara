@@ -644,6 +644,26 @@
       "idempotency": "forward_or_generate_header"
     },
     {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions",
+      "method": "GET",
+      "required_capabilities_any_of": ["datasets:manage"],
+      "authorization_action": "datasets.list_manageable_revisions",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+      "method": "GET",
+      "required_capabilities_any_of": ["datasets:manage"],
+      "authorization_action": "datasets.get_manageable_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
       "path_template": "/api/admin/datasets/{dataset_id}",
       "method": "DELETE",
       "required_capabilities_any_of": ["datasets:manage"],
@@ -929,7 +949,7 @@
     },
     {
       "path": "/dataset.js",
-      "digest": "sha256:e243e30f9ef3c56bb59d41a58568b401405165a550784a091858d4174dcb0776",
+      "digest": "sha256:076f4347634d867910478eedea1049888a4fa6c35e821dd39094003ae73e180b",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -939,7 +959,7 @@
     },
     {
       "path": "/dataset.wasm",
-      "digest": "sha256:4013f3e9d814864db9df2623ed21ac010263be78451e1f81a8e50f683eb9c5ff",
+      "digest": "sha256:b26ef61bdef40904e1bd7d7e0357b890801e76d72d9341a880c67dea956e68b0",
       "content_type": "application/wasm"
     }
   ]

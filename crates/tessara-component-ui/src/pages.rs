@@ -2467,7 +2467,8 @@ fn load_components(
         is_loading.set(true);
         load_error.set(None);
         match api::fetch_admin_components().await {
-            Ok(Some(response)) => {
+            Ok(Some(mut response)) => {
+                response.sort_by_key(|item| item.name.to_lowercase());
                 can_manage_components.set(true);
                 components.set(response);
             }
@@ -2476,7 +2477,8 @@ fn load_components(
                 components.set(Vec::new());
             }
             Err(_) => match api::fetch_components().await {
-                Ok(Some(response)) => {
+                Ok(Some(mut response)) => {
+                    response.sort_by_key(|item| item.name.to_lowercase());
                     can_manage_components.set(false);
                     components.set(response);
                 }

@@ -756,7 +756,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
     }
   });
 
-  test("embedded Table keeps full server-backed paging and page-size controls", async ({
+  test("embedded Table keeps server-backed terminal paging and page-size controls", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -822,39 +822,25 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       await expect(next).toBeDisabled();
 
       const rows = tableViewer.locator("tbody tr[data-row-id]");
-      await expect(rows).toHaveCount(3);
+      await expect(rows).toHaveCount(1);
       const firstPageFirstRow = await rows.first().getAttribute("data-row-id");
       expect(firstPageFirstRow).toBeTruthy();
       await expect.poll(() => executionUrls.length).toBeGreaterThanOrEqual(1);
 
-      // The source-exact Reference fixture materializes the three initial
-      // Responses. `response.new` is intentionally created after that snapshot
-      // and remains pending until the explicit refresh scenario. Exercise the
-      // same mediated owner endpoint with a two-row page to retain exact cursor
-      // proof without manufacturing extra fixture Responses.
-      const firstMediatedUrl = new URL(executionUrls[0]);
-      firstMediatedUrl.searchParams.set("page_size", "2");
-      firstMediatedUrl.searchParams.delete("cursor");
-      const firstMediatedPage = await expectJson<{
+      // Sprint 8C intentionally materializes one submitted Primary Response.
+      // Prove the exact terminal server page here; opaque multi-page cursor
+      // behavior remains covered by the Component provider and shared viewer
+      // state-machine tests without manufacturing immutable Response rows.
+      const terminalMediatedUrl = new URL(executionUrls[0]);
+      terminalMediatedUrl.searchParams.set("page_size", "1");
+      terminalMediatedUrl.searchParams.delete("cursor");
+      const terminalMediatedPage = await expectJson<{
         rows: Array<{ row_id: string }>;
         pagination: { next_cursor: string | null; has_more: boolean };
-      }>(await page.request.get(`${firstMediatedUrl.pathname}${firstMediatedUrl.search}`));
-      expect(firstMediatedPage.rows).toHaveLength(2);
-      expect(firstMediatedPage.pagination.has_more).toBe(true);
-      expect(firstMediatedPage.pagination.next_cursor).toBeTruthy();
-      firstMediatedUrl.searchParams.set(
-        "cursor",
-        firstMediatedPage.pagination.next_cursor!,
-      );
-      const secondMediatedPage = await expectJson<{
-        rows: Array<{ row_id: string }>;
-        pagination: { next_cursor: string | null; has_more: boolean };
-      }>(await page.request.get(`${firstMediatedUrl.pathname}${firstMediatedUrl.search}`));
-      expect(secondMediatedPage.rows).toHaveLength(1);
-      expect(secondMediatedPage.pagination.has_more).toBe(false);
-      expect(secondMediatedPage.rows[0].row_id).not.toBe(
-        firstMediatedPage.rows[0].row_id,
-      );
+      }>(await page.request.get(`${terminalMediatedUrl.pathname}${terminalMediatedUrl.search}`));
+      expect(terminalMediatedPage.rows).toHaveLength(1);
+      expect(terminalMediatedPage.pagination.has_more).toBe(false);
+      expect(terminalMediatedPage.pagination.next_cursor).toBeNull();
 
       const pageSizeRequestPromise = page.waitForRequest((request) => {
         const url = new URL(request.url());
@@ -883,7 +869,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(pageSizeUrl.searchParams.get("page_size")).toBe("25");
       expect(pageSizeUrl.searchParams.has("cursor")).toBe(false);
       await expect(pagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(rows).toHaveCount(3);
+      await expect(rows).toHaveCount(1);
       await expect(page.locator(".component-table-preview__header")).toHaveCount(0);
       await expect(rows.first()).toHaveAttribute("data-row-id", firstPageFirstRow!);
 
@@ -932,7 +918,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       const fullscreenRows = fullscreenDialog.locator("tbody tr[data-row-id]");
       await expect(fullscreenPagination.getByLabel("Rows")).toHaveValue("25");
       await expect(fullscreenPagination.getByText("Page 1", { exact: true })).toBeVisible();
-      await expect(fullscreenRows).toHaveCount(3);
+      await expect(fullscreenRows).toHaveCount(1);
       await expect(fullscreenRows.first()).toHaveAttribute(
         "data-row-id",
         firstPageFirstRow!,
@@ -959,7 +945,7 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
       expect(
         allExecutionPaths.length === executionUrls.length &&
           allExecutionPaths.every((path) => mediatedTablePath.test(path)),
-        "initial and page-size UI execution must stay bound to one Dashboard placement endpoint; the two explicit cursor-page requests are asserted separately above",
+        "initial and page-size UI execution must stay bound to one Dashboard placement endpoint; the explicit terminal-page request is asserted separately above",
       ).toBe(true);
       assertNoConsoleErrors();
     } finally {

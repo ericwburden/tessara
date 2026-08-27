@@ -17,7 +17,7 @@
   "module_releases": [
     {
       "definition_id":"tessara.datasets","version":"1.0.0",
-      "manifest_digest":"sha256:8247be0f4367a81046d4655250deb01b890802fba4cd724ddf457ebc31b622c5",
+      "manifest_digest":"sha256:4f10ee99eeaaffb8ec0216521855c4dc3d3b3131ebb5bc03f218ac3ba338ff83",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dataset-configuration/v1",
@@ -33,7 +33,7 @@
     },
     {
       "definition_id":"tessara.components","version":"1.1.0",
-      "manifest_digest":"sha256:2c5a7d79c91f5b1ac742393b733170fd43fa8b1579499a0a375f0b1228547341",
+      "manifest_digest":"sha256:fd634734fa599aa524b552faed002ade974be72b17993380936e6d9adbd3d0ea",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000004",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/component-configuration/v1",

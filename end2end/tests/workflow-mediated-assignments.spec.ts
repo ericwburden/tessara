@@ -418,7 +418,12 @@ test.describe("workflow-mediated form shortcuts", () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Assigned to Me" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Responses", exact: true })).toBeVisible();
+    const mobileNavigation = page.locator(".mobile-nav");
+    await mobileNavigation.getByRole("button", { name: "Open navigation" }).click();
+    await expect(
+      mobileNavigation.getByRole("link", { name: "Responses", exact: true }),
+    ).toBeVisible();
+    await mobileNavigation.getByRole("button", { name: "Close navigation" }).click();
 
     const submission = await apiPost<IdResponse>(
       page,
@@ -502,9 +507,8 @@ test.describe("workflow-mediated form shortcuts", () => {
     });
 
     const assignedWork = page.getByLabel("Assigned Work");
-    const assignmentValue = await assignedWork.locator("option").nth(1).getAttribute("value");
-    expect(assignmentValue).not.toBeNull();
-    await assignedWork.selectOption(assignmentValue!);
+    await assignedWork.selectOption(assignment.assignmentId);
+    await expect(assignedWork).toHaveValue(assignment.assignmentId);
     const startButton = page.getByRole("button", { name: "Start Draft" });
     await expect(startButton).toBeEnabled();
     const startedResponse = page.waitForResponse((response) =>

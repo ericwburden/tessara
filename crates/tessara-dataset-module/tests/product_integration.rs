@@ -1288,9 +1288,11 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
                 },
                 dependency_binding: DependencyBindingKey::new("tessara.core.datasets")
                     .expect("Dataset Core binding"),
-                functional_contract: FunctionalContractId::new(
-                    "tessara.datasets.dataset-major-line",
-                )
+                functional_contract: FunctionalContractId::new(if include_manage {
+                    "tessara.datasets.authoring"
+                } else {
+                    "tessara.datasets.dataset-major-line"
+                })
                 .expect("Dataset resource contract"),
                 action: action.into(),
                 operation: AuthorizationGrantOperationV1::Read,
@@ -1343,12 +1345,12 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     );
 
     let (manager_revisions_grant, manager_revisions_correlation) =
-        revision_grant("datasets.list_revisions", true);
+        revision_grant("datasets.list_manageable_revisions", true);
     let manager_revisions_response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/datasets/{visible_dataset}/revisions"))
+                .uri(format!("/api/admin/datasets/{visible_dataset}/revisions"))
                 .header("x-tessara-authorization", manager_revisions_grant)
                 .header(
                     "x-tessara-correlation-id",
@@ -1369,13 +1371,13 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     assert_eq!(manager_revisions[0].id, draft_revision.to_string());
 
     let (manager_revision_grant, manager_revision_correlation) =
-        revision_grant("datasets.get_revision", true);
+        revision_grant("datasets.get_manageable_revision", true);
     let manager_revision_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/datasets/{visible_dataset}/revisions/{draft_revision}"
+                    "/api/admin/datasets/{visible_dataset}/revisions/{draft_revision}"
                 ))
                 .header("x-tessara-authorization", manager_revision_grant)
                 .header(

@@ -144,6 +144,14 @@ pub(super) fn routes() -> Router<DatasetModuleState> {
             get(get_dataset_revision),
         )
         .route(
+            "/api/admin/datasets/{dataset_id}/revisions",
+            get(list_manageable_dataset_revisions),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+            get(get_manageable_dataset_revision),
+        )
+        .route(
             "/api/admin/datasets/{dataset_id}/tags",
             patch(update_dataset_tags),
         )
@@ -2472,6 +2480,24 @@ async fn list_dataset_revisions(
     ))
 }
 
+async fn list_manageable_dataset_revisions(
+    State(state): State<DatasetModuleState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<Vec<DatasetProductRevisionSummaryV1>>, DatasetModuleError> {
+    let grant = authorize_product(
+        &state,
+        &headers,
+        "datasets.list_manageable_revisions",
+        AuthorizationGrantOperationV1::Read,
+        "tessara.datasets.authoring",
+    )
+    .await?;
+    Ok(Json(
+        dataset_revision_summaries(&state, &grant.payload, dataset_id).await?,
+    ))
+}
+
 pub(crate) async fn dataset_revision_summaries(
     state: &DatasetModuleState,
     grant: &AuthorizationGrantV3,
@@ -2567,6 +2593,24 @@ async fn get_dataset_revision(
     Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<DatasetProductRevisionDetailV1>, DatasetModuleError> {
     let grant = authorize_read(&state, &headers, "datasets.get_revision").await?;
+    Ok(Json(
+        dataset_revision_detail(&state, &grant.payload, dataset_id, revision_id).await?,
+    ))
+}
+
+async fn get_manageable_dataset_revision(
+    State(state): State<DatasetModuleState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<DatasetProductRevisionDetailV1>, DatasetModuleError> {
+    let grant = authorize_product(
+        &state,
+        &headers,
+        "datasets.get_manageable_revision",
+        AuthorizationGrantOperationV1::Read,
+        "tessara.datasets.authoring",
+    )
+    .await?;
     Ok(Json(
         dataset_revision_detail(&state, &grant.payload, dataset_id, revision_id).await?,
     ))

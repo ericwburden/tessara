@@ -53,11 +53,21 @@ pub(super) async fn fetch_dataset_table(dataset_id: &str) -> Result<Option<Datas
 pub(super) async fn fetch_dataset_revisions(
     dataset_id: &str,
 ) -> Result<Option<Vec<DatasetRevisionSummary>>, String> {
-    fetch_json(
-        &format!("/api/datasets/{dataset_id}/revisions"),
+    match fetch_json(
+        &format!("/api/admin/datasets/{dataset_id}/revisions"),
         "Dataset revisions",
     )
     .await
+    {
+        Ok(response) => Ok(response),
+        Err(_) => {
+            fetch_json(
+                &format!("/api/datasets/{dataset_id}/revisions"),
+                "Dataset revisions",
+            )
+            .await
+        }
+    }
 }
 
 #[cfg(feature = "hydrate")]
@@ -65,11 +75,21 @@ pub(super) async fn fetch_dataset_revision(
     dataset_id: &str,
     revision_id: &str,
 ) -> Result<Option<DatasetRevisionDetail>, String> {
-    fetch_json(
-        &format!("/api/datasets/{dataset_id}/revisions/{revision_id}"),
+    match fetch_json(
+        &format!("/api/admin/datasets/{dataset_id}/revisions/{revision_id}"),
         "Dataset revision",
     )
     .await
+    {
+        Ok(response) => Ok(response),
+        Err(_) => {
+            fetch_json(
+                &format!("/api/datasets/{dataset_id}/revisions/{revision_id}"),
+                "Dataset revision",
+            )
+            .await
+        }
+    }
 }
 
 #[cfg(feature = "hydrate")]

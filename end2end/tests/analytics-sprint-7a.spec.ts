@@ -99,11 +99,10 @@ test.describe("source-exact scoped analytics boundary", () => {
       `/api/dashboards/${fixture.dashboard.id}/placements/${fixture.tablePlacement.placement_id}/render/table?page_size=100`,
     ));
     expect(table.materialization_state).toBe("ready");
-    expect(table.rows).toHaveLength(3);
+    expect(table.rows).toHaveLength(1);
     const rows = JSON.stringify(table.rows);
-    expect(rows).toContain("Initial");
-    expect(rows).toContain("Same time A");
-    expect(rows).toContain("Same time B");
+    expect(rows).toContain("Submitted owner");
+    expect(rows).toContain('"amount":"20"');
     expect(rows).not.toContain("New after initial sync");
     expect(rows).not.toContain("Outside scope");
   });
