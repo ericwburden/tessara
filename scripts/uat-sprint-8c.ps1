@@ -22,6 +22,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $evidencePathWasExplicit = $PSBoundParameters.ContainsKey("EvidencePath")
 $requestedSelfTest = [bool]$SelfTest
 . (Join-Path $PSScriptRoot "sprint-8c-harness-isolation.ps1")
+. (Join-Path $PSScriptRoot "sprint-8c-uat-predicate-inventory.ps1")
 $SelfTest = $requestedSelfTest
 $scenarioContractPath = Join-Path $repoRoot "docs/sprints/sprint-8c-uat/scenario-contract.json"
 $script:Sprint8CRefreshTestIdentities = @(
@@ -38,6 +39,11 @@ $script:Sprint8CDagTestIdentities = @(
     "candidate_sources_reject_a_transitive_cycle_before_any_sync_attempt",
     "rebuild_promotes_the_full_topological_closure_and_leaves_independent_state_exact",
     "downstream_materialization_failure_rolls_back_every_rebuilt_table"
+)
+$script:Sprint8CResponseOwnerInventory = Get-Sprint8CResponseOwnerTestInventory
+$script:Sprint8CWorkflowEventInventory = @(Get-Sprint8CWorkflowEventTestInventory)
+$script:Sprint8CWorkflowEventTestIdentities = @(
+    $script:Sprint8CWorkflowEventInventory | ForEach-Object { @($_.identities) }
 )
 
 function Get-Sprint8CUatPredicateCatalog {
@@ -93,13 +99,7 @@ function Get-Sprint8CUatPredicateCatalog {
             evidence_contract = [pscustomobject][ordered]@{
                 kind = "exact-identities"; proof = "response-module-test-suite"
                 package = "tessara-response-module"; test_binary = "owner_persistence"
-                expected_test_identities = @(
-                    "create_is_atomic_audited_evented_and_idempotent",
-                    "create_requires_the_exact_live_start_claim",
-                    "expired_start_claim_cannot_create_a_response",
-                    "inaccessible_response_is_nondisclosing",
-                    "pinned_draft_saves_submits_and_exports_without_live_providers"
-                )
+                expected_test_identities = @($script:Sprint8CResponseOwnerInventory.identities)
             }
         },
         [pscustomobject][ordered]@{
@@ -117,12 +117,9 @@ function Get-Sprint8CUatPredicateCatalog {
             path = "scripts/test-sprint-8c-workflow-events.ps1"; arguments = @()
             topology = "isolated-database"
             evidence_contract = [pscustomobject][ordered]@{
-                kind = "exact-identities"; proof = "workflow-response-event-consumption"
-                package = "tessara-api"; test_binary = "lib"
-                expected_test_identities = @(
-                    "workflow_response_consumer::tests::projection_revision_policy_is_stale_safe_gap_intolerant_and_reconciliation_aware",
-                    "workflow_response_consumer::tests::workflow_events_consume_once_and_advance_the_same_actor_and_node_once"
-                )
+                kind = "exact-runs"; proof = "workflow-response-event-consumption"
+                expected_runs = @($script:Sprint8CWorkflowEventInventory)
+                expected_test_identities = @($script:Sprint8CWorkflowEventTestIdentities)
             }
         },
         [pscustomobject][ordered]@{
@@ -132,7 +129,8 @@ function Get-Sprint8CUatPredicateCatalog {
             evidence_contract = [pscustomobject][ordered]@{
                 kind = "summary"; proof = "response-owner-to-dataset-export-boundary"
                 expected_counts = [pscustomobject][ordered]@{
-                    response_owner_tests = 5; dataset_sync_tests = 7; dataset_refresh_tests = 8
+                    response_owner_tests = @($script:Sprint8CResponseOwnerInventory.identities).Count
+                    dataset_sync_tests = 7; dataset_refresh_tests = 8
                 }
             }
         },
@@ -286,7 +284,7 @@ function Get-Sprint8CUatAssertionEvidenceClaims {
             workflow_events_exact = @(
                 [pscustomobject][ordered]@{
                     predicate_id = "workflow-events"
-                    test_identity = "workflow_response_consumer::tests::workflow_events_consume_once_and_advance_the_same_actor_and_node_once"
+                    test_identity = "workflow_response_consumer::tests::autonomous_consumer_recovers_owner_start_save_submit_backlog_while_unready"
                 }
             )
             response_export_boundary_exact = @(
@@ -441,6 +439,24 @@ function Assert-Sprint8CUatPredicateContract {
                 -not [string]::IsNullOrWhiteSpace([string]$evidenceContract.proof) -and
                 -not [string]::IsNullOrWhiteSpace([string]$evidenceContract.package) -and
                 -not [string]::IsNullOrWhiteSpace([string]$evidenceContract.test_binary)
+            $exactRunsValid = $false
+            if ($evidenceKind -ceq "exact-runs" -and
+                [string]$predicate.kind -ceq "script" -and
+                -not [string]::IsNullOrWhiteSpace([string]$evidenceContract.proof)) {
+                $expectedRuns = @($evidenceContract.expected_runs)
+                $runIdentities = @($expectedRuns | ForEach-Object { @($_.identities) })
+                $exactRunsValid = $expectedRuns.Count -gt 0 -and
+                    $runIdentities.Count -eq $expectedTestIdentities.Count -and
+                    ($runIdentities -join "`n") -ceq ($expectedTestIdentities -join "`n") -and
+                    @($expectedRuns.label | Sort-Object -Unique).Count -eq $expectedRuns.Count -and
+                    @($expectedRuns | Where-Object {
+                        [string]::IsNullOrWhiteSpace([string]$_.label) -or
+                        [string]::IsNullOrWhiteSpace([string]$_.package) -or
+                        [string]::IsNullOrWhiteSpace([string]$_.test_binary) -or
+                        @($_.arguments).Count -eq 0 -or @($_.identities).Count -eq 0 -or
+                        @($_.identities | Sort-Object -Unique).Count -ne @($_.identities).Count
+                    }).Count -eq 0
+            }
             $summaryValid = $evidenceKind -ceq "summary" -and
                 [string]$predicate.kind -ceq "script" -and
                 -not [string]::IsNullOrWhiteSpace([string]$evidenceContract.proof) -and
@@ -476,9 +492,9 @@ function Assert-Sprint8CUatPredicateContract {
                     default { $false }
                 }
             }
-            if ((-not $legacyValid -and -not $exactValid -and -not $summaryValid -and
-                    -not $structuredValid) -or
-                (($legacyValid -or $exactValid) -and (
+            if ((-not $legacyValid -and -not $exactValid -and -not $exactRunsValid -and
+                    -not $summaryValid -and -not $structuredValid) -or
+                (($legacyValid -or $exactValid -or $exactRunsValid) -and (
                     $expectedTestIdentities.Count -eq 0 -or
                     @($expectedTestIdentities | Sort-Object -Unique).Count -ne $expectedTestIdentities.Count
                 ))) {
@@ -610,6 +626,36 @@ function Invoke-Sprint8CProgramPredicate {
         arguments = @($Arguments)
         exit_code = $exitCode
         output = @($output)
+    }
+}
+
+function Assert-Sprint8CExactCargoSelector {
+    param(
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [Parameter(Mandatory)][string]$Package,
+        [Parameter(Mandatory)][string]$TestBinary,
+        [Parameter(Mandatory)][string]$PredicateId
+    )
+
+    $packageIndex = [Array]::IndexOf($Arguments, "-p")
+    $binaryIndex = [Array]::IndexOf($Arguments, "--test")
+    $libIndex = [Array]::IndexOf($Arguments, "--lib")
+    $jobsIndex = [Array]::IndexOf($Arguments, "--jobs")
+    $binarySelectorValid = if ($TestBinary -ceq "lib") {
+        $libIndex -ge 0 -and $binaryIndex -lt 0
+    } else {
+        $binaryIndex -ge 0 -and $binaryIndex + 1 -lt $Arguments.Count -and
+            $Arguments[$binaryIndex + 1] -ceq $TestBinary
+    }
+    if ($Arguments.Count -eq 0 -or $Arguments[0] -cne "test" -or
+        $packageIndex -lt 0 -or $packageIndex + 1 -ge $Arguments.Count -or
+        $Arguments[$packageIndex + 1] -cne $Package -or
+        -not $binarySelectorValid -or
+        $Arguments -cnotcontains "--locked" -or
+        $Arguments -cnotcontains "--offline" -or
+        $jobsIndex -lt 0 -or $jobsIndex + 1 -ge $Arguments.Count -or
+        $Arguments[$jobsIndex + 1] -cne "1") {
+        throw "Predicate '$PredicateId' evidence does not retain its exact Cargo test selector."
     }
 }
 
@@ -873,6 +919,54 @@ function Assert-Sprint8CExactTestPredicateEvidence {
             cleanup_restoration = $document.cleanup_restoration
         }
     }
+    if ($kind -ceq "exact-runs") {
+        $expectedRuns = @($contract.expected_runs)
+        $actualRuns = @($document.runs)
+        $expected = @($contract.expected_test_identities | ForEach-Object { [string]$_ })
+        $declared = @($document.expected_test_identities | ForEach-Object { [string]$_ })
+        $executed = @($document.executed_test_identities | ForEach-Object { [string]$_ })
+        if ($expectedRuns.Count -eq 0 -or $actualRuns.Count -ne $expectedRuns.Count -or
+            [int]$document.executed_test_count -ne $expected.Count -or
+            (@($declared | Sort-Object -Unique) -join "`n") -cne
+                (@($expected | Sort-Object -Unique) -join "`n") -or
+            (@($executed | Sort-Object -Unique) -join "`n") -cne
+                (@($expected | Sort-Object -Unique) -join "`n") -or
+            $declared.Count -ne $expected.Count -or $executed.Count -ne $expected.Count -or
+            [string]$document.database.mode -cne "disposable-postgres" -or
+            [string]$document.database.cleanup_restoration.state -cne "passed") {
+            throw "Predicate '$($Predicate.id)' evidence does not prove its exact multi-run test identity and cleanup contract."
+        }
+        for ($index = 0; $index -lt $expectedRuns.Count; $index++) {
+            $expectedRun = $expectedRuns[$index]
+            $actualRun = $actualRuns[$index]
+            $expectedRunIdentities = @($expectedRun.identities | ForEach-Object { [string]$_ })
+            $declaredRunIdentities = @($actualRun.expected_test_identities | ForEach-Object { [string]$_ })
+            $executedRunIdentities = @($actualRun.executed_test_identities | ForEach-Object { [string]$_ })
+            $expectedArguments = @($expectedRun.arguments | ForEach-Object { [string]$_ }) +
+                @("--", "--format", "terse")
+            $actualArguments = @($actualRun.arguments | ForEach-Object { [string]$_ })
+            if ([string]$actualRun.label -cne [string]$expectedRun.label -or
+                [int]$actualRun.executed_test_count -ne $expectedRunIdentities.Count -or
+                ($declaredRunIdentities -join "`n") -cne ($expectedRunIdentities -join "`n") -or
+                ($executedRunIdentities -join "`n") -cne ($expectedRunIdentities -join "`n") -or
+                ($actualArguments -join "`n") -cne ($expectedArguments -join "`n")) {
+                throw "Predicate '$($Predicate.id)' evidence does not prove exact Workflow run '$([string]$expectedRun.label)'."
+            }
+            Assert-Sprint8CExactCargoSelector -Arguments $actualArguments `
+                -Package ([string]$expectedRun.package) -TestBinary ([string]$expectedRun.test_binary) `
+                -PredicateId ([string]$Predicate.id)
+        }
+        return [pscustomobject][ordered]@{
+            path = $resolved
+            sha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+            proof = [string]$document.proof
+            suite = $null
+            test_binary = "multiple"
+            test_identities = @($executed)
+            executed_test_count = [int]$document.executed_test_count
+            cleanup_restoration = $document.database.cleanup_restoration
+        }
+    }
     $evidence = if ($kind -ceq "exact-identities" -and
         $null -ne $document.PSObject.Properties['suites']) {
         $matches = @($document.suites | Where-Object {
@@ -913,28 +1007,11 @@ function Assert-Sprint8CExactTestPredicateEvidence {
             @($commandArgumentsProperty.Value | ForEach-Object { [string]$_ })
         })
     }
-    $packageIndex = [Array]::IndexOf($arguments, "-p")
-    $binaryIndex = [Array]::IndexOf($arguments, "--test")
-    $libIndex = [Array]::IndexOf($arguments, "--lib")
-    $jobsIndex = [Array]::IndexOf($arguments, "--jobs")
-    $binarySelectorValid = if ([string]$contract.test_binary -ceq "lib") {
-        $libIndex -ge 0 -and $binaryIndex -lt 0
-    } else {
-        $binaryIndex -ge 0 -and $binaryIndex + 1 -lt $arguments.Count -and
-            $arguments[$binaryIndex + 1] -ceq [string]$contract.test_binary
-    }
-    if ($arguments.Count -eq 0 -or $arguments[0] -cne "test" -or
-        $packageIndex -lt 0 -or $packageIndex + 1 -ge $arguments.Count -or
-        $arguments[$packageIndex + 1] -cne $(if ($kind -ceq "legacy-exact-identities") {
+    Assert-Sprint8CExactCargoSelector -Arguments $arguments `
+        -Package $(if ($kind -ceq "legacy-exact-identities") {
             "tessara-dataset-module"
-        } else { [string]$contract.package }) -or
-        -not $binarySelectorValid -or
-        $arguments -cnotcontains "--locked" -or
-        $arguments -cnotcontains "--offline" -or
-        $jobsIndex -lt 0 -or $jobsIndex + 1 -ge $arguments.Count -or
-        $arguments[$jobsIndex + 1] -cne "1") {
-        throw "Predicate '$($Predicate.id)' evidence does not retain its exact Cargo test selector."
-    }
+        } else { [string]$contract.package }) `
+        -TestBinary ([string]$contract.test_binary) -PredicateId ([string]$Predicate.id)
     [pscustomobject][ordered]@{
         path = $resolved
         sha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1569,24 +1646,30 @@ function Test-Sprint8CUatPredicateReadiness {
             proof = "workflow-response-event-consumption"; state = "passed"
             expected_test_identities = @($workflowPredicate.evidence_contract.expected_test_identities)
             executed_test_identities = @($workflowPredicate.evidence_contract.expected_test_identities)
-            executed_test_count = 2
+            executed_test_count = @($workflowPredicate.evidence_contract.expected_test_identities).Count
             database = [pscustomobject]@{
                 mode = "disposable-postgres"
                 cleanup_restoration = [pscustomobject]@{ state = "passed" }
             }
-            command = [pscustomobject]@{
-                arguments = @(
-                    "test", "-p", "tessara-api", "--lib", "--locked", "--offline", "--jobs", "1"
-                )
-            }
+            runs = @($workflowPredicate.evidence_contract.expected_runs | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    label = [string]$_.label
+                    arguments = @($_.arguments) + @("--", "--format", "terse")
+                    expected_test_identities = @($_.identities)
+                    executed_test_identities = @($_.identities)
+                    executed_test_count = @($_.identities).Count
+                }
+            })
         }
         $workflowPath = Join-Path $selfTestRoot "workflow-lib.json"
         Publish-Sprint8CHarnessEvidence -Document $workflowEvidence -OutputPath $workflowPath | Out-Null
         Assert-Sprint8CExactTestPredicateEvidence -Predicate $workflowPredicate `
             -EvidencePath $workflowPath | Out-Null
         $workflowTampered = $workflowEvidence | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
-        $workflowTampered.command.arguments = @(
-            "test", "-p", "tessara-api", "--test", "lib", "--locked", "--offline", "--jobs", "1"
+        $workflowTampered.runs[0].arguments = @(
+            "test", "-p", "tessara-api", "--test", "lib",
+            "workflow_response_consumer::tests::", "--locked", "--offline", "--jobs", "1",
+            "--", "--format", "terse"
         )
         $workflowTamperedPath = Join-Path $selfTestRoot "workflow-lib-tampered.json"
         Publish-Sprint8CHarnessEvidence -Document $workflowTampered `
@@ -1594,9 +1677,9 @@ function Test-Sprint8CUatPredicateReadiness {
         try {
             Assert-Sprint8CExactTestPredicateEvidence -Predicate $workflowPredicate `
                 -EvidencePath $workflowTamperedPath | Out-Null
-            throw "Sprint 8C UAT self-test accepted a substituted Workflow --test selector."
+            throw "Sprint 8C UAT self-test accepted a substituted Workflow run selector."
         } catch {
-            if ($_.Exception.Message -notmatch 'exact Cargo test selector') { throw }
+            if ($_.Exception.Message -notmatch 'exact Workflow run|exact Cargo test selector') { throw }
         }
 
         $prerequisiteOnly = Get-Sprint8CUatAssertionProofState `

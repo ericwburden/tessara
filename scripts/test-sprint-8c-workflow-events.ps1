@@ -9,38 +9,8 @@ $databaseUrlWasPresent = Test-Path Env:DATABASE_URL
 $databaseUrlBefore = $env:DATABASE_URL
 . (Join-Path $PSScriptRoot "sprint-8c-cargo-test-integrity.ps1")
 . (Join-Path $PSScriptRoot "sprint-8c-harness-isolation.ps1")
-$contracts = @(
-    [pscustomobject][ordered]@{
-        label = "Core autonomous consumer"
-        arguments = @(
-            "test", "-p", "tessara-api", "--lib", "workflow_response_consumer::tests::",
-            "--locked", "--offline", "--jobs", "1"
-        )
-        identities = @(
-            "workflow_response_consumer::tests::autonomous_consumer_recovers_owner_start_save_submit_backlog_while_unready",
-            "workflow_response_consumer::tests::background_consumer_cancels_cleanly_without_losing_the_durable_cursor",
-            "workflow_response_consumer::tests::projection_revision_policy_is_stale_safe_gap_intolerant_and_reconciliation_aware"
-        )
-    },
-    [pscustomobject][ordered]@{
-        label = "Response owner outbox"
-        arguments = @(
-            "test", "-p", "tessara-response-module", "--test", "owner_persistence",
-            "--locked", "--offline", "--jobs", "1",
-            "pinned_draft_saves_submits_and_exports_without_live_providers"
-        )
-        identities = @("pinned_draft_saves_submits_and_exports_without_live_providers")
-    },
-    [pscustomobject][ordered]@{
-        label = "Response consumer ACK"
-        arguments = @(
-            "test", "-p", "tessara-response-module", "--lib",
-            "--locked", "--offline", "--jobs", "1",
-            "event_provider::tests::workflow_consumer_checkpoint_ack_is_monotonic_and_rejects_unpublished_heads"
-        )
-        identities = @("event_provider::tests::workflow_consumer_checkpoint_ack_is_monotonic_and_rejects_unpublished_heads")
-    }
-)
+. (Join-Path $PSScriptRoot "sprint-8c-uat-predicate-inventory.ps1")
+$contracts = @(Get-Sprint8CWorkflowEventTestInventory)
 $expected = @($contracts | ForEach-Object { @($_.identities) })
 $cleanupSucceeded = $false
 $runs = [Collections.Generic.List[object]]::new()

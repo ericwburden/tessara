@@ -13,23 +13,15 @@ $databaseUrlWasPresent = Test-Path Env:DATABASE_URL
 $databaseUrlBefore = $env:DATABASE_URL
 . (Join-Path $PSScriptRoot "sprint-8c-cargo-test-integrity.ps1")
 . (Join-Path $PSScriptRoot "sprint-8c-harness-isolation.ps1")
+. (Join-Path $PSScriptRoot "sprint-8c-uat-predicate-inventory.ps1")
+$ownerInventory = Get-Sprint8CResponseOwnerTestInventory
 
 $suiteContracts = [ordered]@{
     Owner = [pscustomobject][ordered]@{
-        kind = "integration"; binary = "owner_persistence"; identities = @(
-            "concurrent_different_save_input_with_one_key_applies_once_and_conflicts",
-            "concurrent_identical_delete_is_one_apply_and_one_replay",
-            "concurrent_identical_save_is_one_apply_and_one_replay",
-            "concurrent_identical_start_is_one_apply_and_one_replay",
-            "concurrent_identical_submit_is_one_apply_and_one_replay",
-            "create_is_atomic_audited_evented_and_idempotent",
-            "create_requires_the_exact_live_start_claim",
-            "delete_authority_separates_respond_ownership_from_manage_scope",
-            "expired_start_claim_cannot_create_a_response",
-            "fresh_gateway_grant_replays_stable_request_and_preserves_initial_binding",
-            "inaccessible_response_is_nondisclosing",
-            "pinned_draft_saves_submits_and_exports_without_live_providers"
-        )
+        package = [string]$ownerInventory.package
+        kind = [string]$ownerInventory.kind
+        binary = [string]$ownerInventory.binary
+        identities = @($ownerInventory.identities)
     }
     Bootstrap = [pscustomobject][ordered]@{
         kind = "integration"; binary = "bootstrap_integration"; identities = @(

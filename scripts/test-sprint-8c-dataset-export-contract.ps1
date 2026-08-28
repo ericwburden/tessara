@@ -8,6 +8,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "sprint-8c-harness-isolation.ps1")
+. (Join-Path $PSScriptRoot "sprint-8c-uat-predicate-inventory.ps1")
+$ownerExpectedCount = @((Get-Sprint8CResponseOwnerTestInventory).identities).Count
 
 $fullEvidenceRoot = if ([IO.Path]::IsPathRooted($EvidenceRoot)) {
     [IO.Path]::GetFullPath($EvidenceRoot)
@@ -29,7 +31,7 @@ $ownerReceipt = Get-Content -Raw -LiteralPath $ownerEvidence | ConvertFrom-Json 
 $consumerReceipt = Get-Content -Raw -LiteralPath $consumerEvidence | ConvertFrom-Json -Depth 100
 if ([string]$ownerReceipt.proof -cne "response-module-test-suite" -or
     [string]$ownerReceipt.state -cne "passed" -or
-    [int]$ownerReceipt.executed_test_count -ne 12 -or
+    [int]$ownerReceipt.executed_test_count -ne $ownerExpectedCount -or
     [string]$consumerReceipt.proof -cne "dataset-module-test-suite" -or
     [string]$consumerReceipt.state -cne "passed" -or
     [int]$consumerReceipt.executed_test_count -ne 8) {
@@ -42,7 +44,7 @@ $result = [pscustomobject][ordered]@{
     proof = "response-owner-to-dataset-export-boundary"
     state = "passed"
     source = Get-Sprint8CSourceIdentity
-    response_owner_tests = 12
+    response_owner_tests = $ownerExpectedCount
     dataset_sync_tests = 7
     dataset_refresh_tests = 8
     output_sha256 = [pscustomobject][ordered]@{
