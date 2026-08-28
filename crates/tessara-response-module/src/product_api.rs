@@ -720,6 +720,8 @@ async fn authorize_product(
 }
 
 fn response_access(grant: &AuthorizationGrantV3) -> Result<ResponseAccess, ProductApiError> {
+    let read_own =
+        SecurityCapabilityId::new("submissions:read_own").map_err(|_| ProductApiError::Internal)?;
     let respond =
         SecurityCapabilityId::new("submissions:respond").map_err(|_| ProductApiError::Internal)?;
     let manage =
@@ -749,7 +751,7 @@ fn response_access(grant: &AuthorizationGrantV3) -> Result<ResponseAccess, Produ
         delegated_account_ids: grant
             .delegation_basis
             .iter()
-            .filter(|basis| basis.capability == respond)
+            .filter(|basis| basis.capability == read_own || basis.capability == respond)
             .map(|basis| basis.delegated_by_actor_id)
             .collect(),
         respond_node_ids,
@@ -1151,19 +1153,25 @@ mod tests {
             DelegationBasisV1 {
                 delegation_id: Uuid::from_u128(20),
                 delegated_by_actor_id: Uuid::from_u128(21),
-                capability: SecurityCapabilityId::new("submissions:respond").unwrap(),
+                capability: SecurityCapabilityId::new("submissions:read_own").unwrap(),
                 organization_root_id: Uuid::from_u128(1),
             },
             DelegationBasisV1 {
                 delegation_id: Uuid::from_u128(22),
                 delegated_by_actor_id: Uuid::from_u128(23),
+                capability: SecurityCapabilityId::new("submissions:respond").unwrap(),
+                organization_root_id: Uuid::from_u128(1),
+            },
+            DelegationBasisV1 {
+                delegation_id: Uuid::from_u128(24),
+                delegated_by_actor_id: Uuid::from_u128(25),
                 capability: SecurityCapabilityId::new("submissions:manage").unwrap(),
                 organization_root_id: Uuid::from_u128(1),
             },
         ];
         assert_eq!(
             response_access(&delegated).unwrap().delegated_account_ids,
-            BTreeSet::from([Uuid::from_u128(21)])
+            BTreeSet::from([Uuid::from_u128(21), Uuid::from_u128(23)])
         );
         let mut changed_service = grant;
         changed_service.presenting_service = ModuleServicePrincipalV1::ModuleInstance {
