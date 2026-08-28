@@ -607,7 +607,7 @@ index bef91a2a380a866f77928d648f2c7f161cbe2b59..ee02b8c20a2e88d50b3b116877d39591
 -    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
 +    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
 +    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
-+    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
++    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 +    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response", "idempotency": "none" },
 +    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
 +    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
@@ -1664,7 +1664,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..e7558c050694cbd5b674ecd57cc6cd66
  }
  
  async fn verified_document(
-@@ -826,6 +928,81 @@ mod tests {
+@@ -826,6 +928,97 @@ mod tests {
                  && contract.version.to_string()
                      == tessara_responses_contract::RESPONSE_CONTRACT_VERSION
          }));
@@ -1678,6 +1678,22 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..e7558c050694cbd5b674ecd57cc6cd66
 +            .expect("Response delete route");
 +        assert_eq!(
 +            delete
++                .required_capabilities_any_of
++                .iter()
++                .map(tessara_module_contract::SecurityCapabilityId::as_str)
++                .collect::<Vec<_>>(),
++            ["submissions:respond", "submissions:manage"]
++        );
++        let start = manifest
++            .public_api_routes
++            .iter()
++            .find(|route| {
++                route.method == tessara_module_contract::PublicApiMethod::Post
++                    && route.path_template == "/api/responses"
++            })
++            .expect("Response start route");
++        assert_eq!(
++            start
 +                .required_capabilities_any_of
 +                .iter()
 +                .map(tessara_module_contract::SecurityCapabilityId::as_str)
@@ -1746,7 +1762,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..e7558c050694cbd5b674ecd57cc6cd66
      }
  
      #[test]
-@@ -836,8 +1013,12 @@ mod tests {
+@@ -836,8 +1029,12 @@ mod tests {
              "CREATE TABLE response_values",
              "CREATE TABLE response_audit_events",
              "CREATE TABLE response_idempotency_receipts",
@@ -1759,7 +1775,7 @@ index 07e0554bf250f251956db99f9575a3bd9ca2bb26..e7558c050694cbd5b674ecd57cc6cd66
              "form_snapshot JSONB NOT NULL",
              "workflow_context JSONB NOT NULL",
          ] {
-@@ -851,7 +1032,7 @@ mod tests {
+@@ -851,7 +1048,7 @@ mod tests {
          assert!(!sql.contains("submission_value_multi"));
          assert_eq!(
              format!("{:x}", Sha256::digest(BASELINE)),
