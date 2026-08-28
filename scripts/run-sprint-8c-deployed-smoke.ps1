@@ -384,9 +384,6 @@ function Assert-Sprint8CResponseProductProjection {
     $expectedProperties = @($ResponseFixtureProof.response_ids.PSObject.Properties)
     $expectedIds = @($expectedProperties.Value | ForEach-Object { [string]$_ } | Sort-Object)
     $actualIds = @($ListDocument | ForEach-Object { [string]$_.id } | Sort-Object)
-    if (($actualIds -join "`n") -cne ($expectedIds -join "`n")) {
-        throw "Response list is not set-equal to the exact owner-bootstrap fixture identities."
-    }
     foreach ($property in $expectedProperties) {
         $logicalKey = [string]$property.Name
         $identity = [string]$property.Value
@@ -407,6 +404,8 @@ function Assert-Sprint8CResponseProductProjection {
     [pscustomobject][ordered]@{
         state = "passed"
         response_count = $expectedIds.Count
+        observed_response_count = $actualIds.Count
+        additional_response_count = $actualIds.Count - $expectedIds.Count
         draft_response_id = $draftId
         directory_sha256 = [string]$DirectoryResponse.body_sha256
         list_identities = @($actualIds)
@@ -651,6 +650,20 @@ function Test-Sprint8CDeployedSmokeHarness {
     Assert-Sprint8CResponseProductProjection -DirectoryResponse $responseDirectory `
         -ListDocument $responseList -DraftDetail $draftDetail `
         -ResponseFixtureProof $identity.response_fixtures | Out-Null
+    $scenarioMutatedResponseList = @($responseList) + @(
+        [pscustomobject]@{
+            id = "01980000-0088-7000-8000-000000000099"
+            status = "draft"
+        }
+    )
+    $scenarioMutatedProjection = Assert-Sprint8CResponseProductProjection `
+        -DirectoryResponse $responseDirectory -ListDocument $scenarioMutatedResponseList `
+        -DraftDetail $draftDetail -ResponseFixtureProof $identity.response_fixtures
+    if ([int]$scenarioMutatedProjection.response_count -ne 4 -or
+        [int]$scenarioMutatedProjection.observed_response_count -ne 5 -or
+        [int]$scenarioMutatedProjection.additional_response_count -ne 1) {
+        throw "Deployed smoke self-test rejected a scenario-owned Response beside exact bootstrap identities."
+    }
     $tamperedResponseList = @($responseList | ForEach-Object {
         $_ | ConvertTo-Json -Depth 10 | ConvertFrom-Json -Depth 10
     })
