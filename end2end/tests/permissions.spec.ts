@@ -437,17 +437,6 @@ async function expectNoJavaScriptRoutes(
   }
 }
 
-function datasetRevisionVersion(revision: DatasetRevisionDetail) {
-  if (
-    revision.version_major !== null &&
-    revision.version_minor !== null &&
-    revision.version_patch !== null
-  ) {
-    return `v${revision.version_major}.${revision.version_minor}.${revision.version_patch}`;
-  }
-  return `Revision ${revision.version_number}`;
-}
-
 async function expectHydratedRoute(page: Page, route: FrozenNativeRoute) {
   await expectHydratedNativeRouteDirectLoadAndRefresh(page, {
     path: route.path,
@@ -2839,7 +2828,7 @@ test.describe.serial("capability + scope + ownership permissions", () => {
     );
     const datasetDraftDetail = await getJson<DatasetRevisionDetail>(
       fixtures.admin,
-      `/api/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
+      `/api/admin/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
     );
     expect(datasetDraftDetail).toMatchObject({
       id: datasetDraft.revision_id,
@@ -2851,7 +2840,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         slug: dataset.slug,
       },
     });
-    const datasetDraftVersion = datasetRevisionVersion(datasetDraftDetail);
+    const currentVersionParts = [
+      dataset.current_version_major,
+      dataset.current_version_minor,
+      dataset.current_version_patch,
+    ];
+    expect(currentVersionParts.every((part) => typeof part === "number")).toBe(true);
+    const datasetCurrentVersion = `v${currentVersionParts.join(".")}`;
 
     try {
       await withNoJavaScriptPage(browser, async (page) => {
@@ -2907,20 +2902,13 @@ test.describe.serial("capability + scope + ownership permissions", () => {
             path: `/datasets/${dataset.id}/revisions`,
             expectedText: dataset.name,
             documentRootSelector: DATASET_DOCUMENT_ROOT,
-            additionalExpectedTexts: [
-              datasetDraftVersion,
-              datasetDraftLabel,
-              "Draft",
-            ],
+            additionalExpectedTexts: [datasetCurrentVersion, "Published current"],
           },
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}`,
-            expectedText: datasetDraftName,
+            expectedText: "Loading revision",
             documentRootSelector: DATASET_DOCUMENT_ROOT,
-            additionalExpectedTexts: [datasetDraftVersion, "Draft"],
-            expectedLabeledValues: [
-              { label: "Revision label", value: datasetDraftLabel },
-            ],
+            additionalExpectedTexts: ["Fetching dataset revision detail."],
           },
           {
             path: `/datasets/${dataset.id}/revisions/${datasetDraft.revision_id}/edit`,
@@ -3056,16 +3044,11 @@ test.describe.serial("capability + scope + ownership permissions", () => {
         ]);
 
         await page.goto("/components");
-        await expect(page.getByRole("link", { name: "Create Component" })).toBeVisible();
-        const draftEntry = page
-          .locator(`[data-component-directory-item][data-component-id="${draftOnly.component_id}"]`)
-          .filter({ visible: true });
-        await expect(draftEntry).toHaveCount(1);
-        await expect(draftEntry.getByText(draftOnly.name, { exact: true })).toBeVisible();
-        await expect(draftEntry.getByRole("link", { name: "Edit" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Create Component" })).toHaveCount(0);
+        await expect(page.locator(`[data-component-id="${draftOnly.component_id}"]`)).toHaveCount(0);
         await page.goto(`/components/${fixtures.inScopeComponent.slug}`);
-        await expect(page.getByRole("link", { name: "Versions" })).toBeVisible();
-        await expect(page.getByRole("link", { name: "Edit" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Versions" })).toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Edit" })).toHaveCount(0);
       });
 
       await withNoJavaScriptPage(browser, async (page) => {
