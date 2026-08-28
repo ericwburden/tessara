@@ -194,7 +194,9 @@ type WorkflowAssignmentSummary = {
   has_draft: boolean;
   has_submitted: boolean;
 };
-type PendingWorkflowWork = { workflow_assignment_id: string; account_id: string };
+type ResponseStartOptions = {
+  assignments: Array<{ workflow_assignment_id: string; account_id: string }>;
+};
 type PermissionResponseSummary = {
   id: string;
   node_id: string;
@@ -2633,16 +2635,16 @@ test.describe.serial("capability + scope + ownership permissions", () => {
   });
 
   test("owners and delegators can access owned or delegated work only", async () => {
-    const ownerPending = await getJson<PendingWorkflowWork[]>(
+    const ownerPending = await getJson<ResponseStartOptions>(
       fixtures.owner,
-      "/api/workflow-assignments/pending",
+      "/api/responses/start-options",
     );
-    expect(ownerPending.some((item) => item.workflow_assignment_id === fixtures.ownerAssignmentId)).toBe(
-      true,
-    );
-    expect(ownerPending.some((item) => item.workflow_assignment_id === fixtures.delegateAssignmentId)).toBe(
-      false,
-    );
+    expect(ownerPending.assignments.some(
+      (item) => item.workflow_assignment_id === fixtures.ownerAssignmentId,
+    )).toBe(true);
+    expect(ownerPending.assignments.some(
+      (item) => item.workflow_assignment_id === fixtures.delegateAssignmentId,
+    )).toBe(false);
 
     const ownerSubmission = await postJson<ResponseMutationResult>(
       fixtures.owner,
@@ -2659,19 +2661,19 @@ test.describe.serial("capability + scope + ownership permissions", () => {
       { workflow_assignment_id: fixtures.delegateAssignmentId },
     );
 
-    const delegatePending = await getJson<PendingWorkflowWork[]>(
+    const delegatePending = await getJson<ResponseStartOptions>(
       fixtures.delegate,
-      "/api/workflow-assignments/pending",
+      "/api/responses/start-options",
     );
-    expect(delegatePending.some((item) => item.workflow_assignment_id === fixtures.delegateAssignmentId)).toBe(
-      true,
-    );
+    expect(delegatePending.assignments.some(
+      (item) => item.workflow_assignment_id === fixtures.delegateAssignmentId,
+    )).toBe(true);
 
-    const delegatedPending = await getJson<PendingWorkflowWork[]>(
+    const delegatedPending = await getJson<ResponseStartOptions>(
       fixtures.delegator,
-      `/api/workflow-assignments/pending?delegate_account_id=${fixtures.userIds.delegate}`,
+      `/api/responses/start-options?delegate_account_id=${fixtures.userIds.delegate}`,
     );
-    expect(delegatedPending.map((item) => item.workflow_assignment_id)).toContain(
+    expect(delegatedPending.assignments.map((item) => item.workflow_assignment_id)).toContain(
       fixtures.delegateAssignmentId,
     );
     const delegatedSubmission = await postJson<ResponseMutationResult>(

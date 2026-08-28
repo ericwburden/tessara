@@ -24,8 +24,8 @@ use sqlx::Row;
 use tessara_module_contract::{
     AUTHORIZATION_GRANT_SCHEMA_VERSION_V3, AuthorizationAudienceV1, AuthorizationGrantOperationV1,
     AuthorizationGrantV3, BrowserLifecycleBootstrapV1, CapabilityScopeBindingV1,
-    CoreServiceRequestV1, DependencyBindingKey, DeploymentProfile, FunctionalContractId,
-    ModuleManifest, ModuleServicePrincipalV1, OriginalActorProjectionV1,
+    CoreServiceRequestV1, DelegationBasisV1, DependencyBindingKey, DeploymentProfile,
+    FunctionalContractId, ModuleManifest, ModuleServicePrincipalV1, OriginalActorProjectionV1,
     ProtocolSignaturePurposeV1, PublicApiIdempotency, PublicApiMethod,
     SHELL_CONTEXT_SCHEMA_VERSION_V2, SecurityCapabilityId, ServiceActionMethod, ShellContextV2,
     ShellDocumentStateV1, ShellNavigationGroupProjectionV2, ShellThemeV1, TypedResourceReference,
@@ -1012,6 +1012,9 @@ async fn issue_module_authorization(
         return Err(ApiError::Forbidden("module action unavailable".into()));
     }
 
+    let delegation_basis =
+        load_module_delegation_basis(&state.pool, actor.account.account_id, &bindings).await?;
+
     let now = Utc::now();
     let grant = AuthorizationGrantV3 {
         schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
@@ -1029,7 +1032,7 @@ async fn issue_module_authorization(
         operation: request.operation,
         capability_scope_bindings: bindings,
         resource_assertion: None,
-        delegation_basis: Vec::new(),
+        delegation_basis,
         authorization_revision: authorization_revision as u64,
         organization_revision: organization_revision as u64,
         jti: Uuid::new_v4(),
@@ -1046,6 +1049,70 @@ async fn issue_module_authorization(
     protocol_signer(ProtocolSignaturePurposeV1::AuthorizationGrant)?
         .sign(grant)
         .map_err(|error| ApiError::Internal(error.into()))
+}
+
+async fn load_module_delegation_basis(
+    pool: &sqlx::PgPool,
+    original_actor_id: Uuid,
+    bindings: &[CapabilityScopeBindingV1],
+) -> ApiResult<Vec<DelegationBasisV1>> {
+    let delegated_by_actor_ids = sqlx::query_scalar::<_, Uuid>(
+        "SELECT delegate_account_id
+         FROM account_delegations
+         WHERE delegator_account_id=$1
+         ORDER BY delegate_account_id",
+    )
+    .bind(original_actor_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(project_module_delegation_basis(
+        original_actor_id,
+        &delegated_by_actor_ids,
+        bindings,
+    ))
+}
+
+fn project_module_delegation_basis(
+    original_actor_id: Uuid,
+    delegated_by_actor_ids: &[Uuid],
+    bindings: &[CapabilityScopeBindingV1],
+) -> Vec<DelegationBasisV1> {
+    delegated_by_actor_ids
+        .iter()
+        .flat_map(|delegated_by_actor_id| {
+            bindings.iter().map(move |binding| DelegationBasisV1 {
+                delegation_id: module_delegation_id(
+                    original_actor_id,
+                    *delegated_by_actor_id,
+                    &binding.capability,
+                    binding.organization_root_id,
+                ),
+                delegated_by_actor_id: *delegated_by_actor_id,
+                capability: binding.capability.clone(),
+                organization_root_id: binding.organization_root_id,
+            })
+        })
+        .collect()
+}
+
+fn module_delegation_id(
+    original_actor_id: Uuid,
+    delegated_by_actor_id: Uuid,
+    capability: &SecurityCapabilityId,
+    organization_root_id: Uuid,
+) -> Uuid {
+    let mut digest = Sha256::new();
+    digest.update(b"tessara.module-delegation/v1\0");
+    digest.update(original_actor_id.as_bytes());
+    digest.update(delegated_by_actor_id.as_bytes());
+    digest.update(capability.as_str().as_bytes());
+    digest.update(organization_root_id.as_bytes());
+    let digest = digest.finalize();
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x80;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Uuid::from_bytes(bytes)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -1574,6 +1641,43 @@ mod tests {
             detail_bindings[1].authorized_organization_ids,
             [Uuid::from_u128(150)]
         );
+    }
+
+    #[test]
+    fn public_api_delegations_are_capability_and_scope_bound() {
+        let original_actor_id = Uuid::from_u128(1);
+        let delegated_by_actor_ids = [Uuid::from_u128(2), Uuid::from_u128(3)];
+        let bindings = [
+            CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("submissions:respond").unwrap(),
+                organization_root_id: Uuid::from_u128(10),
+                authorized_organization_ids: vec![Uuid::from_u128(11)],
+            },
+            CapabilityScopeBindingV1 {
+                capability: SecurityCapabilityId::new("submissions:manage").unwrap(),
+                organization_root_id: Uuid::from_u128(20),
+                authorized_organization_ids: Vec::new(),
+            },
+        ];
+
+        let basis =
+            project_module_delegation_basis(original_actor_id, &delegated_by_actor_ids, &bindings);
+        assert_eq!(basis.len(), 4);
+        assert_eq!(basis[0].delegated_by_actor_id, delegated_by_actor_ids[0]);
+        assert_eq!(basis[0].capability.as_str(), "submissions:respond");
+        assert_eq!(basis[0].organization_root_id, Uuid::from_u128(10));
+        assert_eq!(basis[1].capability.as_str(), "submissions:manage");
+        assert_eq!(basis[2].delegated_by_actor_id, delegated_by_actor_ids[1]);
+        assert_eq!(
+            basis,
+            project_module_delegation_basis(original_actor_id, &delegated_by_actor_ids, &bindings,),
+            "the relationship/capability/scope projection must be deterministic"
+        );
+        let unique_ids = basis
+            .iter()
+            .map(|item| item.delegation_id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(unique_ids.len(), basis.len());
     }
 
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
