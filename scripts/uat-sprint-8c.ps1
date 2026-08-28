@@ -126,6 +126,7 @@ function Get-Sprint8CUatPredicateCatalog {
             id = "dataset-export"; kind = "script"
             path = "scripts/test-sprint-8c-dataset-export-contract.ps1"; arguments = @()
             topology = "isolated-database"
+            child_evidence_root_argument = "-EvidenceRoot"
             evidence_contract = [pscustomobject][ordered]@{
                 kind = "summary"; proof = "response-owner-to-dataset-export-boundary"
                 expected_counts = [pscustomobject][ordered]@{
@@ -418,6 +419,12 @@ function Assert-Sprint8CUatPredicateContract {
             $readinessTargets -cnotcontains [string]$predicate.target) {
             throw "Sprint 8C UAT predicate '$($predicate.id)' references an unknown readiness target."
         }
+        $childEvidenceRootProperty = $predicate.PSObject.Properties['child_evidence_root_argument']
+        if ($null -ne $childEvidenceRootProperty -and (
+                [string]$predicate.kind -cne "script" -or
+                [string]$childEvidenceRootProperty.Value -cne "-EvidenceRoot")) {
+            throw "Sprint 8C UAT predicate '$($predicate.id)' has an invalid child evidence-root contract."
+        }
         $evidenceProperty = $predicate.PSObject.Properties['evidence_contract']
         if ($null -ne $evidenceProperty) {
             $evidenceContract = $evidenceProperty.Value
@@ -501,6 +508,14 @@ function Assert-Sprint8CUatPredicateContract {
                 throw "Sprint 8C UAT predicate '$($predicate.id)' has an invalid exact test-evidence contract."
             }
         }
+    }
+    $datasetExportPredicate = @($PredicateCatalog | Where-Object {
+        [string]$_.id -ceq "dataset-export"
+    })
+    if ($datasetExportPredicate.Count -ne 1 -or
+        $null -eq $datasetExportPredicate[0].PSObject.Properties['child_evidence_root_argument'] -or
+        [string]$datasetExportPredicate[0].child_evidence_root_argument -cne "-EvidenceRoot") {
+        throw "Sprint 8C UAT Dataset-export must bind nested receipts to its run-scoped child evidence root."
     }
     foreach ($scenario in @($ScenarioContract.scenarios)) {
         $actorKeys = @($scenario.actor_keys | ForEach-Object { [string]$_ })
@@ -1194,6 +1209,9 @@ function Test-Sprint8CUatPredicateReadiness {
         $predicates.id -cnotcontains "dataset-export") {
         throw "Sprint 8C UAT exact scenario/predicate selection self-test failed."
     }
+    $datasetExportPredicate = @($catalog | Where-Object {
+        [string]$_.id -ceq "dataset-export"
+    })[0]
 
     $allSelected = @(Get-Sprint8CSelectedScenarios `
         -ScenarioContract $scenarioContract -Selections @("All"))
@@ -1275,6 +1293,19 @@ function Test-Sprint8CUatPredicateReadiness {
         if ($_.Exception.Message -notmatch 'not set-equal') { throw }
     }
 
+    $tamperedCatalog = $catalog | ConvertTo-Json -Depth 100 | ConvertFrom-Json -Depth 100
+    $tamperedDatasetExport = @($tamperedCatalog | Where-Object {
+        [string]$_.id -ceq "dataset-export"
+    })[0]
+    $tamperedDatasetExport.PSObject.Properties.Remove('child_evidence_root_argument')
+    try {
+        Assert-Sprint8CUatPredicateContract -ScenarioContract $scenarioContract `
+            -PredicateCatalog @($tamperedCatalog) -AssertionMap $mapping -EvidenceClaims $evidenceClaims
+        throw "Sprint 8C UAT predicate self-test accepted Dataset-export without run-scoped nested evidence."
+    } catch {
+        if ($_.Exception.Message -notmatch 'must bind nested receipts') { throw }
+    }
+
     $tamperedScenarioContract = $scenarioContract | ConvertTo-Json -Depth 100 |
         ConvertFrom-Json -Depth 100
     $tamperedScenarioContract.scenarios[0].actor_keys[0] = "actor.predicted"
@@ -1312,6 +1343,18 @@ function Test-Sprint8CUatPredicateReadiness {
         }
         [IO.Directory]::CreateDirectory($firstChildRoot) | Out-Null
         [IO.Directory]::CreateDirectory($secondChildRoot) | Out-Null
+        $datasetExportEvidence = Join-Path $firstChildRoot "dataset-export.json"
+        $datasetExportArguments = @(Get-Sprint8CUatScriptPredicateArguments `
+            -Predicate $datasetExportPredicate -ChildEvidenceRoot $firstChildRoot `
+            -ChildEvidence $datasetExportEvidence)
+        $expectedDatasetExportArguments = @(
+            "-EvidencePath", $datasetExportEvidence,
+            "-EvidenceRoot", (Join-Path $firstChildRoot "dataset-export-children")
+        )
+        if (($datasetExportArguments -join "`n") -cne
+            ($expectedDatasetExportArguments -join "`n")) {
+            throw "Sprint 8C UAT self-test did not bind Dataset-export nested receipts to its action root."
+        }
         $firstMaterialization = Join-Path $firstChildRoot "reference-materialization.json"
         $secondMaterialization = Join-Path $secondChildRoot "reference-materialization.json"
         $syntheticMaterialization = [pscustomobject][ordered]@{
@@ -1878,6 +1921,28 @@ function Set-Sprint8CUatMaterializedTopologyEnvironment {
         -SupervisorPort ([int]$portValues[2])
 }
 
+function Get-Sprint8CUatScriptPredicateArguments {
+    param(
+        [Parameter(Mandatory)]$Predicate,
+        [Parameter(Mandatory)][string]$ChildEvidenceRoot,
+        [Parameter(Mandatory)][string]$ChildEvidence
+    )
+
+    $arguments = @($Predicate.arguments)
+    if ([string]$Predicate.id -ceq "acceptance-contract" -or
+        $null -ne $Predicate.PSObject.Properties['evidence_contract']) {
+        $arguments += @("-EvidencePath", $ChildEvidence)
+    }
+    $childEvidenceRootProperty = $Predicate.PSObject.Properties['child_evidence_root_argument']
+    if ($null -ne $childEvidenceRootProperty) {
+        $arguments += @(
+            [string]$childEvidenceRootProperty.Value,
+            (Join-Path $ChildEvidenceRoot "$($Predicate.id)-children")
+        )
+    }
+    @($arguments)
+}
+
 function Invoke-Sprint8CUatPredicate {
     param(
         [Parameter(Mandatory)]$Predicate,
@@ -1896,13 +1961,8 @@ function Invoke-Sprint8CUatPredicate {
     $exactTestEvidence = $null
     $commandResult = switch ([string]$Predicate.kind) {
         "script" {
-            $arguments = @($Predicate.arguments)
-            if ([string]$Predicate.id -ceq "acceptance-contract") {
-                $arguments += @("-EvidencePath", $childEvidence)
-            }
-            if ($null -ne $Predicate.PSObject.Properties['evidence_contract']) {
-                $arguments += @("-EvidencePath", $childEvidence)
-            }
+            $arguments = @(Get-Sprint8CUatScriptPredicateArguments -Predicate $Predicate `
+                -ChildEvidenceRoot $ChildEvidenceRoot -ChildEvidence $childEvidence)
             Invoke-Sprint8CChildScript -ScriptPath ([string]$Predicate.path) -Arguments $arguments
             break
         }
