@@ -674,6 +674,58 @@ function Assert-Sprint8CExactCargoSelector {
     }
 }
 
+function Assert-Sprint8CUatResponseHealthEvidence {
+    param(
+        [Parameter(Mandatory)]$Health,
+        [Parameter(Mandatory)][string]$PredicateId
+    )
+
+    $liveProperty = $Health.PSObject.Properties['response_live']
+    $readyProperty = $Health.PSObject.Properties['response_ready']
+    if ($null -eq $liveProperty -or $null -eq $readyProperty) {
+        throw "Predicate '$PredicateId' evidence does not prove the required Response health documents."
+    }
+    $live = $liveProperty.Value
+    $ready = $readyProperty.Value
+    $expectedEnvelopeProperties = @("schema_version", "status", "checks")
+    foreach ($document in @($live, $ready)) {
+        $actualProperties = @($document.PSObject.Properties.Name | Sort-Object)
+        if (($actualProperties -join "`n") -cne
+                (($expectedEnvelopeProperties | Sort-Object) -join "`n") -or
+            [int]$document.schema_version -ne 1 -or
+            [string]$document.status -cne "passing") {
+            throw "Predicate '$PredicateId' evidence does not prove the exact passing shared Response health envelope."
+        }
+    }
+    if (@($live.checks).Count -ne 0) {
+        throw "Predicate '$PredicateId' evidence does not prove empty Response liveness checks."
+    }
+
+    $expectedReadinessCodes = @(
+        "response.database",
+        "response.configuration",
+        "response.security_state",
+        "response.provider.forms",
+        "response.provider.workflow",
+        "response.events.publication",
+        "response.export.publication"
+    )
+    $readyChecks = @($ready.checks)
+    if ($readyChecks.Count -ne $expectedReadinessCodes.Count -or
+        (@($readyChecks.code) -join "`n") -cne ($expectedReadinessCodes -join "`n")) {
+        throw "Predicate '$PredicateId' evidence does not prove the exact ordered Response readiness inventory."
+    }
+    foreach ($check in $readyChecks) {
+        $actualProperties = @($check.PSObject.Properties.Name | Sort-Object)
+        if (($actualProperties -join "`n") -cne
+                ((@("code", "passing", "message") | Sort-Object) -join "`n") -or
+            -not [bool]$check.passing -or
+            [string]::IsNullOrWhiteSpace([string]$check.message)) {
+            throw "Predicate '$PredicateId' evidence does not prove the exact passing Response readiness check shape."
+        }
+    }
+}
+
 function Assert-Sprint8CExactTestPredicateEvidence {
     param(
         [Parameter(Mandatory)]$Predicate,
@@ -714,6 +766,8 @@ function Assert-Sprint8CExactTestPredicateEvidence {
         }
         switch ([string]$contract.receipt_type) {
             "materialization-noop" {
+                Assert-Sprint8CUatResponseHealthEvidence -Health $document.health `
+                    -PredicateId ([string]$Predicate.id)
                 $expectedOwners = @($contract.owner_order | ForEach-Object { [string]$_ })
                 $firstOwners = @($document.first_apply.owner_order | ForEach-Object { [string]$_ })
                 $noOpOwners = @($document.semantic_noop.owner_order | ForEach-Object { [string]$_ })
@@ -758,10 +812,6 @@ function Assert-Sprint8CExactTestPredicateEvidence {
                     -not [bool]$document.semantic_noop_proof.stable_container_topology -or
                     -not [bool]$document.gateway_start_boundary.owner_apply_completed_before_start -or
                     [string]$document.gateway_start_boundary.post_start_health -cne "passed" -or
-                    [string]$document.health.response_live.module_definition_id -cne "tessara.responses" -or
-                    [string]$document.health.response_live.module_release_version -cne "1.0.0" -or
-                    [string]$document.health.response_live.status -cne "live" -or
-                    [string]$document.health.response_ready.status -cne "ready" -or
                     [string]$document.cleanup_restoration.state -cne "passed" -or
                     [string]$document.cleanup_restoration.mode -cne "exact-project-teardown" -or
                     [string]::IsNullOrWhiteSpace([string]$document.fixture_receipt_path) -or
@@ -1480,10 +1530,24 @@ function Test-Sprint8CUatPredicateReadiness {
             }
             health = [pscustomobject]@{
                 response_live = [pscustomobject]@{
-                    module_definition_id = "tessara.responses"
-                    module_release_version = "1.0.0"; status = "live"
+                    schema_version = 1; status = "passing"; checks = @()
                 }
-                response_ready = [pscustomobject]@{ status = "ready" }
+                response_ready = [pscustomobject]@{
+                    schema_version = 1; status = "passing"
+                    checks = @(
+                        "response.database",
+                        "response.configuration",
+                        "response.security_state",
+                        "response.provider.forms",
+                        "response.provider.workflow",
+                        "response.events.publication",
+                        "response.export.publication" | ForEach-Object {
+                            [pscustomobject][ordered]@{
+                                code = $_; passing = $true; message = "self-test passing check"
+                            }
+                        }
+                    )
+                }
             }
             fixture_receipt_path = "target/self-test/fixture.json"
             fixture_receipt_sha256 = ('d' * 64)
@@ -1629,7 +1693,13 @@ function Test-Sprint8CUatPredicateReadiness {
         $structuredCases = @(
             [pscustomobject]@{
                 id = "materialization-noop"; document = $materializationDocument
-                tamper = { param($value) $value.health.response_ready.status = "degraded" }
+                tamper = {
+                    param($value)
+                    $value.health.response_live = [pscustomobject]@{
+                        module_definition_id = "tessara.responses"
+                        module_release_version = "1.0.0"; status = "live"
+                    }
+                }
             },
             [pscustomobject]@{
                 id = "failure-recovery"; document = $failureDocument
