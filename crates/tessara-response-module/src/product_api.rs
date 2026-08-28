@@ -367,10 +367,7 @@ pub(crate) async fn start_response(
             },
         )
         .await?;
-        if form.validate_for(workflow.form_version_id).is_err()
-            || form.form_id != workflow.form_id
-            || !form.source_scope_node_ids.contains(&workflow.node_id)
-        {
+        if !form_schema_matches_workflow(&form, workflow.form_id, workflow.form_version_id) {
             provider_client::record_provider_observation(
                 &runtime,
                 RESPONSE_FORM_BINDING,
@@ -430,6 +427,14 @@ pub(crate) async fn start_response(
         })
     })
     .await
+}
+
+fn form_schema_matches_workflow(
+    form: &FormVersionSchemaResponse,
+    workflow_form_id: Uuid,
+    workflow_form_version_id: Uuid,
+) -> bool {
+    form.validate_for(workflow_form_version_id).is_ok() && form.form_id == workflow_form_id
 }
 
 fn validate_start_authority(
@@ -1037,6 +1042,46 @@ mod tests {
             RESPONSE_START_CAPABILITIES,
             &["submissions:respond", "submissions:manage"]
         );
+    }
+
+    #[test]
+    fn response_form_schema_does_not_reimpose_workflow_node_scope() {
+        let form_id = Uuid::from_u128(20);
+        let form_version_id = Uuid::from_u128(21);
+        let schema = FormVersionSchemaResponse {
+            schema_version: FORM_VERSION_SCHEMA_VERSION,
+            form_id,
+            form_version_id,
+            form_name: "Assigned response form".into(),
+            form_slug: "assigned-response-form".into(),
+            version_label: Some("1.0.0".into()),
+            version_major: Some(1),
+            source_scope_node_ids: vec![Uuid::from_u128(22)],
+            source_scope_revision: String::new(),
+            source_scope_digest: String::new(),
+            content_revision: String::new(),
+            content_digest: String::new(),
+            sections: Vec::new(),
+            fields: Vec::new(),
+        }
+        .with_recomputed_digests()
+        .unwrap();
+
+        assert!(form_schema_matches_workflow(
+            &schema,
+            form_id,
+            form_version_id
+        ));
+        assert!(!form_schema_matches_workflow(
+            &schema,
+            Uuid::from_u128(23),
+            form_version_id
+        ));
+        assert!(!form_schema_matches_workflow(
+            &schema,
+            form_id,
+            Uuid::from_u128(24)
+        ));
     }
 
     #[test]
