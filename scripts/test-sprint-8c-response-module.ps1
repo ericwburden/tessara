@@ -80,6 +80,7 @@ $suiteContracts = [ordered]@{
         filter = "module_gateway::tests::public_api_"
         identities = @(
             "module_gateway::tests::public_api_capability_alternatives_authorize_either_declared_binding",
+            "module_gateway::tests::public_api_delegations_are_capability_and_scope_bound",
             "module_gateway::tests::public_api_grants_exclude_undeclared_actor_bindings"
         )
     }
