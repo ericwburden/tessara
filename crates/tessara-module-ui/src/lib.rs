@@ -357,7 +357,7 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
 
 #[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
-    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);document.querySelector('[data-shell-sign-out]')?.addEventListener('click',()=>{const form=document.createElement('form');form.method='post';form.action='/api/logout';document.body.appendChild(form);form.submit()})})();"#
+    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);const signOutButton=document.querySelector('[data-shell-sign-out]');signOutButton?.addEventListener('click',async()=>{signOutButton.disabled=true;try{const response=await fetch('/api/auth/logout',{method:'DELETE',credentials:'same-origin',headers:{accept:'application/json'}});if(!response.ok){throw new Error('Sign out failed')}const result=await response.json();if(result?.signed_out!==true){throw new Error('Sign out failed')}window.location.assign('/login')}catch(_error){signOutButton.disabled=false}})})();"#
 }
 
 #[cfg(feature = "components")]
@@ -506,6 +506,20 @@ mod tests {
         assert!(!html.contains("shell?.classList.add('mobile-nav-open')"));
         assert!(html.contains(r#"name="tessara-module-release" content="1.0.1""#));
         assert!(!html.contains("type=\"module\""));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn shell_interaction_script_uses_canonical_logout_contract() {
+        let script = shell_interaction_script();
+
+        assert!(script.contains("fetch('/api/auth/logout'"));
+        assert!(script.contains("method:'DELETE'"));
+        assert!(script.contains("credentials:'same-origin'"));
+        assert!(script.contains("result?.signed_out!==true"));
+        assert!(script.contains("window.location.assign('/login')"));
+        assert!(!script.contains("'/api/logout'"));
+        assert!(!script.contains("form.method='post'"));
     }
 
     #[test]

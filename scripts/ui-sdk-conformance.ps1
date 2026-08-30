@@ -10,8 +10,33 @@ function Add-Finding([string]$Code, [string]$Path, [string]$Message) {
     $findings.Add([pscustomobject][ordered]@{ code = $Code; path = $Path; message = $Message })
 }
 
+function Test-CanonicalShellLogoutContract([string]$Source) {
+    $match = [regex]::Match(
+        $Source,
+        '(?s)fn shell_interaction_script\(\).*?r#"(?<script>.*?)"#'
+    )
+    $script = if ($match.Success) { $match.Groups['script'].Value } else { $Source }
+    return $script.Contains("fetch('/api/auth/logout'") -and
+        $script.Contains("method:'DELETE'") -and
+        $script.Contains("credentials:'same-origin'") -and
+        $script.Contains("result?.signed_out!==true") -and
+        $script.Contains("window.location.assign('/login')") -and
+        -not $script.Contains("'/api/logout'") -and
+        -not $script.Contains("form.method='post'")
+}
+
+function Assert-CanonicalShellLogoutContractSelfTest {
+    $canonical = "fetch('/api/auth/logout',{method:'DELETE',credentials:'same-origin'});result?.signed_out!==true;window.location.assign('/login')"
+    $legacy = "form.method='post';form.action='/api/logout'"
+    if (-not (Test-CanonicalShellLogoutContract -Source $canonical) -or
+        (Test-CanonicalShellLogoutContract -Source $legacy)) {
+        throw "Canonical shell logout conformance self-test failed"
+    }
+}
+
 Push-Location $repoRoot
 try {
+    Assert-CanonicalShellLogoutContractSelfTest
     $sdkDigest = (Get-FileHash -LiteralPath "crates/tessara-module-ui/assets/module-ui.css" -Algorithm SHA256).Hash.ToLowerInvariant()
     $manifests = @(Get-ChildItem -LiteralPath "crates" -Recurse -File -Filter "manifest.json" | Sort-Object FullName)
     if ($manifests.Count -eq 0) { throw "No first-party manifests were found" }
@@ -95,6 +120,9 @@ try {
         if (-not $moduleDocumentSource.Contains($required)) {
             Add-Finding "module_shell_not_shared" "crates/tessara-module-ui/src/lib.rs" "complete module documents must render the shared $required component"
         }
+    }
+    if (-not (Test-CanonicalShellLogoutContract -Source $moduleDocumentSource)) {
+        Add-Finding "noncanonical_shell_logout" "crates/tessara-module-ui/src/lib.rs" "shared shell sign out must DELETE /api/auth/logout, require signed_out=true, and route successful logout to /login"
     }
     if (-not $sharedSidebarSource.Contains("ShellNavigationIcon") -or
         -not $coreNavigationSource.Contains("ShellNavigationIcon")) {
