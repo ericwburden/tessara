@@ -1067,7 +1067,13 @@ function Get-Sprint8CFormalActionMap {
     )
     $map["rehearsal-consumers"] = @(
         New-Sprint8CMaterializeAction -Id "setup" -Target Reference -KeepTopology
-        New-Sprint8CPowerShellAction -Id "dataset-export" -Script "scripts/test-sprint-8c-dataset-export-contract.ps1"
+        New-Sprint8CPowerShellAction -Id "dataset-export" `
+            -Script "scripts/test-sprint-8c-dataset-export-contract.ps1" `
+            -Arguments @(
+                "-EvidenceRoot", "{evidence}.d",
+                "-EvidencePath", "{evidence}"
+            ) `
+            -ProducesEvidence
         New-Sprint8CPowerShellAction -Id "component-consumer" -Script "scripts/test-sprint-8c-component-consumer.ps1"
         New-Sprint8CSmokeAction -Id "restoration-checkpoint" -UseExistingTopology
         New-Sprint8CAction -Id "teardown" -Kind teardown -Command "compose-down"
@@ -1258,6 +1264,17 @@ function Assert-Sprint8CFormalProfile {
             }
             if ([bool]$action.produces_evidence -and @($action.arguments) -cnotcontains "{evidence}") {
                 throw "Evidence-producing action '$id/$($action.id)' omits the attempt-scoped evidence path."
+            }
+            if ([string]$action.command -ceq "scripts/test-sprint-8c-dataset-export-contract.ps1") {
+                $expectedDatasetExportArguments = @(
+                    "-EvidenceRoot", "{evidence}.d",
+                    "-EvidencePath", "{evidence}"
+                )
+                if (-not [bool]$action.produces_evidence -or
+                    (@($action.arguments) -join "`n") -cne
+                        ($expectedDatasetExportArguments -join "`n")) {
+                    throw "Dataset export action '$id/$($action.id)' is not isolated to its lane attempt evidence namespace."
+                }
             }
             if ([bool]$action.provides_environment) {
                 $environmentProviders++
@@ -1651,6 +1668,9 @@ function Assert-Sprint8CHarnessEvidence {
             $expectedProof = "independent-response-upgrade-rollback-restoration"
         }
         "uat-sprint-8c.ps1" { $expectedProof = "uat-automated-predicates" }
+        "test-sprint-8c-dataset-export-contract.ps1" {
+            $expectedProof = "response-owner-to-dataset-export-boundary"
+        }
         "sprint-8c-acceptance-contract.ps1" {
             $expectedContract = "tessara.sprint-8c.acceptance-contract-result"
             $expectedStatus = "passed"
@@ -3056,6 +3076,28 @@ function Test-Sprint8CFormalRunner {
         }
     }
 
+    if ($Phase -ceq "candidate-rehearsal") {
+        $datasetExportActions = @($actionMap["rehearsal-consumers"] | Where-Object {
+            [string]$_.id -ceq "dataset-export"
+        })
+        if ($datasetExportActions.Count -ne 1) {
+            throw "Candidate Rehearsal does not define exactly one Dataset export action."
+        }
+        $datasetExportAction = $datasetExportActions[0]
+        $retainedArguments = @($datasetExportAction.arguments)
+        try {
+            $datasetExportAction.arguments = @("-EvidencePath", "{evidence}")
+            Assert-Sprint8CExpectedFailure `
+                -Label "candidate-rehearsal Dataset export missing child evidence isolation" `
+                -Action {
+                    Assert-Sprint8CFormalProfile -Contract $contract -Phase $Phase `
+                        -ActionMap $actionMap
+                }
+        } finally {
+            $datasetExportAction.arguments = $retainedArguments
+        }
+    }
+
     if ($Phase -ceq "sit") {
         $sitRustActions = @($actionMap["sit-rust"])
         $expectedSitRustActionIds = @(
@@ -3149,6 +3191,7 @@ function Test-Sprint8CFormalRunner {
             "identity", "order", "prerequisites", "environment", "evidence-mapping",
             "playwright-data-state", "missing-prerequisite", "missing-harness",
             "zero-argument-action", "typed-action-result", "unmapped-selector", "exclusive-mode",
+            "nested-action-evidence-isolation",
             "sit-fresh-browser-handoff", "defect-provenance-chronology",
             "chronology-publication-rollback"
         )
