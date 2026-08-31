@@ -34,6 +34,9 @@ executed. Implementation harvesting uses
 and require its immutable schedule and recovery rules.
 For any post-freeze correction, validate the canonical document against
 [`references/successor-impact-plan.schema.json`](references/successor-impact-plan.schema.json).
+When creating or auditing a UAT inventory, read
+[`references/uat-scenario-classification.md`](references/uat-scenario-classification.md)
+completely and enforce its automated-versus-human boundary before freeze.
 
 Otherwise read
 [`references/validation-protocol.md`](references/validation-protocol.md)
@@ -122,6 +125,10 @@ Preserve these invariants:
   provenance is classified and its routing decision is retained.
 - Automation may classify, invalidate, route, and block reruns; it never edits
   tests or declares an assertion obsolete.
+- Machine-decidable checks are scripted coverage even when an operator could
+  inspect their JSON or logs. Manual UAT requires direct product interaction
+  and an irreducible human-judgment question; a human evidence-review checklist
+  cannot replace automation.
 
 Do not interpret every command failure as a candidate failure. Record its
 stage and `assertions_started`, then apply the shared invalidation matrix.
@@ -137,7 +144,8 @@ Before freeze, record:
 - every roadmap exit-condition clause
 - relevant product, authorization, lifecycle, deployment, migration,
   compatibility, recovery, and rollback risks
-- automated, deployed-smoke, and manual UAT proof per clause
+- automated proof per clause, deployed-smoke where applicable, and manual UAT
+  only for a recorded human-observable acceptance concern
 - exact commands, environments, accounts, fixtures, topology, and evidence
   paths
 - the required receipt and evidence inventory, including planned conditional
@@ -351,7 +359,9 @@ Authorize `tessara-sprint-closeout` only when:
   v3 only, authenticated non-impact inheritance
 - every scripted/manual UAT scenario is passed with executed versus inherited
   coverage stated explicitly
-- every roadmap clause maps to automated and manual evidence
+- every roadmap clause maps to automated evidence, and every applicable manual
+  scenario states the product interaction and irreducible human-judgment
+  question instead of reviewing machine-readable artifacts
 - all invalidation decisions were satisfied
 - no required evidence is missing, stale, malformed, or unhashed
 - no product decision or open acceptance defect remains

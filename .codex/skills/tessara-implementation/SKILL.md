@@ -211,6 +211,13 @@ that cone instead of silently expanding scope.
 - Compare whole frames only with invariant fixture content. With current
   owner-controlled content, compare declared stable regions and independently
   assert the current semantic content.
+- Implement machine-decidable acceptance as automation. Parsing JSON or other
+  structured evidence, comparing exact fields/counts/hashes, checking source
+  ownership or topology, and asserting deterministic browser/API state belong
+  in focused targets or scripted coverage, never in a human checklist. For a
+  mixed scenario, automate those prerequisites and leave manual UAT only the
+  direct product interaction and irreducible human-judgment question defined by
+  [`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md).
 - Treat formal validation as certification of a completed implementation, not
   as the ordinary debugging loop. Reproduce and resolve every known failure in
   the implementation phase. Do not launch Readiness or Rehearsal merely to find
@@ -336,6 +343,8 @@ complete.
    failed/blocked targets. Formal Readiness cannot be the
    first execution of a fixture/environment/acceptance combination,
    authorization matrix, or generated-asset combination.
+   Reject an acceptance inventory that substitutes human review of machine-
+   readable evidence for a missing automated target or scripted scenario.
 8. Hand the clean implementation commit and passing implementation-readiness
    result to `tessara-sprint-validation` when formal sprint validation is
    requested. Let `tessara-sprint-validation`,

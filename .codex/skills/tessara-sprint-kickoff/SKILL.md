@@ -127,7 +127,12 @@ the current roadmap.
     name actual producer/test/fixture/environment/acceptance/runner inputs,
     candidate binding, exact target/lane consumers, and either a proved bounded
     cone or conservative full replay. Declare every UAT scripted/manual scenario
-    as a formal coverage item with a risk rank.
+    as a formal coverage item with a risk rank. Read
+    [`tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+    and
+    classify every machine-decidable artifact, API, browser, topology, or
+    provenance check as automated. Retain a manual scenario only when it names
+    a direct product interaction and an irreducible human-judgment question.
 11. Prepend the kickoff entry to `docs/progress-report.md`.
 12. Run the comprehensive planning audit below and correct planning gaps.
 13. Present the plan, unresolved decisions, and recommended first
@@ -144,7 +149,8 @@ Write the plan in Markdown with these sections:
   observability, and rollback specifications, retaining only relevant domains
 - assumptions, decisions, open questions, dependencies, and blockers
 - traceability matrix mapping every roadmap clause to specifications,
-  acceptance criteria, implementation slices, automated checks, and manual UAT
+  acceptance criteria, implementation slices, automated checks, and applicable
+  manual UAT
 - acceptance criteria with observable pass conditions and negative cases
 - ordered implementation slices with prerequisites, expected file/component
   touchpoints, exact focused exit targets, controlled-artifact fanout edges,
@@ -195,7 +201,9 @@ counts, reduced DTO replicas, and cross-owner fixture writes are prohibited.
 Seed the validation record before implementation with:
 
 - every roadmap exit-condition clause
-- one automated assertion and one manual UAT scenario per clause
+- automated evidence for every clause, plus a manual UAT scenario only when a
+  genuine human-observable acceptance concern remains after deterministic
+  checks are automated
 - product, authorization, lifecycle, deployment, compatibility, migration,
   observability, recovery, and rollback risks that apply
 - required commands, environments, roles/accounts, fixtures, and evidence paths
@@ -268,6 +276,10 @@ Before declaring kickoff complete, verify that:
   mandatory passing `ui-sdk-conformance` implementation target
 - acceptance commands, roles, environments, data, and evidence destinations
   are concrete
+- no manual UAT scenario consists of reviewing JSON, receipts, logs, hashes,
+  source scans, or other machine-decidable evidence; each retained manual
+  scenario records its product surface, direct interaction, irreducible human-
+  judgment question, and automated prerequisite receipts
 - assumptions and unresolved decisions are visible and no blocker is hidden
 - the plan traces the defect-provenance gate through implementation exit,
   every formal phase failure, Preflight rejection, and Closeout audit
@@ -330,6 +342,8 @@ Do not report kickoff complete unless:
   validated through the public APIs, and passed the planning-package audit
 - every owned domain has actual producer and test evidence plus an exact
   consumer inventory, and the shared successor-impact state machine is active
+- every acceptance clause has automated evidence and every retained manual UAT
+  scenario passes the automated-versus-human classification audit
 - the shared coordinator activation, deterministic prerequisites, and resource
   claims can produce one immutable execution plan
 - the kickoff progress entry was prepended

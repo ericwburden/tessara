@@ -9,6 +9,10 @@ Run formal acceptance for the exact SIT-authorized candidate. Do not change
 the acceptance inventory while executing it and do not authorize closeout
 directly.
 
+Read
+[`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+completely before reviewing or executing the scenario inventory.
+
 Inspect the tracked sprint validation contract before loading a protocol. When
 it declares `policy_version: tessara-validation-v2`, read
 [`../tessara-sprint-validation/references/validation-policy-v2.md`](../tessara-sprint-validation/references/validation-policy-v2.md)
@@ -65,11 +69,31 @@ state explicit non-impact rationale, and have no successor timestamps. Missing
 hashes, changed fixtures/environment/acceptance semantics, unknown paths, open
 defects, or expectation ambiguity require complete UAT.
 
+## Automated versus human boundary
+
+Do not treat inspection of machine-readable evidence as human UAT. A scenario
+whose pass/fail decision consists of parsing JSON, confirming exact fields,
+counts, hashes, identities, release sequences, source absence, isolation
+matrices, topology cleanup, API results, or other deterministic state must be a
+scripted scenario or an earlier automated target/lane. The same applies to
+deterministic browser behavior that a stable browser test can establish.
+
+Manual UAT must exercise the actual product surface and state an irreducible
+human acceptance question. For mixed coverage, require automation to establish
+fixtures, provenance, and exact state first; the human receipt references that
+passing automated evidence and records only the direct interaction and human
+judgment. If no human question remains, manual coverage is not applicable.
+
+If the frozen inventory labels an artifact-review checklist as manual UAT,
+block execution and return the classification gap to the coordinator. Do not
+ask a person to open a JSON file merely to manufacture manual evidence.
+
 ## Required execution order
 
 1. Reconfirm candidate provenance, SIT authorization, active slot, health,
    fixtures, roles/accounts, browser configuration, and evidence paths.
-2. Hash the frozen scripted and manual UAT inventory.
+2. Audit the scripted/manual classification, then hash the frozen inventory.
+   Block rather than execute a misclassified machine-decidable manual scenario.
 3. Under legacy/v2, run the contract's UAT command. Under v3, invoke each
    impact-plan `execute` scripted scenario through
    `Invoke-TessaraValidationLane`; the named script may be its adapter action.
@@ -91,6 +115,11 @@ Record for every scenario:
 - actual result and pass/fail decision
 - evidence paths and timestamps
 - cleanup and restored state
+
+For a manual scenario, also record the product surface, direct human
+interaction, irreducible judgment question, and prerequisite automated receipt.
+For a scripted scenario, retain the deterministic oracle and its declared
+machine-readable inputs.
 
 Run independent scenarios to completion when their state is isolated and safe,
 even if a sibling fails, so the phase collects useful results. Stop scenarios
@@ -169,7 +198,8 @@ candidate as successor-executed coverage or v3-authenticated non-impact
 inheritance, evidence is complete and hashed, no defect or product decision is
 open, every UAT provenance record is verified or validly superseded, the
 handoff topology is restored, and `uat-result.json` agrees with the human
-verification record.
+verification record. No passing manual receipt may consist solely of reviewing
+machine-readable evidence.
 
 Diagnostic harvest or focused repair work finishes at its coordinator-defined
 record boundary, not at this formal-UAT finish criterion.
