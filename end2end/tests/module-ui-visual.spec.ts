@@ -703,9 +703,12 @@ test.describe("canonical module UI visual baselines", () => {
     await expect(system).toHaveAttribute("aria-checked", "false");
     await expect(system).not.toHaveClass(/is-active/);
 
-    await page.locator(".account-copy strong").evaluate((element) => {
-      element.textContent = "Reference Workflow Delegate With An Intentionally Long Display Name";
-    });
+    await page
+      .getByRole("region", { name: "Account context" })
+      .locator(".account-copy strong")
+      .evaluate((element) => {
+        element.textContent = "Reference Workflow Delegate With An Intentionally Long Display Name";
+      });
     const overflow = await page.locator(".sidebar").evaluate((sidebar) => ({
       clientWidth: sidebar.clientWidth,
       scrollWidth: sidebar.scrollWidth,
