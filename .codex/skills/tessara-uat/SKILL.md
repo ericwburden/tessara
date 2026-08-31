@@ -82,7 +82,9 @@ Manual UAT must exercise the actual product surface and state an irreducible
 human acceptance question. For mixed coverage, require automation to establish
 fixtures, provenance, and exact state first; the human receipt references that
 passing automated evidence and records only the direct interaction and human
-judgment. If no human question remains, manual coverage is not applicable.
+judgment. Every sprint-delivered user-facing screen and feature still receives
+an exploratory human touch; manual coverage is not applicable only to a purely
+technical requirement with no user-facing surface.
 
 If the frozen inventory labels an artifact-review checklist as manual UAT,
 block execution and return the classification gap to the coordinator. Do not
@@ -99,11 +101,15 @@ ask a person to open a JSON file merely to manufacture manual evidence.
    `Invoke-TessaraValidationLane`; the named script may be its adapter action.
 4. Run every legacy/v2 manual scenario, or each v3 manual scenario marked
    `execute`; authenticate the remaining v3 inventory as inheritance.
-5. Include role/scope, responsive, failure containment, restart/recovery,
+5. Audit the screen/feature touch inventory and visit every mapped surface and
+   feature through its intended actor journey. Record observations beyond the
+   scripted pass/fail assertions, including unexpected regressions and useful
+   UI/UX follow-up opportunities.
+6. Include role/scope, responsive, failure containment, restart/recovery,
    upgrade, and rollback scenarios when their contracts changed.
-6. Restore the intended canonical handoff topology and verify health.
-7. Validate all UAT JSON, links, screenshots/log references, and hashes.
-8. Write `uat-result.json` only when scripted and manual UAT pass.
+7. Restore the intended canonical handoff topology and verify health.
+8. Validate all UAT JSON, links, screenshots/log references, and hashes.
+9. Write `uat-result.json` only when scripted and manual UAT pass.
 
 ## Scenario execution
 
@@ -120,6 +126,12 @@ For a manual scenario, also record the product surface, direct human
 interaction, irreducible judgment question, and prerequisite automated receipt.
 For a scripted scenario, retain the deterministic oracle and its declared
 machine-readable inputs.
+
+Record every exploratory observation with the affected screen/feature and
+classify it as an acceptance defect, a previously existing issue requiring an
+explicit scope/authority decision, or a non-blocking UI/UX improvement for
+future work. A non-blocking improvement does not change the frozen expectation;
+an actual defect follows the normal failure and invalidation path.
 
 Run independent scenarios to completion when their state is isolated and safe,
 even if a sibling fails, so the phase collects useful results. Stop scenarios
@@ -199,7 +211,9 @@ inheritance, evidence is complete and hashed, no defect or product decision is
 open, every UAT provenance record is verified or validly superseded, the
 handoff topology is restored, and `uat-result.json` agrees with the human
 verification record. No passing manual receipt may consist solely of reviewing
-machine-readable evidence.
+machine-readable evidence, every delivered user-facing screen/feature must have
+touch evidence, and every exploratory observation must have a retained
+classification and disposition.
 
 Diagnostic harvest or focused repair work finishes at its coordinator-defined
 record boundary, not at this formal-UAT finish criterion.

@@ -218,6 +218,10 @@ that cone instead of silently expanding scope.
   mixed scenario, automate those prerequisites and leave manual UAT only the
   direct product interaction and irreducible human-judgment question defined by
   [`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md).
+- When a slice adds or materially changes a user-facing screen or feature,
+  update the sprint's screen/feature touch inventory and its manual exploratory
+  scenario in the same slice. Supply passing automated prerequisite receipts,
+  but do not use automation as a reason to omit the human touch coverage.
 - Treat formal validation as certification of a completed implementation, not
   as the ordinary debugging loop. Reproduce and resolve every known failure in
   the implementation phase. Do not launch Readiness or Rehearsal merely to find
@@ -279,6 +283,8 @@ Before handoff, answer from the diff and repository rather than intention:
   and did standalone UI ownership pass before consumer cutover?
 - Are every slice receipt, contract hash, adapter hash, platform fingerprint,
   owner fixture read-back, and visual-stability declaration current?
+- Does every user-facing screen and feature delivered in the slice appear in
+  the human exploratory touch inventory with automated prerequisites?
 
 Resolve findings inside the touched cone before declaring implementation
 complete.

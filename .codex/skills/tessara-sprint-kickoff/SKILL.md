@@ -133,6 +133,9 @@ the current roadmap.
     classify every machine-decidable artifact, API, browser, topology, or
     provenance check as automated. Retain a manual scenario only when it names
     a direct product interaction and an irreducible human-judgment question.
+    Build a complete screen/feature touch inventory and map every user-facing
+    screen and feature delivered by the sprint to at least one human exploratory
+    scenario; related surfaces may share one coherent journey.
 11. Prepend the kickoff entry to `docs/progress-report.md`.
 12. Run the comprehensive planning audit below and correct planning gaps.
 13. Present the plan, unresolved decisions, and recommended first
@@ -156,6 +159,9 @@ Write the plan in Markdown with these sections:
   touchpoints, exact focused exit targets, controlled-artifact fanout edges,
   tests changed in the same slice, and receipt-bound completion criteria
 - automated, integration, deployed-smoke, and manual UAT plans
+- exact screen/feature-to-manual-scenario coverage, including intended actor and
+  materially distinct role, responsive, direct/lifecycle, or failure-state
+  experiences
 - validation, evidence, candidate-freeze, failure-restart, and closeout-
   authorization plan
 - rollout, migration, compatibility, recovery, and rollback plan where relevant
@@ -201,9 +207,10 @@ counts, reduced DTO replicas, and cross-owner fixture writes are prohibited.
 Seed the validation record before implementation with:
 
 - every roadmap exit-condition clause
-- automated evidence for every clause, plus a manual UAT scenario only when a
-  genuine human-observable acceptance concern remains after deterministic
-  checks are automated
+- automated evidence for every clause, plus human exploratory touch coverage
+  for every user-facing screen and feature delivered by the sprint; purely
+  technical clauses without a user-facing surface may mark manual coverage not
+  applicable
 - product, authorization, lifecycle, deployment, compatibility, migration,
   observability, recovery, and rollback risks that apply
 - required commands, environments, roles/accounts, fixtures, and evidence paths
@@ -280,6 +287,9 @@ Before declaring kickoff complete, verify that:
   source scans, or other machine-decidable evidence; each retained manual
   scenario records its product surface, direct interaction, irreducible human-
   judgment question, and automated prerequisite receipts
+- the screen/feature touch inventory has exact forward and reverse mappings,
+  leaves no sprint-delivered user-facing surface uncovered, and requires each
+  manual scenario to retain exploratory defect and UI/UX-improvement notes
 - assumptions and unresolved decisions are visible and no blocker is hidden
 - the plan traces the defect-provenance gate through implementation exit,
   every formal phase failure, Preflight rejection, and Closeout audit
@@ -344,6 +354,8 @@ Do not report kickoff complete unless:
   consumer inventory, and the shared successor-impact state machine is active
 - every acceptance clause has automated evidence and every retained manual UAT
   scenario passes the automated-versus-human classification audit
+- every sprint-delivered user-facing screen and feature maps to a planned human
+  exploratory touch, with purely technical manual exclusions explicit
 - the shared coordinator activation, deterministic prerequisites, and resource
   claims can produce one immutable execution plan
 - the kickoff progress entry was prepended

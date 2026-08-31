@@ -37,6 +37,10 @@ When any prior v2 target, lane, or scenario failed, also read
 [`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
 and validate every retained record against its schema.
 
+Read
+[`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+before freezing the acceptance inventory.
+
 ## Inputs
 
 - passing `validation-readiness-result.json` and
@@ -70,8 +74,11 @@ and validate every retained record against its schema.
    an open implementation-exit gap, unresolved provenance, blocked broad
    rerun, or test expectation change without approved authority and a
    test-change-log entry.
-6. Reconcile every roadmap exit condition with automated, smoke, and manual
-   UAT coverage in the validation record.
+6. Reconcile every roadmap exit condition with automated evidence and smoke
+   where applicable. Audit the exact screen/feature touch inventory and require
+   every sprint-delivered user-facing surface to map to a human exploratory UAT
+   scenario with automated prerequisites; purely technical clauses may record
+   manual coverage as not applicable.
 7. Discover required environment variables from the actual test and runner
    sources. Do not infer similarly named variables.
 8. Validate database URLs, unique disposable identities, reachability,
@@ -166,6 +173,8 @@ Finish only when:
 
 - the implementation commit is clean
 - the acceptance inventory is complete and frozen
+- every delivered user-facing screen/feature has planned human exploratory
+  touch coverage and no manual scenario is a machine-evidence review checklist
 - all environment and deployment prerequisites pass
 - evidence paths and required artifacts are declared
 - the defect-provenance chronology is complete and resolved

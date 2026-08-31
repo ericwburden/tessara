@@ -129,6 +129,10 @@ Preserve these invariants:
   inspect their JSON or logs. Manual UAT requires direct product interaction
   and an irreducible human-judgment question; a human evidence-review checklist
   cannot replace automation.
+- Every user-facing screen and feature delivered by the sprint receives a human
+  exploratory touch. Automation remains its deterministic prerequisite, not a
+  substitute for observing the actual experience and recording unexpected
+  defects, prior-sprint issues, and UI/UX improvement opportunities.
 
 Do not interpret every command failure as a candidate failure. Record its
 stage and `assertions_started`, then apply the shared invalidation matrix.
@@ -145,7 +149,9 @@ Before freeze, record:
 - relevant product, authorization, lifecycle, deployment, migration,
   compatibility, recovery, and rollback risks
 - automated proof per clause, deployed-smoke where applicable, and manual UAT
-  only for a recorded human-observable acceptance concern
+  through an exact screen/feature touch inventory; purely technical clauses may
+  mark manual coverage not applicable, but no delivered user-facing surface may
+  be omitted
 - exact commands, environments, accounts, fixtures, topology, and evidence
   paths
 - the required receipt and evidence inventory, including planned conditional
@@ -362,6 +368,10 @@ Authorize `tessara-sprint-closeout` only when:
 - every roadmap clause maps to automated evidence, and every applicable manual
   scenario states the product interaction and irreducible human-judgment
   question instead of reviewing machine-readable artifacts
+- every sprint-delivered screen and user-facing feature maps to an executed
+  manual exploratory touch (or v3-authenticated immediate-predecessor touch for
+  unchanged successor coverage), and every observation is triaged as a defect,
+  previously existing issue needing authority, or non-blocking future UI/UX work
 - all invalidation decisions were satisfied
 - no required evidence is missing, stale, malformed, or unhashed
 - no product decision or open acceptance defect remains

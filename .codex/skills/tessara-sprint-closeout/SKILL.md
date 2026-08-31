@@ -19,6 +19,10 @@ When it declares v3, then read
 [`../tessara-sprint-validation/references/validation-policy-v3.md`](../tessara-sprint-validation/references/validation-policy-v3.md)
 completely.
 
+Read
+[`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+before auditing human UAT coverage and exploratory observations.
+
 For v3, also validate evidence-chain schema 2 and every phase-certificate schema
 3 through the current adapter and platform. Require authenticated platform
 release/fingerprint and adapter hash; absence or uncertainty returns to
@@ -129,7 +133,13 @@ Require all of the following before changing roadmap status:
   v2 complete SIT/UAT chain or v3 exact executed/inherited impact-plan chain;
   legacy sprints additionally require complete Readiness/Rehearsal execution
   from the beginning
-- every roadmap exit-condition clause maps to automated and manual evidence
+- every roadmap exit-condition clause maps to automated evidence
+- every sprint-delivered user-facing screen and feature maps to a manual
+  exploratory touch receipt, while machine-decidable assertions remain in
+  automated evidence
+- every human observation is retained and explicitly dispositioned as a
+  blocking defect, a previously existing issue with a scope/authority decision,
+  or a non-blocking UI/UX improvement for future work
 - changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
   deployment contracts have explicit coverage
 - no acceptance test first appeared during closeout
@@ -182,6 +192,11 @@ retained receipts and provenance; do not estimate or rewrite historical
 findings. Record only reusable workflow/platform lessons, not sprint-specific
 product policy.
 
+Include a concise future-work list for non-blocking UAT UI/UX observations,
+preserving the affected screen/feature, user impact, and suggested direction.
+Do not silently convert an acceptance defect into a future improvement or
+reopen accepted behavior solely to implement an optional enhancement.
+
 ## Sprint Handoff / Demo Instructions
 
 For each delivered functionality, provide:
@@ -202,7 +217,8 @@ untested demonstration path during closeout.
 For every roadmap exit-condition clause, include:
 
 - exact or faithfully preserved exit-condition text
-- corresponding handoff/manual demonstration
+- corresponding handoff/manual demonstration for user-facing behavior, or an
+  explicit not-applicable rationale for a purely technical clause
 - automated assertion or command
 - deployed-smoke assertion when the clause changes an integration contract
 - evidence location and candidate identity
@@ -267,7 +283,10 @@ Do not finalize closeout if:
 - the verification record did not authorize closeout
 - closeout was the first execution point for any acceptance check
 - roadmap or progress updates are missing or inconsistent
-- any exit condition lacks both automated and manual evidence
+- any acceptance clause lacks automated evidence, or any sprint-delivered
+  user-facing screen/feature lacks human exploratory touch evidence
+- any exploratory UAT observation lacks an explicit disposition and retained
+  future-work note when applicable
 - evidence does not resolve to one clean v2 candidate or one clean v3 successor
   with an exact authenticated immediate-predecessor inheritance chain
 - under the legacy policy, an executable or harness change was made without

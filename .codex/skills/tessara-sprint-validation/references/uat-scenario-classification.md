@@ -37,6 +37,16 @@ confidence, perceived continuity, or whether workflow feedback is useful to
 the intended actor. Record the exact human-judgment question and why a stable
 deterministic oracle is insufficient.
 
+Every sprint-delivered user-facing screen and feature requires at least one
+human exploratory touch during the sprint. The standing human question is
+whether the intended actor can find, understand, and use the delivered surface
+and whether interaction reveals an unexpected defect, regression, inconsistency,
+or worthwhile UI/UX improvement that deterministic assertions did not expose.
+One coherent journey may cover multiple screens or features, but none may be
+unmapped. Materially different role, responsive, direct-document, lifecycle-
+navigation, or failure-state experiences need their own touch when the human
+experience differs.
+
 Clicking through a UI is not by itself human UAT. If every expected result is
 an exact route, status, field, count, or other deterministic state, automate the
 scenario. Do not create a manual checklist whose substantive action is to open
@@ -47,15 +57,36 @@ For a mixed scenario, split the coverage:
 1. Automation establishes fixtures, provenance, exact state, and every
    deterministic assertion.
 2. The manual scenario references the passing automated receipt as a
-   prerequisite and contains only the remaining product interaction and human
-   acceptance question.
-3. If no human question remains, omit the manual scenario and record manual
-   coverage as not applicable for that requirement.
+   prerequisite and contains the product interaction, exploratory touch, and
+   human acceptance question rather than repeating machine checks.
+3. Manual coverage may be not applicable only to a purely technical requirement
+   with no user-facing screen or feature. It is never not applicable to a
+   screen or feature delivered by the sprint.
 
-Every acceptance requirement needs automated evidence. Manual evidence is
-required only where the requirement has a genuine human-observable acceptance
-concern; never invent manual work to satisfy a one-manual-scenario-per-clause
-quota.
+Every acceptance requirement needs automated evidence. Manual coverage follows
+the delivered screen/feature inventory rather than a one-scenario-per-clause
+quota: consolidate related surfaces into useful exploratory journeys without
+leaving any delivered user-facing surface untouched.
+
+## Screen and feature touch inventory
+
+Before freeze, maintain an exact inventory of every user-facing screen and
+feature implemented or materially changed in the sprint. Record its route or
+surface, intended actor, materially distinct experience states, manual scenario
+ID, and automated prerequisite receipts. Audit the reverse mapping so every
+manual scenario names what it touches and every inventory item has coverage.
+
+During execution, record observations even when the planned acceptance steps
+pass. Classify each observation as:
+
+- an acceptance defect or unexpected regression, which follows the normal
+  defect-provenance and invalidation policy;
+- a previously existing issue discovered during exploration, which is retained
+  and routed for an explicit scope/authority decision rather than silently
+  ignored or automatically expanding the sprint; or
+- a non-blocking UI/UX improvement, which records the affected surface,
+  observation, rationale, and suggested follow-up for closeout/future work and
+  does not rewrite current accepted behavior.
 
 ## Classification audit
 
@@ -68,6 +99,9 @@ name:
 - the direct interaction the person performs;
 - the irreducible human-judgment question; and
 - the automated prerequisite receipts that already cover deterministic state.
+
+Also reject a UAT inventory when any delivered user-facing screen or feature is
+absent from the touch inventory or lacks a manual scenario mapping.
 
 If execution discovers a misclassified frozen scenario, stop and return the
 inventory gap to the validation coordinator. Add the automated coverage while
