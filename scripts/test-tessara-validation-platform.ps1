@@ -63,6 +63,7 @@ $adapterPath = Join-Path $PSScriptRoot "validation-platform/fixtures/synthetic-a
 $dockerShimPath = Join-Path $PSScriptRoot "validation-platform/fixtures/docker-shim.ps1"
 $certificationHarnessRelativePaths = @(
     "scripts/test-tessara-validation-platform.ps1"
+    "scripts/test-tessara-successor-certification.ps1"
     "scripts/validation-platform/fixtures/assert-synthetic-environment.ps1"
     "scripts/validation-platform/fixtures/docker-shim.ps1"
     "scripts/validation-platform/fixtures/synthetic-acceptance.json"
@@ -78,8 +79,9 @@ function Get-CertificationHarnessSnapshot {
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string[]]$RelativePaths
     )
-    if ($RelativePaths.Count -ne 9 -or
+    if ($RelativePaths.Count -ne 10 -or
         [string]$RelativePaths[0] -cne "scripts/test-tessara-validation-platform.ps1" -or
+        [string]$RelativePaths[1] -cne "scripts/test-tessara-successor-certification.ps1" -or
         @($RelativePaths | Where-Object {
                 ([string]$_).StartsWith(
                     "scripts/validation-platform/fixtures/",
@@ -87,7 +89,7 @@ function Get-CertificationHarnessSnapshot {
                 )
             }).Count -ne 8 -or
         @($RelativePaths | Sort-Object -Unique).Count -ne $RelativePaths.Count) {
-        throw "Certification harness inventory must be the certification script plus exactly eight fixtures."
+        throw "Certification harness inventory must be the platform and successor certification scripts plus exactly eight fixtures."
     }
 
     $resolvedRoot = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd(
@@ -654,7 +656,7 @@ try {
     Assert-Equal $identity.contract "tessara.validation.platform" "Platform contract"
     Assert-Equal $identity.release_version "2.0.0" "Platform release"
     Assert-Equal $identity.components.Count 4 "Platform component count"
-    Assert-Equal $identity.boundary_inputs.Count 21 "Platform boundary-input count"
+    Assert-Equal $identity.boundary_inputs.Count 23 "Platform boundary-input count"
     if ([string]$identity.execution_fingerprint -cnotmatch '^[0-9a-f]{64}$') {
         throw "Platform did not publish a lane execution fingerprint."
     }
@@ -3434,6 +3436,14 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
         }
     }
 
+    $successorCertificationOutput = @(& pwsh -NoProfile -NonInteractive -File `
+        (Join-Path $PSScriptRoot "test-tessara-successor-certification.ps1"))
+    if ($LASTEXITCODE -ne 0 -or
+        [string]$successorCertificationOutput[-1] -cne
+            "Tessara successor-certification self-test passed.") {
+        throw "Successor-candidate impact certification did not pass inside the aggregate platform suite."
+    }
+
     $certificationHarnessCurrent = Get-CertificationHarnessSnapshot `
         -RepositoryRoot $repoRoot -RelativePaths $certificationHarnessRelativePaths
     Assert-Equal $certificationHarnessCurrent.fingerprint `
@@ -3469,6 +3479,7 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
             "truthful-assertion-process-start-accounting",
             "post-setup-topology-tool-recheck",
             "prerequisite-gating", "lane-scoped-invalidation",
+            "successor-impact-selection",
             "planner-mutation-matrix",
             "git-nul-path-and-mode-binding",
             "required-source-setup-failure",

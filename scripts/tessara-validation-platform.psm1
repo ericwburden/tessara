@@ -462,7 +462,10 @@ function Get-TessaraPlatformLiveDependencyFingerprints {
     }
     $entries = [Collections.Generic.List[object]]::new()
     $domainPatterns = @($ValidationContract.dependency_domains | ForEach-Object {
-        @($_.tracked_inputs | ForEach-Object {
+        $domainInputs = if ($_.PSObject.Properties.Name -contains "inputs") {
+            @($_.inputs | ForEach-Object { [string]$_.path })
+        } else { @($_.tracked_inputs) }
+        @($domainInputs | ForEach-Object {
             ([string]$_).Replace('\', '/').Trim()
         })
     })
@@ -501,9 +504,12 @@ function Get-TessaraPlatformLiveDependencyFingerprints {
     }
     @($ValidationContract.dependency_domains | ForEach-Object {
         $domain = $_
+        $domainInputs = if ($domain.PSObject.Properties.Name -contains "inputs") {
+            @($domain.inputs | ForEach-Object { [string]$_.path })
+        } else { @($domain.tracked_inputs) }
         $matches = @($entries | Where-Object {
             $candidatePath = [string]$_.path
-            @($domain.tracked_inputs | Where-Object {
+            @($domainInputs | Where-Object {
                 $candidatePath -clike ([string]$_).Replace('\', '/').Trim()
             }).Count -gt 0
         } | Sort-Object path)
@@ -775,6 +781,8 @@ function Get-TessaraValidationPlatformIdentity {
         "validation-contract-schema",
         "phase-certificate-v2-schema",
         "future-guardrails",
+        "successor-certification",
+        "successor-impact-plan-schema",
         "validation-contract-v3-schema",
         "implementation-readiness-v2-schema",
         "authorization-matrix-schema",
@@ -801,6 +809,8 @@ function Get-TessaraValidationPlatformIdentity {
         ".codex/skills/tessara-sprint-validation/references/validation-contract.schema.json",
         ".codex/skills/tessara-sprint-validation/references/phase-certificate-v2.schema.json",
         "scripts/validation-platform/tessara-future-sprint-guardrails.psm1",
+        "scripts/validation-platform/tessara-successor-certification.ps1",
+        ".codex/skills/tessara-sprint-validation/references/successor-impact-plan.schema.json",
         ".codex/skills/tessara-sprint-validation/references/validation-contract-v3.schema.json",
         ".codex/skills/tessara-sprint-validation/references/implementation-readiness-v2.schema.json",
         ".codex/skills/tessara-sprint-validation/references/authorization-matrix.schema.json",
@@ -1485,6 +1495,12 @@ function Assert-TessaraValidationAdapter {
         $laneIdentities.Add([pscustomobject][ordered]@{
             lane_id = $laneId
             phase = [string]$contractLane.phase
+            coverage_kind = if ($contractLane.PSObject.Properties.Name -contains "coverage_kind") {
+                [string]$contractLane.coverage_kind
+            } else { "lane" }
+            risk_rank = if ($contractLane.PSObject.Properties.Name -contains "risk_rank") {
+                [int]$contractLane.risk_rank
+            } else { 500 }
             touches_live_state = [bool]$contractLane.touches_live_state
             dependency_domains = @($domainNames)
             dependency_domain_definitions = @($contractDomains)
@@ -1618,9 +1634,28 @@ function Get-TessaraPlatformCandidateIdentityFromValidation {
         validation_contract_sha256 = [string]$ValidatedAdapter.validation_contract_sha256
         dependency_fingerprints = @($dependencyFingerprints | Sort-Object domain)
     }
+    $sourceFingerprint = Get-TessaraPlatformCanonicalJsonSha256 -Value $source
+    $candidateFingerprint = $sourceFingerprint
+    if ([int]$ValidatedAdapter.validation_contract.schema_version -eq 3) {
+        $candidateDomains = @($ValidatedAdapter.validation_contract.dependency_domains |
+            Where-Object { [bool]$_.candidate_binding } | ForEach-Object { [string]$_.name } |
+            Sort-Object -Unique)
+        $candidateMaterial = [pscustomobject][ordered]@{
+            schema_version = 1
+            contract = "tessara.validation.application-candidate"
+            validation_contract_sha256 = [string]$ValidatedAdapter.validation_contract_sha256
+            dependency_fingerprints = @($dependencyFingerprints | Where-Object {
+                    [string]$_.domain -in $candidateDomains
+                } | Sort-Object domain | ForEach-Object {
+                    [pscustomobject][ordered]@{ domain = [string]$_.domain; sha256 = [string]$_.sha256 }
+                })
+        }
+        $candidateFingerprint = Get-TessaraPlatformCanonicalJsonSha256 -Value $candidateMaterial
+    }
     [pscustomobject][ordered]@{
         source_identity = $source
-        candidate_fingerprint = Get-TessaraPlatformCanonicalJsonSha256 -Value $source
+        source_fingerprint = $sourceFingerprint
+        candidate_fingerprint = $candidateFingerprint
     }
 }
 
@@ -1745,6 +1780,7 @@ function Invoke-TessaraValidationLane {
             [pscustomobject][ordered]@{
                 lane_id = [string]$_.lane_id
                 compatibility_fingerprint = [string]$_.compatibility_fingerprint
+                inheritance_fingerprint = [string]$_.inheritance_fingerprint
             }
         })
         $candidateBinding = if ([string]$laneIdentity.phase -in @(
@@ -1768,6 +1804,29 @@ function Invoke-TessaraValidationLane {
             platform_execution_fingerprint = [string]$platform.provider_execution_fingerprints.([string]$adapterLane.topology.provider)
             prerequisite_compatibility_fingerprints = @($prerequisiteIdentities)
         }
+        $inheritanceCompatibility = [pscustomobject][ordered]@{
+            schema_version = 1
+            contract = "tessara.validation.lane-inheritance-compatibility"
+            lane_id = [string]$laneIdentity.lane_id
+            phase = [string]$laneIdentity.phase
+            validation_contract_sha256 = [string]$laneIdentity.validation_contract_source.sha256
+            contract_lane_fingerprint = [string]$laneIdentity.contract_lane_fingerprint
+            dependency_fingerprints = @($laneDomains)
+            acceptance_fingerprint = [string]$laneIdentity.acceptance_fingerprint
+            fixture_fingerprint = [string]$laneIdentity.fixture_fingerprint
+            harness_fingerprint = [string]$laneIdentity.harness_fingerprint
+            adapter_fingerprint = [string]$laneIdentity.adapter_fingerprint
+            environment_contract_fingerprint = [string]$laneIdentity.environment_contract_fingerprint
+            environment_observation_fingerprint = $environmentObservationFingerprint
+            tool_observation_fingerprint = [string]$toolObservation.fingerprint
+            platform_execution_fingerprint = [string]$platform.provider_execution_fingerprints.([string]$adapterLane.topology.provider)
+            prerequisite_inheritance_fingerprints = @($prerequisiteIdentities | ForEach-Object {
+                    [pscustomobject][ordered]@{
+                        lane_id = [string]$_.lane_id
+                        inheritance_fingerprint = [string]$_.inheritance_fingerprint
+                    }
+                })
+        }
         $copy = [ordered]@{}
         foreach ($property in $laneIdentity.PSObject.Properties) {
             $copy[$property.Name] = $property.Value
@@ -1783,6 +1842,8 @@ function Invoke-TessaraValidationLane {
         $copy.prerequisite_compatibility_fingerprints = @($prerequisiteIdentities)
         $copy.compatibility_fingerprint = Get-TessaraPlatformCanonicalJsonSha256 `
             -Value $compatibility
+        $copy.inheritance_fingerprint = Get-TessaraPlatformCanonicalJsonSha256 `
+            -Value $inheritanceCompatibility
         $resolved = [pscustomobject]$copy
         $resolvedLaneIdentityMap[$IdentityLaneId] = $resolved
         $Visiting.Remove($IdentityLaneId)
@@ -1796,10 +1857,13 @@ function Invoke-TessaraValidationLane {
             lane_id = [string]$_.lane_id
             phase = [string]$_.phase
             compatibility_fingerprint = [string]$_.compatibility_fingerprint
+            inheritance_fingerprint = [string]$_.inheritance_fingerprint
             platform_execution_fingerprint = [string]$_.platform_execution_fingerprint
             environment_fingerprint = [string]$_.environment_observation_fingerprint
             dependency_fingerprints = @($_.dependency_fingerprints)
             prerequisite_compatibility_fingerprints = @($_.prerequisite_compatibility_fingerprints)
+            coverage_kind = [string]$_.coverage_kind
+            risk_rank = [int]$_.risk_rank
             implementation_targets = @()
         }
     })
@@ -1816,6 +1880,7 @@ function Invoke-TessaraValidationLane {
         contract = "tessara.validation.compatibility-plan"
         sprint = [string]$validated.validation_contract.sprint
         source_identity = $candidateIdentity.source_identity
+        source_fingerprint = [string]$candidateIdentity.source_fingerprint
         candidate_fingerprint = [string]$candidateIdentity.candidate_fingerprint
         validation_contract = [pscustomobject][ordered]@{
             path = [IO.Path]::GetRelativePath(
@@ -1886,6 +1951,7 @@ function Invoke-TessaraValidationLane {
 
 
 . (Join-Path $script:PlatformRoot "tessara-implementation-coordinator.ps1")
+. (Join-Path $script:PlatformRoot "tessara-successor-certification.ps1")
 
 function Get-TessaraValidationCompatibilityPlan {
     [CmdletBinding()]
@@ -1973,5 +2039,8 @@ Export-ModuleMember -Function @(
     "Assert-TessaraValidationAdapter",
     "Assert-TessaraFutureSprintPlanningPackage",
     "Invoke-TessaraValidationLane",
-    "Invoke-TessaraImplementationHarvest"
+    "Invoke-TessaraImplementationHarvest",
+    "New-TessaraSuccessorImpactPlan",
+    "Assert-TessaraSuccessorImpactPlan",
+    "Assert-TessaraSuccessorPredecessorCertificate"
 )

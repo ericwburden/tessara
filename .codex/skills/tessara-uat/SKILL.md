@@ -15,7 +15,15 @@ it declares `policy_version: tessara-validation-v2`, read
 completely. Authenticate compact prerequisite certificates and publish UAT
 through one phase-local evidence index plus a compact UAT certificate.
 
-Otherwise read
+When it declares `policy_version: tessara-validation-v3`, read v2 and then
+[`../tessara-sprint-validation/references/validation-policy-v3.md`](../tessara-sprint-validation/references/validation-policy-v3.md)
+completely. Validate the successor-impact plan and immediate predecessor.
+Execute every `execute` scripted/manual scenario through its platform adapter
+lane; use the shared certifier for `inherit` items. A manual adapter action may
+validate a human scenario receipt, but it cannot own phase lifecycle or
+publication.
+
+Only when the contract selects neither v2 nor v3, read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
 completely.
 
@@ -50,14 +58,23 @@ Under v2, every scripted and manual UAT scenario executes for the exact
 SIT-authorized candidate. A successor candidate cannot inherit UAT acceptance
 from its predecessor.
 
+Under v3, `uat-result.json` contains the exact complete scenario inventory with
+an `executed` or `inherited_nonimpact` basis. Inherited scenarios retain the
+immediate predecessor receipt and unchanged dependency/compatibility closure,
+state explicit non-impact rationale, and have no successor timestamps. Missing
+hashes, changed fixtures/environment/acceptance semantics, unknown paths, open
+defects, or expectation ambiguity require complete UAT.
+
 ## Required execution order
 
 1. Reconfirm candidate provenance, SIT authorization, active slot, health,
    fixtures, roles/accounts, browser configuration, and evidence paths.
 2. Hash the frozen scripted and manual UAT inventory.
-3. Run `scripts/uat-sprint.ps1 -BaseUrl "http://localhost:8080"` or the
-   documented sprint equivalent.
-4. Run every recorded manual business scenario.
+3. Under legacy/v2, run the contract's UAT command. Under v3, invoke each
+   impact-plan `execute` scripted scenario through
+   `Invoke-TessaraValidationLane`; the named script may be its adapter action.
+4. Run every legacy/v2 manual scenario, or each v3 manual scenario marked
+   `execute`; authenticate the remaining v3 inventory as inheritance.
 5. Include role/scope, responsive, failure containment, restart/recovery,
    upgrade, and rollback scenarios when their contracts changed.
 6. Restore the intended canonical handoff topology and verify health.
@@ -94,8 +111,9 @@ route ambiguity to a product decision rather than changing the expected
 result.
 
 - product or tracked harness correction: enter coordinator-owned convergence,
-  then refreeze only after the required legacy complete pass or v2 affected-
-  lane pre-freeze recertification passes
+  then refreeze only after the required legacy complete pass, v2 affected-lane
+  pre-freeze recertification, or v3 focused-repair/batch convergence and
+  successor-impact plan passes
 - shared environment/topology correction: rerun affected SIT/downstream work
   as directed by the coordinator
 - scenario setup failure before actions: rerun that scenario after prerequisite
@@ -104,8 +122,9 @@ result.
 - assertion failure with no change: retain it, diagnose narrowly, and rerun the
   complete affected scenario set as directed
 
-Never combine candidates or resume from an arbitrary failed step. Mark every
-superseded attempt.
+Never manually combine candidates or resume from an arbitrary failed step. V3
+cross-candidate coverage is valid only when the shared certifier authenticates
+the immediate predecessor and impact plan. Mark every superseded attempt.
 
 ### Fail-late harvest after invalidation
 
@@ -146,7 +165,8 @@ is sealed; closeout performs the one required full integrity audit.
 ## Finish criteria
 
 Finish only when scripted UAT and every manual scenario pass for the exact SIT
-candidate, evidence is complete and hashed, no defect or product decision is
+candidate as successor-executed coverage or v3-authenticated non-impact
+inheritance, evidence is complete and hashed, no defect or product decision is
 open, every UAT provenance record is verified or validly superseded, the
 handoff topology is restored, and `uat-result.json` agrees with the human
 verification record.

@@ -21,6 +21,7 @@ $script:SchemaFiles = @{
     implementation_defect_batch = "implementation-defect-batch.schema.json"
     closeout_efficiency = "closeout-efficiency.schema.json"
     correction_impact = "correction-impact-assessment-v2.schema.json"
+    successor_impact_plan = "successor-impact-plan.schema.json"
     phase_evidence_index = "phase-evidence-index.schema.json"
     phase_evidence_index_v2 = "phase-evidence-index-v2.schema.json"
     evidence_chain = "evidence-chain.schema.json"
@@ -67,6 +68,7 @@ function Get-TessaraValidationSchemaPath {
             "implementation_defect_batch",
             "closeout_efficiency",
             "correction_impact",
+            "successor_impact_plan",
             "phase_evidence_index",
             "phase_evidence_index_v2",
             "evidence_chain",
@@ -115,6 +117,14 @@ function Get-TessaraValidationChangedPaths {
         Sort-Object -Unique)
 }
 
+function Get-TessaraValidationDomainPatterns {
+    param([Parameter(Mandatory)]$Domain)
+    if ($Domain.PSObject.Properties.Name -contains "inputs") {
+        return @($Domain.inputs | ForEach-Object { [string]$_.path } | Sort-Object -Unique)
+    }
+    return @($Domain.tracked_inputs | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+}
+
 function Get-TessaraDependencyFingerprints {
     [CmdletBinding()]
     param(
@@ -141,9 +151,10 @@ function Get-TessaraDependencyFingerprints {
 
     $fingerprints = [Collections.Generic.List[object]]::new()
     foreach ($domain in @($Contract.dependency_domains)) {
+        $patterns = @(Get-TessaraValidationDomainPatterns -Domain $domain)
         $matches = @($tracked | Where-Object {
             $candidate = [string]$_.path
-            @($domain.tracked_inputs | Where-Object {
+            @($patterns | Where-Object {
                 $candidate -clike (ConvertTo-TessaraRepositoryPath -Path ([string]$_))
             }).Count -gt 0
         } | Sort-Object path)
@@ -175,6 +186,7 @@ function Assert-TessaraJsonSchema {
             "implementation_defect_batch",
             "closeout_efficiency",
             "correction_impact",
+            "successor_impact_plan",
             "phase_evidence_index",
             "phase_evidence_index_v2",
             "evidence_chain",
@@ -1189,7 +1201,7 @@ function Assert-TessaraValidationContract {
     $proofTargets = @{}
 
     foreach ($domain in @($Contract.dependency_domains)) {
-        foreach ($pattern in @($domain.tracked_inputs)) {
+        foreach ($pattern in @(Get-TessaraValidationDomainPatterns -Domain $domain)) {
             $null = ConvertTo-TessaraRepositoryPath -Path ([string]$pattern)
         }
     }
@@ -1299,7 +1311,7 @@ function Get-TessaraValidationImpact {
         $path = ConvertTo-TessaraRepositoryPath -Path $rawPath
         $matchedDomains = [Collections.Generic.List[string]]::new()
         foreach ($domain in @($Contract.dependency_domains)) {
-            foreach ($rawPattern in @($domain.tracked_inputs)) {
+            foreach ($rawPattern in @(Get-TessaraValidationDomainPatterns -Domain $domain)) {
                 $pattern = ConvertTo-TessaraRepositoryPath -Path ([string]$rawPattern)
                 if ($path -like $pattern) {
                     $name = [string]$domain.name
@@ -1761,6 +1773,31 @@ function Assert-TessaraPlatformPhaseCertificate {
             [string]$currentPlan.body.candidate_fingerprint) {
         throw "The phase certificate does not authenticate the current compatibility plan."
     }
+    $impactPlan = $null
+    $impactCoverage = @{}
+    if ([int]$Certificate.schema_version -eq 3 -and $null -ne $Certificate.successor_impact_plan) {
+        $impactReference = Read-TessaraPlatformCertificateReference `
+            -RepositoryRoot $RepositoryRoot -Reference $Certificate.successor_impact_plan `
+            -Label "Successor impact plan"
+        $impactPlan = $impactReference.document
+        $assertImpact = Get-Command Assert-TessaraSuccessorImpactPlan `
+            -CommandType Function -ErrorAction SilentlyContinue
+        if ($null -eq $assertImpact) {
+            throw "Successor evidence requires the loaded shared impact-plan validator."
+        }
+        $contract = (Assert-TessaraValidationAdapter -AdapterPath $AdapterPath `
+            -RepositoryRoot $RepositoryRoot).validation_contract
+        $null = & $assertImpact -Plan $impactPlan -Contract $contract
+        if ([string]$impactPlan.successor.compatibility_plan_fingerprint -cne
+                [string]$plan.fingerprint -or
+            [string]$impactPlan.successor.candidate_fingerprint -cne
+                [string]$plan.body.candidate_fingerprint) {
+            throw "Successor impact plan does not authenticate the current compatibility plan and candidate."
+        }
+        foreach ($item in @($impactPlan.coverage)) {
+            $impactCoverage[[string]$item.id] = $item
+        }
+    }
     $phase = [string]$Certificate.phase
     $preFreeze = $phase -in @("validation-readiness", "candidate-rehearsal")
     if ($preFreeze -and $null -ne $Certificate.candidate_fingerprint) {
@@ -1845,6 +1882,11 @@ function Assert-TessaraPlatformPhaseCertificate {
                 (@($planLane.dependency_fingerprints.domain | Sort-Object) -join "`n")) {
             throw "Phase lane '$($lane.name)' does not match its authenticated compatibility tuple."
         }
+        if ($null -ne $impactPlan -and
+            [string]$impactCoverage[[string]$lane.name].disposition -cne
+                $(if ([string]$lane.certification_basis -ceq "executed") { "execute" } else { "inherit" })) {
+            throw "Phase lane '$($lane.name)' disposition disagrees with the authenticated successor impact plan."
+        }
         if ([string]$lane.certification_basis -ceq "executed") {
             $executed++
             $result = Assert-TessaraPlatformCommittedLaneResult `
@@ -1867,13 +1909,20 @@ function Assert-TessaraPlatformPhaseCertificate {
             }
         } else {
             $inherited++
-            if (-not $preFreeze) {
-                throw "Candidate-bound phase '$phase' cannot inherit a lane."
+            if ([int]$Certificate.schema_version -ne 3 -and -not $preFreeze) {
+                throw "Validation policy v2 candidate-bound phase '$phase' cannot inherit a lane."
+            }
+            if ($null -eq $impactPlan -or -not $impactCoverage.ContainsKey([string]$lane.name) -or
+                [string]$impactCoverage[[string]$lane.name].disposition -cne "inherit") {
+                throw "Inherited lane '$($lane.name)' lacks authorization from the authenticated successor impact plan."
             }
             $priorCertificate = Read-TessaraPlatformCertificateReference `
                 -RepositoryRoot $RepositoryRoot `
                 -Reference $lane.inheritance.prior_certificate `
                 -Label "Prior phase certificate for '$($lane.name)'"
+            $null = Assert-TessaraSuccessorPredecessorCertificate `
+                -ImpactPlan $impactPlan -PriorCertificate $priorCertificate.document `
+                -Phase $phase
             $priorKind = if ([int]$priorCertificate.document.schema_version -eq 3) {
                 "phase_certificate_v3"
             } else { "phase_certificate_v2" }
@@ -1890,14 +1939,44 @@ function Assert-TessaraPlatformPhaseCertificate {
             $priorLane = @($priorCertificate.document.lanes | Where-Object {
                 [string]$_.name -ceq [string]$lane.name
             })
+            $impactItem = $impactCoverage[[string]$lane.name]
             if ($priorLane.Count -ne 1 -or [string]$priorLane[0].state -cne "passed" -or
+                (-not $preFreeze -and
+                    [string]$priorCertificate.document.candidate_fingerprint -cne
+                        [string]$impactPlan.predecessor.candidate_fingerprint) -or
+                [string]$lane.inheritance.predecessor_candidate_fingerprint -cne
+                    [string]$impactPlan.predecessor.candidate_fingerprint -or
                 [string]$priorLane[0].receipt.sha256 -cne
                     [string]$lane.inheritance.prior_receipt.sha256 -or
                 [string]$lane.receipt.sha256 -cne
                     [string]$lane.inheritance.prior_receipt.sha256 -or
+                [string]$lane.compatibility_fingerprint -cne
+                    [string]$planLane.compatibility_fingerprint -or
                 [string]$lane.inheritance.prior_compatibility_fingerprint -cne
-                    [string]$planLane.compatibility_fingerprint) {
+                    [string]$impactItem.predecessor_compatibility_fingerprint -or
+                [string]$lane.inheritance.current_compatibility_fingerprint -cne
+                    [string]$impactItem.successor_compatibility_fingerprint -or
+                [string]$lane.inheritance.prior_inheritance_fingerprint -cne
+                    [string]$impactItem.predecessor_inheritance_fingerprint -or
+                [string]$lane.inheritance.current_inheritance_fingerprint -cne
+                    [string]$impactItem.successor_inheritance_fingerprint -or
+                [string]$lane.inheritance.prior_inheritance_fingerprint -cne
+                    [string]$lane.inheritance.current_inheritance_fingerprint -or
+                [string]$lane.inheritance.non_impact_rationale -cne
+                    [string]$impactItem.non_impact_rationale) {
                 throw "Inherited lane '$($lane.name)' is not owned by its authenticated prior certificate."
+            }
+            $priorFingerprintMap = Get-TessaraFingerprintMap `
+                -Fingerprints @($lane.inheritance.prior_dependency_fingerprints) `
+                -Label "Inherited lane '$($lane.name)' prior fingerprints"
+            foreach ($domain in @($impactItem.dependency_domains)) {
+                $expected = @($impactPlan.predecessor.dependency_fingerprints | Where-Object {
+                        [string]$_.domain -ceq [string]$domain
+                    })
+                if ($expected.Count -ne 1 -or -not $priorFingerprintMap.ContainsKey([string]$domain) -or
+                    [string]$priorFingerprintMap[[string]$domain].sha256 -cne [string]$expected[0].sha256) {
+                    throw "Inherited lane '$($lane.name)' has unauthenticated predecessor dependency fingerprint '$domain'."
+                }
             }
         }
     }
@@ -1916,6 +1995,10 @@ function Assert-TessaraPlatformPhaseCertificate {
         $indexed[[string]$entry.path] = [string]$entry.sha256
     }
     foreach ($reference in @($Certificate.compatibility_plan) +
+        @(if ($Certificate.PSObject.Properties.Name -contains "successor_impact_plan" -and
+                $null -ne $Certificate.successor_impact_plan) {
+                $Certificate.successor_impact_plan
+            } else { @() }) +
         @($Certificate.lanes.receipt) + @($Certificate.prerequisite_certificates)) {
         if (-not $indexed.ContainsKey([string]$reference.path) -or
             [string]$indexed[[string]$reference.path] -cne [string]$reference.sha256) {
@@ -1993,7 +2076,9 @@ function New-TessaraPlatformPhaseCertificate {
         [string]$RepositoryRoot = $script:RepositoryRoot,
         [string[]]$DockerCommand = @("docker"),
         [AllowEmptyCollection()][string[]]$DockerCommandInputPaths = @(),
-        [AllowEmptyCollection()][object[]]$PrerequisiteCertificates = @()
+        [AllowEmptyCollection()][object[]]$PrerequisiteCertificates = @(),
+        [string]$SuccessorImpactPlanPath,
+        [string]$PriorCertificatePath
     )
     if ($Attempt -lt 1) { throw "Phase-certificate attempt must be positive." }
     $root = [IO.Path]::GetFullPath($RepositoryRoot)
@@ -2028,8 +2113,39 @@ function New-TessaraPlatformPhaseCertificate {
     if ($planLanes.Count -eq 0) {
         throw "Compatibility plan declares no lanes for phase '$Phase'."
     }
-    if ($LaneResultPaths.Count -ne $planLanes.Count) {
-        throw "Phase '$Phase' requires exactly $($planLanes.Count) lane result(s)."
+    $impactPlan = $null
+    $impactReference = $null
+    $impactCoverage = @{}
+    if (-not [string]::IsNullOrWhiteSpace($SuccessorImpactPlanPath)) {
+        if ([int]$validated.validation_contract.schema_version -ne 3) {
+            throw "Successor impact selection is available only to validation policy v3."
+        }
+        $impactFull = if ([IO.Path]::IsPathRooted($SuccessorImpactPlanPath)) {
+            [IO.Path]::GetFullPath($SuccessorImpactPlanPath)
+        } else { [IO.Path]::GetFullPath((Join-Path $root $SuccessorImpactPlanPath)) }
+        $impactReference = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($root, $impactFull).Replace('\', '/')
+            sha256 = Get-TessaraValidationSha256 -Path $impactFull
+        }
+        $impactSnapshot = Read-TessaraPlatformCertificateReference `
+            -RepositoryRoot $root -Reference $impactReference -Label "Successor impact plan"
+        $impactPlan = $impactSnapshot.document
+        $null = Assert-TessaraSuccessorImpactPlan -Plan $impactPlan `
+            -Contract $validated.validation_contract
+        if ([string]$impactPlan.successor.compatibility_plan_fingerprint -cne
+                [string]$plan.fingerprint -or
+            [string]$impactPlan.successor.candidate_fingerprint -cne
+                [string]$plan.body.candidate_fingerprint) {
+            throw "Successor impact plan does not bind the current candidate and compatibility plan."
+        }
+        foreach ($item in @($impactPlan.coverage)) { $impactCoverage[[string]$item.id] = $item }
+    }
+    $requiredResultLanes = @($planLanes | Where-Object {
+            $null -eq $impactPlan -or
+            [string]$impactCoverage[[string]$_.lane_id].disposition -ceq "execute"
+        })
+    if ($LaneResultPaths.Count -ne $requiredResultLanes.Count) {
+        throw "Phase '$Phase' requires exactly $($requiredResultLanes.Count) executed lane result(s) under the selected impact plan."
     }
     $platformIdentity = Get-TessaraValidationPlatformIdentity
     $resultByLane = @{}
@@ -2052,12 +2168,80 @@ function New-TessaraPlatformPhaseCertificate {
         $resultByLane[$laneId] = $snapshot.document
         $resultReferences[$laneId] = $reference
     }
+    $priorCertificate = $null
+    $priorCertificateReference = $null
     $preFreeze = $Phase -in @("validation-readiness", "candidate-rehearsal")
+    $inheritedPlanLanes = @($planLanes | Where-Object {
+            $null -ne $impactPlan -and
+            [string]$impactCoverage[[string]$_.lane_id].disposition -ceq "inherit"
+        })
+    if ($inheritedPlanLanes.Count -gt 0) {
+        if ([string]::IsNullOrWhiteSpace($PriorCertificatePath)) {
+            throw "Impact-selected phase '$Phase' requires the immediate predecessor phase certificate."
+        }
+        $priorFull = if ([IO.Path]::IsPathRooted($PriorCertificatePath)) {
+            [IO.Path]::GetFullPath($PriorCertificatePath)
+        } else { [IO.Path]::GetFullPath((Join-Path $root $PriorCertificatePath)) }
+        $priorCertificateReference = [pscustomobject][ordered]@{
+            path = [IO.Path]::GetRelativePath($root, $priorFull).Replace('\', '/')
+            sha256 = Get-TessaraValidationSha256 -Path $priorFull
+        }
+        $priorCertificate = (Read-TessaraPlatformCertificateReference `
+            -RepositoryRoot $root -Reference $priorCertificateReference `
+            -Label "Immediate predecessor phase certificate").document
+        $null = Assert-TessaraSuccessorPredecessorCertificate `
+            -ImpactPlan $impactPlan -PriorCertificate $priorCertificate -Phase $Phase
+        if ([int]$priorCertificate.schema_version -ne 3 -or
+            [string]$priorCertificate.phase -cne $Phase -or
+            [string]$priorCertificate.state -cne "passed" -or
+            (-not $preFreeze -and [string]$priorCertificate.candidate_fingerprint -cne
+                [string]$impactPlan.predecessor.candidate_fingerprint)) {
+            throw "The supplied predecessor certificate is not the passing immediate predecessor for phase '$Phase'."
+        }
+    }
     $lanes = @()
     foreach ($planLane in $planLanes) {
         $laneId = [string]$planLane.lane_id
+        $impactItem = if ($null -ne $impactPlan) { $impactCoverage[$laneId] } else { $null }
+        $inherit = $null -ne $impactItem -and [string]$impactItem.disposition -ceq "inherit"
+        if ($inherit) {
+            $priorLane = @($priorCertificate.lanes | Where-Object {
+                    [string]$_.name -ceq $laneId
+                })
+            if ($priorLane.Count -ne 1 -or [string]$priorLane[0].state -cne "passed") {
+                throw "Immediate predecessor certificate lacks passing lane '$laneId'."
+            }
+            $lanes += [pscustomobject][ordered]@{
+                name = $laneId
+                state = "passed"
+                certification_basis = "inherited_nonimpact"
+                compatibility_fingerprint = [string]$planLane.compatibility_fingerprint
+                dependency_domains = @($planLane.dependency_fingerprints.domain | Sort-Object)
+                receipt = $priorLane[0].receipt
+                started_at = $null
+                ended_at = $null
+                duration_ms = $null
+                inheritance = [pscustomobject][ordered]@{
+                    prior_certificate = $priorCertificateReference
+                    prior_receipt = $priorLane[0].receipt
+                    predecessor_candidate_fingerprint = [string]$impactPlan.predecessor.candidate_fingerprint
+                    prior_compatibility_fingerprint = [string]$impactItem.predecessor_compatibility_fingerprint
+                    current_compatibility_fingerprint = [string]$impactItem.successor_compatibility_fingerprint
+                    prior_inheritance_fingerprint = [string]$impactItem.predecessor_inheritance_fingerprint
+                    current_inheritance_fingerprint = [string]$impactItem.successor_inheritance_fingerprint
+                    prior_dependency_fingerprints = @($impactItem.dependency_domains | Sort-Object | ForEach-Object {
+                            $domainName = [string]$_
+                            @($impactPlan.predecessor.dependency_fingerprints | Where-Object {
+                                    [string]$_.domain -ceq $domainName
+                                })[0]
+                        })
+                    non_impact_rationale = [string]$impactItem.non_impact_rationale
+                }
+            }
+            continue
+        }
         if (-not $resultByLane.ContainsKey($laneId)) {
-            throw "Phase result set is missing lane '$laneId'."
+            throw "Phase result set is missing executed lane '$laneId'."
         }
         $result = Assert-TessaraPlatformCommittedLaneResult -RepositoryRoot $root `
             -Reference $resultReferences[$laneId] -PlanLane $planLane `
@@ -2108,7 +2292,9 @@ function New-TessaraPlatformPhaseCertificate {
             [Text.UTF8Encoding]::new($false).GetBytes($environmentText)
         )
     ).ToLowerInvariant()
-    $entries = @($planPublication.reference) + @($lanes.receipt) + @($PrerequisiteCertificates)
+    $entries = @($planPublication.reference) + @($lanes.receipt) + @($PrerequisiteCertificates) +
+        @(if ($null -ne $impactReference) { $impactReference } else { @() }) +
+        @(if ($null -ne $priorCertificateReference) { $priorCertificateReference } else { @() })
     $indexEntries = @($entries | Sort-Object path -Unique | ForEach-Object {
             $full = [IO.Path]::GetFullPath((Join-Path $root ([string]$_.path)))
             [pscustomobject][ordered]@{
@@ -2166,8 +2352,8 @@ function New-TessaraPlatformPhaseCertificate {
         coverage = [pscustomobject][ordered]@{
             declared_lanes_sha256 = $declaredLaneDigest
             lane_count = $lanes.Count
-            executed_count = $lanes.Count
-            inherited_count = 0
+            executed_count = @($lanes | Where-Object { [string]$_.certification_basis -ceq "executed" }).Count
+            inherited_count = @($lanes | Where-Object { [string]$_.certification_basis -ceq "inherited_nonimpact" }).Count
         }
         lanes = $lanes
         open_defect_count = 0
@@ -2179,6 +2365,7 @@ function New-TessaraPlatformPhaseCertificate {
         evidence_index = $indexReference
     }
     if ([int]$validated.validation_contract.schema_version -eq 3) {
+        $certificate.successor_impact_plan = $impactReference
         $adapterFull = [IO.Path]::GetFullPath($validated.adapter_path)
         $certificate.platform_identity = [pscustomobject][ordered]@{
             release_version = [string]$platformIdentity.release_version
@@ -2288,7 +2475,9 @@ function Assert-TessaraEvidenceChain {
         $null = Assert-TessaraValidationContract $futureContract
     }
     $indexReferences = [Collections.Generic.List[object]]::new()
-    foreach ($reference in @($Chain.certificates) + @($Chain.corrections)) {
+    $certificateImpactReferences = [Collections.Generic.List[object]]::new()
+    foreach ($reference in @($Chain.certificates) + @($Chain.corrections) +
+        @(if ($futureChain) { @($Chain.successor_impact_plans) } else { @() })) {
         $relative = ConvertTo-TessaraRepositoryPath -Path ([string]$reference.path)
         $full = [IO.Path]::GetFullPath((Join-Path $root $relative))
         if (-not $full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
@@ -2310,9 +2499,30 @@ function Assert-TessaraEvidenceChain {
                 if ($futureChain) {
                     $null = Assert-TessaraPlatformPhaseCertificate -Certificate $document `
                         -AdapterPath $adapterFull -RepositoryRoot $root
+                    if ($document.PSObject.Properties.Name -contains "successor_impact_plan" -and
+                        $null -ne $document.successor_impact_plan) {
+                        $certificateImpactReferences.Add($document.successor_impact_plan)
+                    }
                 } else { $null = Assert-TessaraPhaseCertificate -Certificate $document }
             }
             $indexReferences.Add($document.evidence_index)
+        }
+    }
+    if ($futureChain) {
+        $declaredImpact = @($Chain.successor_impact_plans | Sort-Object path)
+        $usedImpact = @($certificateImpactReferences | Sort-Object path -Unique)
+        if (($declaredImpact.path -join "`n") -cne ($usedImpact.path -join "`n") -or
+            ($declaredImpact.sha256 -join "`n") -cne ($usedImpact.sha256 -join "`n")) {
+            throw "Evidence chain successor-impact inventory does not exactly match phase-certificate inheritance provenance."
+        }
+        foreach ($reference in $declaredImpact) {
+            $impact = (Read-TessaraPlatformCertificateReference -RepositoryRoot $root `
+                -Reference $reference -Label "Evidence-chain successor impact plan").document
+            $null = Assert-TessaraSuccessorImpactPlan -Plan $impact -Contract $futureContract
+            if ([int]$impact.open_defect_count -ne 0 -or
+                -not [bool]$impact.expectation_changes_authenticated) {
+                throw "Closeout rejects an incomplete successor impact plan, open defect, or unauthenticated expectation change."
+            }
         }
     }
 

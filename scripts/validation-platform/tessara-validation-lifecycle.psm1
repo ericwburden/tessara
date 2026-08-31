@@ -371,7 +371,10 @@ function Get-TessaraLifecycleLiveDependencyFingerprints {
     }
     $entries = [Collections.Generic.List[object]]::new()
     $domainPatterns = @($DomainDefinitions | ForEach-Object {
-        @($_.tracked_inputs | ForEach-Object {
+        $domainInputs = if ($_.PSObject.Properties.Name -contains "inputs") {
+            @($_.inputs | ForEach-Object { [string]$_.path })
+        } else { @($_.tracked_inputs) }
+        @($domainInputs | ForEach-Object {
             ([string]$_).Replace('\', '/').Trim()
         })
     })
@@ -408,9 +411,12 @@ function Get-TessaraLifecycleLiveDependencyFingerprints {
     }
     @($DomainDefinitions | ForEach-Object {
         $domain = $_
+        $domainInputs = if ($domain.PSObject.Properties.Name -contains "inputs") {
+            @($domain.inputs | ForEach-Object { [string]$_.path })
+        } else { @($domain.tracked_inputs) }
         $matches = @($entries | Where-Object {
             $candidatePath = [string]$_.path
-            @($domain.tracked_inputs | Where-Object {
+            @($domainInputs | Where-Object {
                 $candidatePath -clike ([string]$_).Replace('\', '/').Trim()
             }).Count -gt 0
         } | Sort-Object path)

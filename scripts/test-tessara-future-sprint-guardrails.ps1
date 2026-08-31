@@ -131,6 +131,10 @@ try {
     $browserLane.id = "browser-implementation"; $browserLane.prerequisites = @()
     $phase8.lanes += $browserLane
     $phase8.requirements += [pscustomobject]@{ id="browser-requirement"; implementation_targets=@("browser-smoke"); validation_lanes=@("browser-implementation") }
+    foreach ($domain in @($phase8.dependency_domains)) {
+        $domain.consumers.implementation_targets += "browser-smoke"
+        $domain.consumers.validation_lanes += "browser-implementation"
+    }
     Assert-Throws { Assert-TessaraValidationContract $phase8 } "authorization target"
     $phase8.implementation_targets[1].prerequisites = @("replace-focused-target")
     $phase8.lanes[-1].prerequisites = @("replace-implementation")
@@ -166,6 +170,10 @@ try {
         $targetLane.prerequisites = @($spec.prerequisites | ForEach-Object { "$($_)-lane" })
         $harvestContract.lanes += $targetLane
         $harvestContract.requirements += [pscustomobject]@{ id="$($spec.id)-requirement"; implementation_targets=@($spec.id); validation_lanes=@($laneId) }
+        foreach ($domain in @($harvestContract.dependency_domains)) {
+            $domain.consumers.implementation_targets += $spec.id
+            $domain.consumers.validation_lanes += $laneId
+        }
         $adapterLane = Copy-Json $harvestAdapter.lanes[0]
         $adapterLane.id = $laneId
         $adapterLane.prerequisites = @($targetLane.prerequisites)
@@ -222,7 +230,7 @@ try {
         validation_contract=[pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$contractAsset).Replace('\','/'); sha256=(Get-Sha $contractAsset) }
         validation_adapter=[pscustomobject]@{ path=[IO.Path]::GetRelativePath($repo,$adapterAsset).Replace('\','/'); sha256=(Get-Sha $adapterAsset) }
         platform_identity=[pscustomobject]@{ release_version=$identity.release_version; platform_fingerprint=$identity.platform_fingerprint }
-        affected_domains=@("product-source"); changed_paths=@(); fanout=@([pscustomobject]@{ edge="replace-fanout"; state="passed"; receipt=$fakeRef })
+        affected_domains=@("module-ui-shell"); changed_paths=@(); fanout=@([pscustomobject]@{ edge="replace-fanout"; state="passed"; receipt=$fakeRef })
         targets=@([pscustomobject]@{ id="replace-focused-target"; state="passed"; source_identity=[pscustomobject]@{ commit=("0" * 40); tree=$tree; dirty=$false }; validation_contract_sha256=(Get-Sha $contractAsset); adapter_sha256=(Get-Sha $adapterAsset); clean_environment=$true; evidence=$fakeRef })
         slices=@([pscustomobject]@{ id="replace-slice"; state="passed"; exit_targets=@("replace-focused-target"); fanout_edges=@("replace-fanout") })
         coordinator_finalization=$fakeFinalizationRef; harvested_defects=$fakeRef; known_failure_count=0; materialization=[pscustomobject]@{ required=$false; first_apply=$state; semantic_no_op=$state; recovery=$state }; cleanup_restoration=$state; evidence_index=$fakeRef

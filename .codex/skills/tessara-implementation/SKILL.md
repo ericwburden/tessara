@@ -86,6 +86,12 @@ targets. Each slice is complete only when every declared exit target has a
 passing current-source receipt bound to the current contract hash, adapter hash,
 and authenticated platform identity.
 
+V3 dependency selection uses owned domains, not a sprint-wide
+`product-source` label. Maintain each touched domain's actual producer/test/
+fixture/environment/acceptance/runner inputs, candidate-binding flag, exact
+target/lane consumers, and bounded-cone rationale or full-replay default. If a
+path or consumer cannot be authenticated, expand the verification cone.
+
 The adapter/action boundary is strict. Sprint-specific product commands,
 focused test scripts, and harness assertions are adapter actions. The shared
 validation platform alone owns phase scheduling, topology and port lifecycle,
@@ -214,6 +220,12 @@ that cone instead of silently expanding scope.
   the coordinator-issued record and follow its owner, invalidation, and rerun
   boundary. Do not silently reclassify a process defect as product or vice
   versa.
+- For a post-freeze correction, run the failed or highest-risk reproducer
+  first, then every affected implementation target, and converge the complete
+  correction batch before asking validation to create a successor impact plan.
+  Focused proof never authorizes closeout. Do not start successor
+  certification while the batch, expectation authority, cleanup, or target
+  receipts remain open.
 - For policy v3, execute implementation lanes with
   `Invoke-TessaraImplementationHarvest` after reading
   `../tessara-sprint-validation/references/implementation-target-coordinator.md`.

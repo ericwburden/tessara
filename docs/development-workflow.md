@@ -375,9 +375,26 @@ or whenever impact is uncertain, run the complete affected phase.
 
 A downstream-only change does not reopen an upstream certificate. For example,
 a Preflight-runner change leaves Readiness and Rehearsal closed when none of
-their declared dependencies changed. A candidate-changing correction still
-requires a successor freeze followed by complete SIT and complete UAT; no SIT
-lane or manual UAT scenario is inherited across candidate fingerprints.
+their declared dependencies changed. Under v2, a candidate-changing correction
+still requires a successor freeze followed by complete SIT and complete UAT;
+no SIT lane or manual UAT scenario is inherited across candidate fingerprints.
+
+Policy v3 instead requires an immutable shared successor-impact plan. First run
+the failed/highest-risk reproducer, affected implementation targets, and the
+complete correction batch. Then `New-TessaraSuccessorImpactPlan` classifies the
+correction, authenticates owned-domain mappings, expands prerequisite closure,
+and orders newly failed/directly affected checks before expensive low-risk
+coverage. Human execution mistakes rerun the scenario; evidence-publication
+defects rerun finalization; phase-local runner defects rerun the runner self-test
+and consumers; bounded product corrections execute affected successor coverage
+and inherit authenticated non-impact evidence; uncertainty triggers complete
+Readiness, Rehearsal, Preflight, SIT, and UAT.
+
+V3 inheritance is limited to the immediate predecessor and requires unchanged
+dependency, fixture, environment, acceptance, runner, platform, adapter, and
+recursive prerequisite inheritance fingerprints. `sit-result.json` and
+`uat-result.json` list executed and inherited coverage separately and leave
+successor execution timing empty for inherited items.
 
 ### Evidence packaging
 
@@ -930,7 +947,9 @@ New kickoff packages use validation contract schema 3 / policy v3 and preserve
 all retained v2 and legacy packages unchanged.
 
 1. Kickoff creates and tracks the contract plus one schema-v2 validation
-   adapter, declares platform release `2.0.0`, explicit artifact-fanout edges,
+   adapter, declares platform release `2.0.0`, the shared successor-impact
+   planner/validator, owned dependency domains with exact producer/test inputs
+   and consumers, explicit artifact-fanout edges,
    per-slice exits, fixture/visual rules, exact target prerequisites and
    exclusive resource claims, shared coordinator activation, and Phase 8
    authorization/UI gates when applicable.
@@ -950,10 +969,16 @@ all retained v2 and legacy packages unchanged.
    targets remain labeled inherited/not newly executed. Formal Readiness is not
    a discovery pass for fixtures, environments, acceptance inventories,
    authorization, or generated assets.
-5. Every formal lane runs through `Invoke-TessaraValidationLane`. Phase
-   certificates and the evidence chain authenticate platform and adapter
+5. After a post-freeze correction, focused repair proof and the complete batch
+   finish before successor certification. The shared planner publishes the
+   predecessor/successor identities, diff digest, affected targets/lanes/UAT
+   scenarios, executed/inherited split, fingerprints, non-impact rationale,
+   cleanup, and fallback reasons.
+6. Every executed formal lane or scenario runs through
+   `Invoke-TessaraValidationLane`. Phase certificates and the evidence chain
+   authenticate platform, adapter, impact-plan, and immediate-predecessor
    provenance; missing provenance blocks rather than falling back.
-6. Closeout validates the chain, reports target/attempt efficiency and finding
+7. Closeout validates the chain, reports target/attempt efficiency and finding
    hotspots from retained receipts, and extracts reusable process lessons
    without changing accepted product behavior.
 

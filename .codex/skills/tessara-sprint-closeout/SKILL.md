@@ -23,6 +23,10 @@ For v3, also validate evidence-chain schema 2 and every phase-certificate schema
 3 through the current adapter and platform. Require authenticated platform
 release/fingerprint and adapter hash; absence or uncertainty returns to
 validation and never authorizes a custom runner or reconstructed evidence.
+Validate every listed successor-impact plan, its complete hashes and correction
+batch, exact executed/inherited coverage, immediate-predecessor certificates,
+unchanged inheritance fingerprints, non-impact rationales, cleanup, zero open
+defects, and expectation-change authority.
 
 When retained history contains a candidate-invalidating post-SIT failure,
 read
@@ -44,14 +48,16 @@ Closeout consumes validation evidence; it does not create it.
 - Require the coordinator-issued `closeout-authorization.json` and verify its
   prerequisite receipt hashes plus the legacy evidence manifest or v2 evidence
   chain selected by the sprint contract.
-- If evidence is missing, stale, or tied to multiple candidates, reopen
-  validation rather than filling the gap during closeout.
+- If evidence is missing or stale, reopen validation. Multiple candidate
+  identities are acceptable only for v3 items explicitly inherited from the
+  immediate predecessor by the authenticated impact plan.
 - If a provenance record is open, blocked, missing, or lacks authority for an
   expectation change, reopen validation at the coordinator-selected boundary.
 - If a post-SIT convergence cycle occurred, require its complete retained
   harvest, batch, impact, focused-attempt, restoration, and final-entry chain;
   verify that the authorized candidate was frozen only after the required
-  legacy full pass or v2 affected-lane pre-freeze recertification passed.
+  legacy full pass, v2 affected-lane pre-freeze recertification, or v3
+  successor-impact certification passed.
 - If closeout reveals a missing acceptance assertion or changes executable,
   harness, migration, seed, manifest, bootstrap, or deployment source, create
   a new candidate and restart SIT.
@@ -104,7 +110,9 @@ certificate is challenged.
 Require all of the following before changing roadmap status:
 
 - preflight preceded SIT
-- one complete clean candidate identity covers all retained SIT and UAT evidence
+- v2 evidence resolves to one clean candidate; v3 evidence resolves to one
+  clean successor plus only impact-plan-authenticated immediate-predecessor
+  items
 - static/boundary, Rust workspace, Playwright, and deployed acceptance-smoke
   SIT lanes passed
 - scripted and manual UAT passed after SIT
@@ -113,12 +121,14 @@ Require all of the following before changing roadmap status:
 - every post-SIT defect harvest accounts for every UAT scenario as executed or
   explicitly blocked, every defect converged, and the coordinator authorized
   return to final readiness/rehearsal
-- focused repair evidence is marked non-authoritative and was not reused to
-  satisfy the successor candidate's complete SIT or UAT
+- focused repair evidence is marked non-authoritative and was not reused as
+  formal proof; v3 inheritance comes only from predecessor authoritative phase
+  certificates, never focused repair receipts
 - the final successor fingerprint has passing Readiness and Rehearsal
   certificates with complete declared coverage, then its own Preflight and
-  complete SIT/UAT chain; legacy sprints additionally require complete
-  Readiness/Rehearsal execution from the beginning
+  v2 complete SIT/UAT chain or v3 exact executed/inherited impact-plan chain;
+  legacy sprints additionally require complete Readiness/Rehearsal execution
+  from the beginning
 - every roadmap exit-condition clause maps to automated and manual evidence
 - changed route, navigation, lifecycle, role, seed, manifest, bootstrap, and
   deployment contracts have explicit coverage
@@ -258,13 +268,15 @@ Do not finalize closeout if:
 - closeout was the first execution point for any acceptance check
 - roadmap or progress updates are missing or inconsistent
 - any exit condition lacks both automated and manual evidence
-- evidence does not resolve to one clean candidate
+- evidence does not resolve to one clean v2 candidate or one clean v3 successor
+  with an exact authenticated immediate-predecessor inheritance chain
 - under the legacy policy, an executable or harness change was made without
   restarting SIT; under v2, a changed certificate dependency lacks its required
-  invalidation/recertification, or a successor candidate lacks complete SIT
+  invalidation/recertification, or a successor candidate lacks complete SIT/UAT
 - any v2 failure lacks a resolved, schema-valid defect-provenance record
 - a v3 closeout lacks a schema-valid efficiency report or authenticated
-  platform/adapter evidence chain
+  platform/adapter evidence chain, or has an incomplete impact plan, missing
+  hash, unsafe inheritance, open defect, or undocumented expectation change
 - the closeout documentation commit is not distinguished from the evidence
   source commit
 - the intended application route is unhealthy or not left reviewer-testable

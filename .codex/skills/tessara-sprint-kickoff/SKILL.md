@@ -104,7 +104,9 @@ the current roadmap.
    canonical adapter path and supported platform release, validate the contract
    with `scripts/tessara-validation-policy.psm1`, validate
    the adapter through public `Assert-TessaraValidationAdapter`, then run
-   `Assert-TessaraFutureSprintPlanningPackage`. Ensure every placeholder is
+   `Assert-TessaraFutureSprintPlanningPackage`. Select v3 only after
+   `scripts/test-tessara-successor-certification.ps1` and the complete shared
+   platform certification pass with warnings denied. Ensure every placeholder is
    replaced and every requirement,
    target, lane, prerequisite, dependency domain, environment section, and
    evidence policy is complete. Select `implementation_profile.kind` as
@@ -120,6 +122,12 @@ the current roadmap.
     evidence-path claim plus every process, topology, port, database, Docker,
     or external-service claim it can touch. Read
     `tessara-sprint-validation/references/implementation-target-coordinator.md`.
+    Activate the shared successor planner/validator. Replace broad
+    `product-source` buckets with only justified owned domains: each domain must
+    name actual producer/test/fixture/environment/acceptance/runner inputs,
+    candidate binding, exact target/lane consumers, and either a proved bounded
+    cone or conservative full replay. Declare every UAT scripted/manual scenario
+    as a formal coverage item with a risk rank.
 11. Prepend the kickoff entry to `docs/progress-report.md`.
 12. Run the comprehensive planning audit below and correct planning gaps.
 13. Present the plan, unresolved decisions, and recommended first
@@ -170,8 +178,8 @@ that merely names files or architectural layers.
 
 The tracked validation contract is the executable companion to this prose. It
 maps every clause to exact implementation targets and formal lanes, maps every
-target/lane to dependency domains, and maps each domain to tracked path
-patterns. Unknown paths must select conservative validation rather than being
+target/lane to dependency domains, and maps each domain to exact owned inputs
+and reverse consumer relationships. Unknown paths must select conservative validation rather than being
 silently ignored.
 
 For policy v3, it also owns one explicit producer-to-projection edge for every
@@ -204,10 +212,10 @@ Seed the validation record before implementation with:
   `evidence-chain.json` integrity audit
 - the rule that deployed acceptance smoke runs inside SIT
 - the rule that a candidate or harness change invalidates downstream evidence
-- the shared validation-protocol invalidation matrix, including complete SIT
-  restart for a successor candidate, authenticated affected-lane pre-freeze
-  recertification, and certificate reuse only when declared dependency
-  fingerprints prove earlier results unaffected
+- the v2 complete-successor-SIT/UAT rule when v2 governs
+- for v3, the five correction classes, focused-repair-before-certification
+  rule, immediate-predecessor-only inheritance invariants, deterministic
+  failed/direct/prerequisite/risk order, and conservative fallback conditions
 
 Plan `defect-provenance.json` beside every possible failed attempt. State that
 automation may classify, invalidate, route, and block reruns, but may not edit
@@ -320,6 +328,8 @@ Do not report kickoff complete unless:
 - the validation record was created and seeded from the roadmap
 - the policy-v3 validation contract and tracked schema-v2 adapter were created,
   validated through the public APIs, and passed the planning-package audit
+- every owned domain has actual producer and test evidence plus an exact
+  consumer inventory, and the shared successor-impact state machine is active
 - the shared coordinator activation, deterministic prerequisites, and resource
   claims can produce one immutable execution plan
 - the kickoff progress entry was prepended

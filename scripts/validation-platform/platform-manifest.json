@@ -24,6 +24,14 @@
       "path": "scripts/validation-platform/tessara-future-sprint-guardrails.psm1"
     },
     {
+      "id": "successor-certification",
+      "path": "scripts/validation-platform/tessara-successor-certification.ps1"
+    },
+    {
+      "id": "successor-impact-plan-schema",
+      "path": ".codex/skills/tessara-sprint-validation/references/successor-impact-plan.schema.json"
+    },
+    {
       "id": "validation-contract-v3-schema",
       "path": ".codex/skills/tessara-sprint-validation/references/validation-contract-v3.schema.json"
     },

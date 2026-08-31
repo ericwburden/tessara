@@ -71,6 +71,33 @@ function Assert-TessaraValidationContractV3Semantics {
     $slices = Get-TessaraGuardrailMap @($Contract.implementation_slices) id "Implementation slices"
     $null = Get-TessaraGuardrailMap @($Contract.requirements) id "Requirements"
 
+    if (-not [bool]$Contract.successor_certification.enabled -or
+        [string]$Contract.successor_certification.planner_entrypoint -cne "New-TessaraSuccessorImpactPlan" -or
+        [string]$Contract.successor_certification.validator_entrypoint -cne "Assert-TessaraSuccessorImpactPlan") {
+        throw "Validation contract v3 must activate the shared successor-impact planner and validator."
+    }
+
+    foreach ($domain in @($Contract.dependency_domains)) {
+        $inputKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        $roles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($input in @($domain.inputs)) {
+            $key = "$([string]$input.role)/$([string]$input.path)"
+            if (-not $inputKeys.Add($key)) { throw "Dependency domain '$($domain.name)' repeats input '$key'." }
+            $null = $roles.Add([string]$input.role)
+        }
+        if (-not $roles.Contains("producer")) {
+            throw "Dependency domain '$($domain.name)' must identify an actual producer input."
+        }
+        if ([string]$domain.default_impact -ceq "bounded") {
+            if ([string]::IsNullOrWhiteSpace([string]$domain.bounded_rationale) -or
+                -not $roles.Contains("test")) {
+                throw "Bounded dependency domain '$($domain.name)' requires a rationale and tracked test input proving its closed cone."
+            }
+        } elseif ($null -ne $domain.bounded_rationale) {
+            throw "Full-replay dependency domain '$($domain.name)' cannot claim a bounded-cone rationale."
+        }
+    }
+
     foreach ($phase in @("implementation", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat")) {
         if (@($Contract.lanes | Where-Object { [string]$_.phase -ceq $phase }).Count -eq 0) {
             throw "Validation contract does not declare a '$phase' lane."
@@ -125,6 +152,22 @@ function Assert-TessaraValidationContractV3Semantics {
         }
         $implementationLaneByTarget[[string]$target.id] = $implementationLane
         $targetByImplementationLane[$implementationLane] = [string]$target.id
+    }
+
+    foreach ($domain in @($Contract.dependency_domains)) {
+        $name = [string]$domain.name
+        $expectedTargets = @($Contract.implementation_targets | Where-Object {
+                @($_.dependency_domains) -ccontains $name
+            } | ForEach-Object { [string]$_.id } | Sort-Object)
+        $expectedLanes = @($Contract.lanes | Where-Object {
+                @($_.dependency_domains) -ccontains $name
+            } | ForEach-Object { [string]$_.id } | Sort-Object)
+        if (($expectedTargets -join "`n") -cne
+                (@($domain.consumers.implementation_targets | Sort-Object) -join "`n") -or
+            ($expectedLanes -join "`n") -cne
+                (@($domain.consumers.validation_lanes | Sort-Object) -join "`n")) {
+            throw "Dependency domain '$name' consumer inventory does not exactly match its target and lane relationships."
+        }
     }
     foreach ($lane in @($Contract.lanes | Where-Object { [string]$_.phase -ceq "implementation" })) {
         if (-not $targetByImplementationLane.ContainsKey([string]$lane.id)) {

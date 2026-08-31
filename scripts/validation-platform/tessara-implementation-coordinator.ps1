@@ -225,7 +225,10 @@ function New-TessaraCoordinatorPlan {
     $unknownImpact = @($changedPaths | Where-Object {
         $changedPath = [string]$_
         @($validated.validation_contract.dependency_domains | Where-Object {
-            @($_.tracked_inputs | Where-Object { $changedPath -clike ([string]$_).Replace('\', '/') }).Count -gt 0
+            $patterns = if ($_.PSObject.Properties.Name -contains 'inputs') {
+                @($_.inputs | ForEach-Object { [string]$_.path })
+            } else { @($_.tracked_inputs) }
+            @($patterns | Where-Object { $changedPath -clike ([string]$_).Replace('\', '/') }).Count -gt 0
         }).Count -eq 0
     }).Count -gt 0
     $preliminary = @{}
@@ -279,7 +282,11 @@ function New-TessaraCoordinatorPlan {
             $changedPath = [string]$_
             @($validated.validation_contract.dependency_domains | Where-Object {
                 [string]$_.name -in $domains -and
-                @($_.tracked_inputs | Where-Object { $changedPath -clike ([string]$_).Replace('\', '/') }).Count -gt 0
+                @($(if ($_.PSObject.Properties.Name -contains 'inputs') {
+                            @($_.inputs | ForEach-Object { [string]$_.path })
+                        } else { @($_.tracked_inputs) }) | Where-Object {
+                        $changedPath -clike ([string]$_).Replace('\', '/')
+                    }).Count -gt 0
             }).Count -gt 0
         }).Count -gt 0
         $preliminary[$id] = [pscustomobject][ordered]@{
