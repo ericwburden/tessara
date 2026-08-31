@@ -14,11 +14,11 @@ pub const RESPONSE_BINDINGS_JS: &str = include_str!("../assets/response-bindings
 pub const RESPONSE_CSS_SHA256: &str =
     "e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7";
 pub const RESPONSE_JS_SHA256: &str =
-    "94d2bfc37e17ac26a0833a0bbcf4ba5f6f0dc17cf4e4862d4098927e24e5f530";
+    "fee5dcb70cd6987e673b557c404c29fd8fb872b83601341e67e9a1207e974462";
 pub const RESPONSE_BINDINGS_JS_SHA256: &str =
-    "d09a3596639d1ffeec5443f019c996cb160fbf935efc9c68c3531d8d3ffaa130";
+    "67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf";
 pub const RESPONSE_WASM_SHA256: &str =
-    "f46b5ad579bf45891d7fd8ceb408435859c91c26c82865fb6f84bc0b2d6b446b";
+    "245e9dc803bc24790f9e84af94d592a1ef4563b269b2b36529bcc8081a8c6273";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "route", rename_all = "snake_case", deny_unknown_fields)]

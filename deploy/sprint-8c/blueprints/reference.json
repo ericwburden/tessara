@@ -903,7 +903,6 @@
                     "summary_type": "row_count",
                     "value_format": "integer",
                     "label": "Response rows",
-                    "supporting_text": "Dataset v2 materialization",
                     "panel_style": "accent"
                   }
                 }

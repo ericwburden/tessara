@@ -1306,7 +1306,18 @@ test.describe("Sprint 8A extracted Component UI parity", () => {
       ).toBeVisible();
       await expect(page.locator(".component-visual-preview")).toBeVisible();
       if (kind === "stat_card") {
-        await expect(page.locator(".component-stat-card")).toBeVisible();
+        const statCard = page.locator(".component-stat-card");
+        const label = statCard.locator(".component-stat-card__label");
+        const value = statCard.locator(".component-stat-card__value");
+        await expect(statCard).toBeVisible();
+        await expect(label).toBeVisible();
+        await expect(value).toBeVisible();
+        const [labelSize, valueSize] = await Promise.all([
+          label.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+          value.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+        ]);
+        expect(valueSize).toBeGreaterThan(labelSize * 3);
+        await expect(statCard.locator(".component-stat-card__supporting")).toHaveCount(0);
       } else {
         await expect(page.locator(".component-d3-svg")).toBeVisible({
           timeout: 15_000,

@@ -53,6 +53,9 @@ pub(crate) fn response_assignee_label(response: &ResponseSummary) -> String {
 }
 
 pub(crate) fn response_step_label(response: &ResponseSummary) -> String {
+    if response_status_key(response) == "submitted" {
+        return "No active step".to_string();
+    }
     let title = nonempty_text(
         response.current_workflow_step_title.as_deref(),
         "No active step",
@@ -69,6 +72,11 @@ pub(crate) fn response_step_label(response: &ResponseSummary) -> String {
 }
 
 pub(crate) fn response_progress_label(response: &ResponseSummary) -> String {
+    if response_status_key(response) == "submitted"
+        && let Some(count) = response.workflow_step_count.filter(|count| *count > 0)
+    {
+        return format!("{count} of {count} completed");
+    }
     match (
         response.workflow_steps_completed,
         response.workflow_step_count,
@@ -147,4 +155,54 @@ pub(crate) fn response_field_class(field_type: &str) -> String {
         "form-field response-form-field response-form-field--{}",
         field_type.replace('_', "-")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn response(status: &str) -> ResponseSummary {
+        ResponseSummary {
+            id: uuid::Uuid::from_u128(1),
+            form_id: uuid::Uuid::from_u128(2),
+            form_version_id: uuid::Uuid::from_u128(3),
+            form_name: "Primary Responses".into(),
+            workflow_name: Some("Primary Responses Workflow".into()),
+            workflow_description: None,
+            workflow_step_position: Some(0),
+            workflow_step_count: Some(1),
+            workflow_steps_completed: Some(0),
+            current_workflow_step_title: Some("Primary Responses Response".into()),
+            next_workflow_step_title: None,
+            next_workflow_step_form_name: None,
+            assigned_to_display_name: Some("Response Owner".into()),
+            version_label: "1.0.0".into(),
+            node_id: uuid::Uuid::from_u128(4),
+            node_name: "Reference Organization".into(),
+            status: status.into(),
+            value_count: 3,
+            created_at: "2026-08-31T00:00:00Z".into(),
+            last_modified_at: "2026-08-31T00:00:00Z".into(),
+            submitted_at: None,
+        }
+    }
+
+    #[test]
+    fn submitted_response_presents_the_completed_assignment() {
+        let response = response("submitted");
+
+        assert_eq!(response_step_label(&response), "No active step");
+        assert_eq!(response_progress_label(&response), "1 of 1 completed");
+    }
+
+    #[test]
+    fn draft_response_preserves_current_step_progress() {
+        let response = response("draft");
+
+        assert_eq!(
+            response_step_label(&response),
+            "Step 1 of 1: Primary Responses Response"
+        );
+        assert_eq!(response_progress_label(&response), "0 of 1 completed");
+    }
 }

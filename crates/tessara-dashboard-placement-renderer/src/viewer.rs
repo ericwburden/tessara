@@ -1621,6 +1621,9 @@ mod tests {
         }
         .to_html();
         assert!(stat_html.contains("component-stat-card--accent"));
+        assert!(stat_html.contains("component-stat-card__label"));
+        assert!(stat_html.contains("component-stat-card__value"));
+        assert!(stat_html.contains("component-stat-card__supporting"));
         assert!(stat_html.contains("Active families"));
         assert!(stat_html.contains("42"));
     }

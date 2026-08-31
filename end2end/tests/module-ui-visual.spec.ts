@@ -689,6 +689,28 @@ test.describe("canonical module UI visual baselines", () => {
       maxMeanColorDelta: 3,
       minComparedPixelRatio: 0.22,
     });
+
+    const trigger = page.locator(".theme-toggle__trigger");
+    const system = page.locator('.theme-toggle__option[data-theme-value="system"]');
+    const light = page.locator('.theme-toggle__option[data-theme-value="light"]');
+    await trigger.click();
+    await system.click();
+    await trigger.click();
+    await light.click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme-preference", "light");
+    await expect(light).toHaveAttribute("aria-checked", "true");
+    await expect(light).toHaveClass(/is-active/);
+    await expect(system).toHaveAttribute("aria-checked", "false");
+    await expect(system).not.toHaveClass(/is-active/);
+
+    await page.locator(".account-copy strong").evaluate((element) => {
+      element.textContent = "Reference Workflow Delegate With An Intentionally Long Display Name";
+    });
+    const overflow = await page.locator(".sidebar").evaluate((sidebar) => ({
+      clientWidth: sidebar.clientWidth,
+      scrollWidth: sidebar.scrollWidth,
+    }));
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
     assertCleanRuntime();
   });
 

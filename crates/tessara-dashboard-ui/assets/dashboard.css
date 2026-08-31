@@ -1363,12 +1363,40 @@
 }
 
 .module-scope--tessara-dashboards .dashboard-viewer-placement--stat-card .component-stat-card {
+  display: grid;
+  gap: 0.35rem;
   align-content: center;
   border: 0;
+  border-radius: 0.65rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--semantic-primary-soft);
 }
 
 .module-scope--tessara-dashboards .dashboard-viewer-placement--stat-card .component-stat-card--default {
   background: var(--color-panel);
+}
+
+.module-scope--tessara-dashboards .dashboard-viewer-placement--stat-card .component-stat-card__label {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.module-scope--tessara-dashboards .dashboard-viewer-placement--stat-card .component-stat-card__value {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 5rem);
+  font-weight: 800;
+  line-height: 0.95;
+}
+
+.module-scope--tessara-dashboards .dashboard-viewer-placement--stat-card .component-stat-card__supporting {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
 }
 
 .module-scope--tessara-dashboards .dashboard-lazy-placeholder,

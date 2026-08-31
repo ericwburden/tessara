@@ -246,8 +246,8 @@ function Get-Sprint8CUatAssertionMap {
                 @("provider-boundaries", "failure-recovery", "deployed-smoke")
         }
         "UAT-8C-06" = [ordered]@{
-            "generic Module Management validates and applies Response configuration" = @("deployed-smoke")
-            "diagnostics are sanitized and owner-authentic" = @("deployed-smoke", "response-provider")
+            "administrator Module Management validates and applies Response configuration" = @("deployed-smoke")
+            "administrator diagnostics are sanitized and owner-authentic while the operator status projection remains available without Module Management access" = @("deployed-smoke", "response-provider")
         }
         "UAT-8C-07" = [ordered]@{
             "from-empty owner order returns signed read-back" = @("materialization-noop", "response-bootstrap")

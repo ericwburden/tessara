@@ -292,6 +292,11 @@ test.describe("Sprint 8C independent Response module", () => {
       (response) => response.status === "draft",
       "Reference Response draft",
     );
+    const submitted = requireResponse(
+      responses,
+      (response) => response.status === "submitted",
+      "Reference submitted Response",
+    );
 
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto("/responses");
@@ -301,6 +306,12 @@ test.describe("Sprint 8C independent Response module", () => {
     );
     await expect(page.locator(".responses-list .table-wrap")).toBeVisible();
     await expect(page.locator(`a[href="/responses/${draft.id}"]`).first()).toBeVisible();
+    const submittedRow = page
+      .locator(".responses-list tbody tr")
+      .filter({ has: page.locator(`a[href="/responses/${submitted.id}"]`) });
+    await expect(submittedRow).toContainText("No active step");
+    await expect(submittedRow).toContainText("1 of 1 completed");
+    await expect(submittedRow).not.toContainText("0 of 1 completed");
     const direct = await responseRouteParity(page);
     expect(direct).toMatchObject({
       title: "Responses · Tessara",

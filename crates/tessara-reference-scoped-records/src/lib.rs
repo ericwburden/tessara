@@ -37,7 +37,7 @@ use uuid::Uuid;
 
 pub const MODULE_DEFINITION_ID: &str = "tessara.reference.scoped-records";
 pub const MODULE_RELEASE_VERSION: &str = "1.0.2";
-pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css";
+pub const MODULE_UI_CSS_PATH: &str = "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f/module-ui.css";
 pub const SCOPED_RECORDS_CSS: &str = include_str!("../assets/scoped-records.css");
 pub const SCOPED_RECORDS_CSS_SHA256: &str =
     "ca3e243f6f1aea1f794876d7bdd47cde5553fc610de66e28568a83393e714f77";

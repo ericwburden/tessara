@@ -657,22 +657,22 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
+      "digest": "sha256:dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.css",
-      "digest": "sha256:752387257cd0ddb69780425d88be40128a1a3cc96ed0cdffd725749ba723600e",
+      "digest": "sha256:6e5179a1f685bc9573edd541447da14a005905d6644d47b9eb6cf5769b5f09be",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component-lifecycle.css",
-      "digest": "sha256:17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724",
+      "digest": "sha256:c5542e5f756e35b65eeabbaeb8da42f2e81c7ac8d2935ae9228dec7711fa04ac",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.js",
-      "digest": "sha256:29ff9915a290c492f45bdbac100f5acce5c07934dd54d77dd65bdd9ac7dd6f60",
+      "digest": "sha256:b79f114c35074053ed07240d67bf142875d38ec985cc819ac681644b170b0f88",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
@@ -682,7 +682,7 @@
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:0a26e247986e233430da02b89dba36fdf101496824df5aa901b7dd5a4c8e7287",
+      "digest": "sha256:94b135f8eab1c40616af38dd699feebfe4f5d88d8c1089ce9d3f35878ffc7fc1",
       "content_type": "application/wasm"
     }
   ]

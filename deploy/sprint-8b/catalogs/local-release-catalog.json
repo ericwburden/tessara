@@ -17,7 +17,7 @@
   "module_releases": [
     {
       "definition_id":"tessara.datasets","version":"1.0.0",
-      "manifest_digest":"sha256:e55c957874e3385171778cac135bd60fa5e967d08ca0f1dc9fa1a39b4212fcd6",
+      "manifest_digest":"sha256:840508bb5d6ed44bf002004afdfa44539dda3d93ad324cf4ed2704096b854afb",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000003",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dataset-configuration/v1",
@@ -33,7 +33,7 @@
     },
     {
       "definition_id":"tessara.components","version":"1.1.0",
-      "manifest_digest":"sha256:fd634734fa599aa524b552faed002ade974be72b17993380936e6d9adbd3d0ea",
+      "manifest_digest":"sha256:faa841fa0a408815de0b24fd4dd1612b9bd18a7ad7c860bc2d54ac77c72083f3",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000004",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/component-configuration/v1",
@@ -44,7 +44,7 @@
     },
     {
       "definition_id":"tessara.dashboards","version":"3.0.2",
-      "manifest_digest":"sha256:7332e9a917a15a184ac0978ea3e8c63bb0dba6a40b30df91ea6b6bc30fcac1b6",
+      "manifest_digest":"sha256:10b15073b9f4d15dfbf269e5059377287529b54e00747696313aa42331f28bcc",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000005",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/dashboard-configuration/v1",
@@ -55,7 +55,7 @@
     },
     {
       "definition_id":"tessara.reference.scoped-records","version":"1.0.2",
-      "manifest_digest":"sha256:e6f9f313e5723782d3c790ebfa0466d3aa0926c4600aecba835c024593ed6c39",
+      "manifest_digest":"sha256:8a24f27e6cbc6d4e26afdefb5518d2b02577caabff32c8e8157f6f1ab49706b2",
       "runtime_image":"sha256:8b00000000000000000000000000000000000000000000000000000000000006",
       "deployment_profile":"tessara-oci-v1",
       "configuration_schema_version":"tessara.io/scoped-records-configuration/v1",

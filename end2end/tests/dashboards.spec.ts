@@ -574,7 +574,15 @@ test.describe.serial("Sprint 5A Dashboard routes and composition", () => {
         statCardPlacement.locator(":scope > .dashboard-viewer-placement__header"),
       ).toHaveCount(0);
       await expect(statCardPlacement.locator(".component-stat-card")).toBeVisible();
-      await expect(statCardPlacement.locator(".component-stat-card strong")).toBeVisible();
+      const statLabel = statCardPlacement.locator(".component-stat-card__label");
+      const statValue = statCardPlacement.locator(".component-stat-card__value");
+      await expect(statLabel).toBeVisible();
+      await expect(statValue).toBeVisible();
+      const [labelSize, valueSize] = await Promise.all([
+        statLabel.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+        statValue.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+      ]);
+      expect(valueSize).toBeGreaterThan(labelSize * 3);
       assertNoConsoleErrors();
     } finally {
       await deleteDashboardFixture(page, fixture.id);

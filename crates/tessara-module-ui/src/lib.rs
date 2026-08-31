@@ -133,7 +133,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
 pub const MODULE_UI_CSS_SHA256: &str =
-    "21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc";
+    "dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -357,7 +357,7 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
 
 #[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
-    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);const signOutButton=document.querySelector('[data-shell-sign-out]');signOutButton?.addEventListener('click',async()=>{signOutButton.disabled=true;try{const response=await fetch('/api/auth/logout',{method:'DELETE',credentials:'same-origin',headers:{accept:'application/json'}});if(!response.ok){throw new Error('Sign out failed')}const result=await response.json();if(result?.signed_out!==true){throw new Error('Sign out failed')}window.location.assign('/login')}catch(_error){signOutButton.disabled=false}})})();"#
+    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const themeOptions=document.querySelectorAll('[data-theme-value]');const setThemeSelection=(preference)=>themeOptions.forEach(option=>{const active=option.dataset.themeValue===preference;option.classList.toggle('is-active',active);option.setAttribute('aria-checked',String(active))});const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};setThemeSelection(root.dataset.themePreference||'system');themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);themeOptions.forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;const resolved=preference==='system'?(dark?'dark':'light'):preference;root.dataset.themePreference=preference;root.dataset.theme=resolved;setThemeSelection(preference);const meta=document.querySelector('meta[name="theme-color"]');meta?.setAttribute('content',resolved==='dark'?'#0F172A':'#F8FAFC');closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);const signOutButton=document.querySelector('[data-shell-sign-out]');signOutButton?.addEventListener('click',async()=>{signOutButton.disabled=true;try{const response=await fetch('/api/auth/logout',{method:'DELETE',credentials:'same-origin',headers:{accept:'application/json'}});if(!response.ok){throw new Error('Sign out failed')}const result=await response.json();if(result?.signed_out!==true){throw new Error('Sign out failed')}window.location.assign('/login')}catch(_error){signOutButton.disabled=false}})})();"#
 }
 
 #[cfg(feature = "components")]
@@ -520,6 +520,17 @@ mod tests {
         assert!(script.contains("window.location.assign('/login')"));
         assert!(!script.contains("'/api/logout'"));
         assert!(!script.contains("form.method='post'"));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn shell_interaction_script_updates_theme_selection_semantics() {
+        let script = shell_interaction_script();
+
+        assert!(script.contains("setThemeSelection(root.dataset.themePreference||'system')"));
+        assert!(script.contains("option.classList.toggle('is-active',active)"));
+        assert!(script.contains("option.setAttribute('aria-checked',String(active))"));
+        assert!(script.contains("setThemeSelection(preference)"));
     }
 
     #[test]

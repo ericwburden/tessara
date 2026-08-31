@@ -45,9 +45,9 @@ fn ComponentStatCard(visual: ComponentVisualResponse) -> impl IntoView {
         <div class=class_name>
             {if let Some(stat) = visual.stat {
                 view! {
-                    <p>{stat.label}</p>
-                    <strong>{stat.display_value.unwrap_or_else(|| "-".into())}</strong>
-                    {stat.supporting_text.map(|text| view! { <span>{text}</span> })}
+                    <p class="component-stat-card__label">{stat.label}</p>
+                    <strong class="component-stat-card__value">{stat.display_value.unwrap_or_else(|| "-".into())}</strong>
+                    {stat.supporting_text.map(|text| view! { <span class="component-stat-card__supporting">{text}</span> })}
                 }
                 .into_any()
             } else {

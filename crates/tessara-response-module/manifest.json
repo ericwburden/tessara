@@ -155,11 +155,11 @@
     }
   ],
   "assets": [
-    { "path": "/module-ui.css", "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc", "content_type": "text/css; charset=utf-8" },
+    { "path": "/module-ui.css", "digest": "sha256:dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f", "content_type": "text/css; charset=utf-8" },
     { "path": "/response.css", "digest": "sha256:e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7", "content_type": "text/css; charset=utf-8" },
-    { "path": "/response.js", "digest": "sha256:94d2bfc37e17ac26a0833a0bbcf4ba5f6f0dc17cf4e4862d4098927e24e5f530", "content_type": "text/javascript; charset=utf-8" },
-    { "path": "/response-bindings.js", "digest": "sha256:d09a3596639d1ffeec5443f019c996cb160fbf935efc9c68c3531d8d3ffaa130", "content_type": "text/javascript; charset=utf-8" },
-    { "path": "/response.wasm", "digest": "sha256:f46b5ad579bf45891d7fd8ceb408435859c91c26c82865fb6f84bc0b2d6b446b", "content_type": "application/wasm" }
+    { "path": "/response.js", "digest": "sha256:fee5dcb70cd6987e673b557c404c29fd8fb872b83601341e67e9a1207e974462", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response-bindings.js", "digest": "sha256:67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response.wasm", "digest": "sha256:245e9dc803bc24790f9e84af94d592a1ef4563b269b2b36529bcc8081a8c6273", "content_type": "application/wasm" }
   ],
   "provided_service_actions": [
     { "path": "/api/private/responses/submitted-export/checkpoint", "method": "POST", "authorization_action": "responses.export_checkpoint", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },
