@@ -233,6 +233,7 @@ textarea {
 
 .account-copy strong,
 .account-copy small {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

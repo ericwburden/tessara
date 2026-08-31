@@ -657,7 +657,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f",
+      "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f",
       "content_type": "text/css; charset=utf-8"
     },
     {

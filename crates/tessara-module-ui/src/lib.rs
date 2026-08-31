@@ -133,7 +133,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
 pub const MODULE_UI_CSS_SHA256: &str =
-    "dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f";
+    "8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";

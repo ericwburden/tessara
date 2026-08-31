@@ -155,7 +155,7 @@
     }
   ],
   "assets": [
-    { "path": "/module-ui.css", "digest": "sha256:dff9a5085d85d9e535b0fc0d4ba37233891e24e0241d9ca7c4ccd3c906ea1f9f", "content_type": "text/css; charset=utf-8" },
+    { "path": "/module-ui.css", "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f", "content_type": "text/css; charset=utf-8" },
     { "path": "/response.css", "digest": "sha256:e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7", "content_type": "text/css; charset=utf-8" },
     { "path": "/response.js", "digest": "sha256:fee5dcb70cd6987e673b557c404c29fd8fb872b83601341e67e9a1207e974462", "content_type": "text/javascript; charset=utf-8" },
     { "path": "/response-bindings.js", "digest": "sha256:67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf", "content_type": "text/javascript; charset=utf-8" },
