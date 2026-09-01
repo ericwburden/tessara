@@ -163,7 +163,7 @@ if ($composeAction -ceq "up") {
         $startParameters.WindowStyle = "Hidden"
     }
     $process = Start-Process @startParameters
-    [pscustomobject][ordered]@{
+    $ownership = [pscustomobject][ordered]@{
         project = $project
         pid = $process.Id
         process_started_at = $process.StartTime.ToUniversalTime().ToString("O")
@@ -172,8 +172,14 @@ if ($composeAction -ceq "up") {
         attempt = [string]$env:TESSARA_VALIDATION_TOPOLOGY_ATTEMPT
         stop_path = [IO.Path]::GetFullPath($stopPath)
         stop_capability = $stopCapability
-    } |
-        ConvertTo-Json -Compress | Set-Content -NoNewline -LiteralPath $statePath
+    }
+    $ownershipJson = $ownership | ConvertTo-Json -Compress
+    $ownershipJson | Set-Content -NoNewline -LiteralPath $statePath
+    [IO.File]::AppendAllText(
+        (Join-Path $root "synthetic-processes.jsonl"),
+        "$ownershipJson`n",
+        [Text.UTF8Encoding]::new($false)
+    )
     exit 0
 }
 if ($composeAction -ceq "ps") {
