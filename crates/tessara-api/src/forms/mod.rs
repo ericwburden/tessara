@@ -833,6 +833,7 @@ async fn load_form_dataset_sources(
             contract_version: DATASET_REVERSE_CONTRACT_VERSION,
             authorization_action: DATASET_SOURCE_USAGE_ACTION,
             path: DATASET_SOURCE_USAGE_PATH,
+            media_type: "application/json",
             correlation_id,
             actor_capability: "forms:read",
             body: &request,
@@ -1623,21 +1624,6 @@ async fn require_form_version_render_access(
     let can_render: bool = sqlx::query_scalar(
         r#"
         SELECT EXISTS (
-            SELECT 1
-            FROM submissions
-            JOIN workflow_assignments
-              ON workflow_assignments.id = submissions.workflow_assignment_id
-            WHERE submissions.form_version_id = $1
-              AND (
-                workflow_assignments.account_id = $2
-                OR EXISTS (
-                    SELECT 1
-                    FROM account_delegations
-                    WHERE account_delegations.delegator_account_id = $2
-                      AND account_delegations.delegate_account_id = workflow_assignments.account_id
-                )
-              )
-            UNION
             SELECT 1
             FROM workflow_assignments
             JOIN workflow_steps

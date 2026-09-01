@@ -1,14 +1,14 @@
 //! Response form field input component.
 
 use crate::display::{rendered_form_field_layout_style, response_field_class};
-use crate::types::RenderedField;
+use crate::types::ResponseFormField;
 use leptos::prelude::*;
 use std::collections::HashMap;
 use tessara_module_ui::empty_view;
 
 #[component]
 pub(crate) fn ResponseFieldInput(
-    field: RenderedField,
+    field: ResponseFormField,
     text_values: RwSignal<HashMap<String, String>>,
     boolean_values: RwSignal<HashMap<String, bool>>,
 ) -> impl IntoView {

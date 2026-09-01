@@ -75,6 +75,15 @@ pub enum ComponentRouteBootstrap {
         component: ComponentDefinitionBootstrap,
         manageable: bool,
     },
+    DeferredDetail {
+        component_ref: String,
+    },
+    DeferredVersions {
+        component_ref: String,
+    },
+    DeferredView {
+        component_ref: String,
+    },
 }
 
 impl ComponentRouteBootstrap {
@@ -84,6 +93,9 @@ impl ComponentRouteBootstrap {
             | Self::Edit { component, .. }
             | Self::Versions { component, .. }
             | Self::View { component, .. } => Some(component.slug.clone()),
+            Self::DeferredDetail { component_ref }
+            | Self::DeferredVersions { component_ref }
+            | Self::DeferredView { component_ref } => Some(component_ref.clone()),
             Self::Directory { .. } | Self::Create { .. } => None,
         }
     }

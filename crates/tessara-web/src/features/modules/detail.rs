@@ -684,9 +684,9 @@ mod tests {
         .expect("entry parses")
     }
 
-    fn responses_entry() -> ModuleInventoryEntryV1 {
+    fn workflows_dependency_entry() -> ModuleInventoryEntryV1 {
         let descriptor: TransitionalContributionDescriptorV1 = serde_json::from_str(include_str!(
-            "../../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json"
+            "../../../../tessara-module-contract/tests/fixtures/transition-workflows-v1.json"
         ))
         .expect("fixture parses");
         serde_json::from_value(json!({
@@ -806,16 +806,16 @@ mod tests {
             let policy = RwSignal::new(None);
             let active_detail_section = RwSignal::new("overview");
             view! {
-                <ModuleDetailPeerSections entry=responses_entry() policy active_detail_section/>
+                <ModuleDetailPeerSections entry=workflows_dependency_entry() policy active_detail_section/>
             }
             .to_html()
         });
 
         assert!(html.contains("Transition-internal only"));
         assert!(html.contains(
-            "2 declared relationships describe current in-process coupling and cannot be satisfied by a transition contribution provider."
+            "1 declared relationship describes current in-process coupling and cannot be satisfied by a transition contribution provider."
         ));
-        assert!(html.contains("data-dependency-binding=\"tessara.responses.workflow-version\""));
+        assert!(html.contains("data-dependency-binding=\"tessara.workflows.form-version\""));
         assert!(html.contains("transition_internal_only"));
         assert!(html.contains("data-finding-code=\"transition_internal_only\""));
         assert!(html.contains("data-finding-path=\"dependencies[0]\""));

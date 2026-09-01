@@ -21,15 +21,15 @@ pub const DASHBOARD_JS: &str = include_str!("../assets/dashboard.js");
 pub const DASHBOARD_BINDINGS_JS: &str = include_str!("../assets/dashboard-bindings.js");
 pub const DASHBOARD_WASM: &[u8] = include_bytes!("../assets/dashboard.wasm");
 pub const DASHBOARD_CSS_SHA256: &str =
-    "b84176e5a2a26d2980dbd30463f5a1e9b8fb20dda258c38e673ebc5446020412";
+    "fe16f3887423464ae30b4211241a09f60a91c5f8752625299befc92600d4785f";
 pub const DASHBOARD_LIFECYCLE_CSS_SHA256: &str =
-    "838136485a2d0a547d95e520076a039189c2d3fb24d9f15d23a977f98ca0cef3";
+    "7f59720d45733e83e9451758318e94914074f3a9fc3779643e7a3f1df50b9e54";
 pub const DASHBOARD_JS_SHA256: &str =
-    "9202af2859d511094717222945b7007311320f30ed0087c2f1001caff2a871db";
+    "e41f1f9b5de1847282a7840ab8aecaaa6efe4e760567e3800fe912993342057b";
 pub const DASHBOARD_BINDINGS_JS_SHA256: &str =
-    "14e2a5f0a610065369306ddfedf41f26edd605ef8639e9dab0cc5c0d72464593";
+    "323922dcdbc6a73530a104226d68dc4bd632eaf2a8e5df64f7a401d07ed06076";
 pub const DASHBOARD_WASM_SHA256: &str =
-    "37a07f6920432f19ad13f27e8201912daf5fced6bac84582aced39ecc6767673";
+    "1147837c07a9ccc8dd69c3a9a76f103fd030ad00e026a720926831d6c8ca2e2c";
 
 pub fn dashboard_asset_path(release: &str, digest: &str, name: &str) -> String {
     format!("/_tessara/modules/tessara.dashboards/{release}/sha256:{digest}/{name}")

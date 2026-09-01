@@ -1,7 +1,7 @@
 //! Response list table and mobile card components.
 
 use super::{ResponseDesktopTable, ResponseMobileCards};
-use crate::types::SubmissionSummary;
+use crate::types::ResponseSummary;
 use tessara_module_ui::TablePaginationFooter;
 
 use icons::Search;
@@ -9,7 +9,7 @@ use leptos::prelude::*;
 
 #[component]
 pub(crate) fn ResponsesList(
-    submissions: Vec<SubmissionSummary>,
+    submissions: Vec<ResponseSummary>,
     search: RwSignal<String>,
     assignee_filter: RwSignal<String>,
     status_filter: RwSignal<String>,

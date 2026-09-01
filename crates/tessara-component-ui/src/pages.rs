@@ -54,9 +54,7 @@ pub fn ComponentsIndexContent() -> impl IntoView {
     let can_manage_components = RwSignal::new(initial_can_manage);
 
     Effect::new(move |_| {
-        if !bootstrapped {
-            load_components(components, is_loading, load_error, can_manage_components);
-        }
+        load_components(components, is_loading, load_error, can_manage_components);
     });
 
     view! {
@@ -107,15 +105,13 @@ pub fn ComponentVersionsContent(component_ref: String) -> impl IntoView {
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
-            if !bootstrapped {
-                load_component(
-                    component_ref.clone(),
-                    component,
-                    is_loading,
-                    load_error,
-                    can_manage_component,
-                )
-            }
+            load_component(
+                component_ref.clone(),
+                component,
+                is_loading,
+                load_error,
+                can_manage_component,
+            )
         }
     });
 
@@ -1234,15 +1230,13 @@ pub fn ComponentViewerContent(component_ref: String) -> impl IntoView {
     Effect::new({
         let component_ref = component_ref.clone();
         move |_| {
-            if !bootstrapped {
-                load_component(
-                    component_ref.clone(),
-                    component,
-                    component_loading,
-                    component_error,
-                    can_manage_component,
-                )
-            }
+            load_component(
+                component_ref.clone(),
+                component,
+                component_loading,
+                component_error,
+                can_manage_component,
+            )
         }
     });
 
@@ -2473,7 +2467,8 @@ fn load_components(
         is_loading.set(true);
         load_error.set(None);
         match api::fetch_admin_components().await {
-            Ok(Some(response)) => {
+            Ok(Some(mut response)) => {
+                response.sort_by_key(|item| item.name.to_lowercase());
                 can_manage_components.set(true);
                 components.set(response);
             }
@@ -2482,7 +2477,8 @@ fn load_components(
                 components.set(Vec::new());
             }
             Err(_) => match api::fetch_components().await {
-                Ok(Some(response)) => {
+                Ok(Some(mut response)) => {
+                    response.sort_by_key(|item| item.name.to_lowercase());
                     can_manage_components.set(false);
                     components.set(response);
                 }

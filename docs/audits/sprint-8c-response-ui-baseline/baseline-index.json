@@ -1,0 +1,438 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8c.response-ui-baseline",
+  "source_commit": "8f6244e8df3e67a25ec537c671016544c1e05c19",
+  "capture_state": "captured-pre-extraction",
+  "captured_from": "http://127.0.0.1:8080",
+  "cases": [
+    {
+      "key": "response-directory",
+      "route": "/responses",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "response-directory-light-1440x1000.png",
+      "screenshot_sha256": "bd5f99fbddca32ca4970069748e9f1856c5a3a364cfa9933855590684a46cf1d",
+      "semantic_assertions": {
+        "title": "Responses · Tessara",
+        "headings": [
+          "Responses",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log",
+          "Demo Session Log"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "header",
+          "nav"
+        ],
+        "body_text_sha256": "212f1669554d6f258dbc560380a07b2c8371000115bf2064abe599a156a4a270"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 11,
+        "landmark_count": 8
+      },
+      "external_requests": []
+    },
+    {
+      "key": "response-start",
+      "route": "/responses/new",
+      "role": "administrator",
+      "fixture_key": "assignment_only",
+      "theme": "dark",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "response-start-dark-390x844.png",
+      "screenshot_sha256": "3d9002307b44facb306595b5e1483b20fe1c0a94957789c16cc02e8a25090273",
+      "semantic_assertions": {
+        "title": "Start Response · Tessara",
+        "headings": [
+          "Start Response",
+          "No assigned responses"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "cc03dcf5c62f31d062113fec98fabd31851af1927c2d8432ed0f65f150d88ba7"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 2,
+        "landmark_count": 8
+      },
+      "external_requests": []
+    },
+    {
+      "key": "response-draft-detail",
+      "route": "/responses/f9f5392c-ffe6-4842-9c54-9f0225d6b7f4",
+      "role": "administrator",
+      "fixture_key": "draft",
+      "theme": "light",
+      "viewport": "1024x1366",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "response-draft-detail-light-1024x1366.png",
+      "screenshot_sha256": "0611c3a6994cade1bc0dc272958a6e59e3aeb8c6f14781da6890a21ad050c863",
+      "semantic_assertions": {
+        "title": "Response Detail · Tessara",
+        "headings": [
+          "Response Detail",
+          "Demo Partner Profile",
+          "Summary",
+          "Workflow Runtime",
+          "Response Values",
+          "Audit Trail"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "header"
+        ],
+        "body_text_sha256": "05f1e1e7e8e7b031c3cf69a458d7c6d84e295e1b0d27d509c7e927f45b16fcee"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 6,
+        "landmark_count": 11
+      },
+      "external_requests": []
+    },
+    {
+      "key": "response-draft-edit",
+      "route": "/responses/f9f5392c-ffe6-4842-9c54-9f0225d6b7f4/edit",
+      "role": "administrator",
+      "fixture_key": "draft",
+      "theme": "dark",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "response-draft-edit-dark-1440x1000.png",
+      "screenshot_sha256": "7d279b6f73de84c9ed126a84188e6b32948f8fcde25c4bcc74ce418b2d4336b5",
+      "semantic_assertions": {
+        "title": "Edit Response · Tessara",
+        "headings": [
+          "Edit Response",
+          "Demo Partner Profile",
+          "Partner Profile"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "93d8c1f47d7573786f53582e5ec459ffa0a6f5f4274c7734e56f32bf7b7489fb"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 3,
+        "landmark_count": 8
+      },
+      "external_requests": []
+    },
+    {
+      "key": "response-submitted-detail",
+      "route": "/responses/09ed36ef-610a-4fdc-8201-4bdab23525e8",
+      "role": "administrator",
+      "fixture_key": "submitted",
+      "theme": "light",
+      "viewport": "390x844",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "response-submitted-detail-light-390x844.png",
+      "screenshot_sha256": "a9475a2e0ebb3994b74a444f118e09ee17df7c61c09123ae566d2281e9e1b5c3",
+      "semantic_assertions": {
+        "title": "Response Detail · Tessara",
+        "headings": [
+          "Response Detail",
+          "Demo Partner Profile",
+          "Summary",
+          "Workflow Runtime",
+          "Response Values",
+          "Audit Trail"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "header"
+        ],
+        "body_text_sha256": "fd5cef8f301a59e0c22ce28e9558c326e4c752d12489d98103d7c7fa6eccccf3"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 6,
+        "landmark_count": 11
+      },
+      "external_requests": []
+    },
+    {
+      "key": "operations-response-status",
+      "route": "/operations",
+      "role": "administrator",
+      "fixture_key": "provider_status",
+      "theme": "dark",
+      "viewport": "1024x1366",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "operations-response-status-dark-1024x1366.png",
+      "screenshot_sha256": "c80e6a60085d81d4237e3dbe25945c97a83aef5e969c6f50a54878e47ddb9618",
+      "semantic_assertions": {
+        "title": "Operations · Tessara",
+        "headings": [
+          "Operations",
+          "Workflow Assignments",
+          "Dataset Readiness",
+          "Dataset readiness unavailable"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "header",
+          "nav",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header",
+          "header"
+        ],
+        "body_text_sha256": "ccbd4d791fb92153446b500831d6ff1cc101aac9a91bbcc160de5190c924fa77"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 4,
+        "landmark_count": 18
+      },
+      "external_requests": []
+    },
+    {
+      "key": "module-management-response",
+      "route": "/administration/modules/tessara.responses",
+      "role": "administrator",
+      "fixture_key": "configuration_diagnostics",
+      "theme": "light",
+      "viewport": "1440x1000",
+      "runtime": "hydrated_direct_load",
+      "screenshot": "module-management-response-light-1440x1000.png",
+      "screenshot_sha256": "deea6d795117506d277e838a983826825cfb4de872133a8b682b7d631f6cfbd8",
+      "semantic_assertions": {
+        "title": "Module Management · Tessara",
+        "headings": [
+          "Responses",
+          "Definition",
+          "Lifecycle assessment",
+          "Declaration summary",
+          "Current navigation",
+          "Configuration",
+          "Feature Declarations",
+          "Response start",
+          "Response draft",
+          "Response submission",
+          "Response review",
+          "Contracts",
+          "Capabilities",
+          "Dependency assessment",
+          "Declared dependencies",
+          "Catalog findings",
+          "Configuration",
+          "Readiness",
+          "Health",
+          "Findings",
+          "Resources/Destinations",
+          "Resource types",
+          "Semantic destinations",
+          "Navigation policy",
+          "Descriptor declarations",
+          "Source digest"
+        ],
+        "landmarks": [
+          "main",
+          "aside",
+          "nav",
+          "header",
+          "aside",
+          "nav",
+          "nav",
+          "header"
+        ],
+        "body_text_sha256": "345cf372157be339f1e0d143fec95439103abf12d12f771eae80ecbf30b1798d"
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "named_heading_count": 26,
+        "landmark_count": 8
+      },
+      "external_requests": []
+    },
+    {
+      "key": "response-directory-javascript-disabled",
+      "route": "/responses",
+      "role": "administrator",
+      "fixture_key": "populated",
+      "theme": "system_theme",
+      "viewport": "1024x1366",
+      "runtime": "javascript_disabled_ssr_direct_refresh",
+      "screenshot": "response-directory-javascript-disabled-1024x1366.png",
+      "screenshot_sha256": "7619f0a9f3c41637d6c820376c6a4b374d42f68e5104619abcb8f32b0582e1d7",
+      "semantic_assertions": {
+        "body_text_sha256": "189944dab13636afeac162ba1a4e26527397ee9867958855a94d3ac6ee8da23e",
+        "useful_content": true
+      },
+      "console": {
+        "errors": []
+      },
+      "accessibility": {
+        "body_text_length": 101
+      },
+      "external_requests": []
+    }
+  ],
+  "source_evidence": [
+    {
+      "path": "crates/tessara-web/src/routes/responses.rs",
+      "sha256": "3726338b2460a33043548ab2dc7148a1a5b7a47c55a862248e664cb487a4dcf7"
+    },
+    {
+      "path": "crates/tessara-web-responses/src/api.rs",
+      "sha256": "14e5b498da519626c924301bbaba8885203f01b32a7f08744ddecfdfee817ff4"
+    },
+    {
+      "path": "crates/tessara-web-responses/src/list.rs",
+      "sha256": "9d3b09d58d8d6b45859ab3e3091b3ebde133cc8703f4e366d58137232d2b6c9e"
+    },
+    {
+      "path": "crates/tessara-web-responses/src/start.rs",
+      "sha256": "a618c0edd028f2fc175691d1b78757c198c1a713eb827723ec0faaddc3c8b965"
+    },
+    {
+      "path": "crates/tessara-web-responses/src/detail.rs",
+      "sha256": "fff608d71f09193edd2d2997313bd5c280c938427d0f6834da04938edb3fcb49"
+    },
+    {
+      "path": "crates/tessara-web-responses/src/edit.rs",
+      "sha256": "b2e45e62166ab2b9b7cb05a72666dc8312aad0198acfbb4ba014f0b56e5edefc"
+    },
+    {
+      "path": "end2end/tests/permissions.spec.ts",
+      "sha256": "62c09387bd8fd5c4370be000eb92213bdfba3989379fb21937a3feb708ab4538"
+    },
+    {
+      "path": "end2end/tests/workflow-mediated-assignments.spec.ts",
+      "sha256": "bfafb656e1b7ee89433b0c51e87c537d69fcef85bdc329bf1634e130fb797ae1"
+    }
+  ],
+  "delegated_behavior_coverage": {
+    "ownership_delegation_restricted_and_empty_states": "end2end/tests/permissions.spec.ts",
+    "assignment_only_loading_validation_and_submit_states": "end2end/tests/workflow-mediated-assignments.spec.ts",
+    "stored_and_system_theme_behavior": "end2end/tests/components.spec.ts",
+    "two_hundred_percent_zoom_and_overflow": "end2end/tests/components.spec.ts"
+  },
+  "required_matrix": {
+    "routes": [
+      "/responses",
+      "/responses/new",
+      "/responses/{response_id}",
+      "/responses/{response_id}/edit",
+      "/operations",
+      "/administration/modules/tessara.responses"
+    ],
+    "roles": [
+      "owner",
+      "delegate",
+      "manager",
+      "restricted",
+      "administrator"
+    ],
+    "states": [
+      "populated",
+      "empty",
+      "loading",
+      "draft",
+      "submitted",
+      "delegated",
+      "restricted",
+      "provider_degraded",
+      "validation_error",
+      "unsaved_dirty"
+    ],
+    "themes": [
+      "light",
+      "dark",
+      "stored_theme",
+      "system_theme"
+    ],
+    "viewports": [
+      "1440x1000",
+      "1024x1366",
+      "390x844",
+      "200_percent_zoom"
+    ],
+    "runtime": [
+      "javascript_disabled_ssr",
+      "direct_refresh",
+      "hydrated",
+      "lifecycle_navigation",
+      "no_external_assets"
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::BTreeSet, sync::LazyLock};
 
 use axum::{
     body::{Body, to_bytes},
@@ -45,22 +45,43 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         authorized_request("GET", "/api/workflows", &admin_token, None),
     )
     .await;
-    let linked_workflow = workflows
+    let workflow_items = workflows
         .as_array()
-        .expect("workflow list should be an array")
+        .expect("workflow list should be an array");
+    let generated_source_form_ids = workflow_items
         .iter()
-        .find(|workflow| workflow["slug"] == "demo-session-log-workflow")
-        .cloned()
-        .expect("seeded form should expose a linked workflow");
-    assert!(
-        workflows
-            .as_array()
-            .expect("workflow list should be an array")
-            .len()
-            >= seed["form_count"]
-                .as_u64()
-                .expect("seed should report form_count") as usize
+        .filter(|workflow| workflow["source"] == "generated_form")
+        .map(|workflow| {
+            workflow["source_form_id"]
+                .as_str()
+                .expect("generated workflow should expose its source form id")
+        })
+        .collect::<BTreeSet<_>>();
+    let expected_generated_source_form_ids = [
+        "program_form_id",
+        "activity_form_id",
+        "intake_activity_form_id",
+        "workshop_activity_form_id",
+    ]
+    .into_iter()
+    .map(|key| {
+        seed[key]
+            .as_str()
+            .expect("seed should expose every assigned form id")
+    })
+    .collect::<BTreeSet<_>>();
+    assert_eq!(
+        generated_source_form_ids,
+        expected_generated_source_form_ids
     );
+    let linked_workflow = workflow_items
+        .iter()
+        .find(|workflow| {
+            workflow["source"] == "generated_form"
+                && workflow["source_form_id"] == seed["program_form_id"]
+        })
+        .cloned()
+        .expect("seeded Program form should expose its generated workflow");
     assert_eq!(linked_workflow["current_status"], "published");
     assert!(
         linked_workflow["assignment_count"]
@@ -75,9 +96,9 @@ async fn demo_seed_backfills_workflows_and_form_links() {
             "GET",
             &format!(
                 "/api/forms/{}",
-                seed["form_id"]
+                seed["program_form_id"]
                     .as_str()
-                    .expect("seed should include form id")
+                    .expect("seed should include Program form id")
             ),
             &admin_token,
             None,
@@ -109,14 +130,14 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
-    assert_eq!(workflow_detail["workflow_node_type_name"], "Session");
+    assert_eq!(workflow_detail["workflow_node_type_name"], "Program");
     assert!(
         workflow_detail["assignments"]
             .as_array()
             .expect("workflow detail should include assignments")
             .iter()
             .any(|assignment| {
-                assignment["form_id"] == seed["form_id"]
+                assignment["form_id"] == seed["program_form_id"]
                     && assignment["is_active"] == true
                     && assignment["workflow_step_title"]
                         .as_str()
@@ -152,7 +173,12 @@ async fn demo_seed_backfills_workflows_and_form_links() {
         ),
     )
     .await;
+    assert_eq!(scoped_workflow["id"], seed["program_workflow_id"]);
     assert_eq!(scoped_workflow["workflow_node_type_name"], "Program");
+    assert_eq!(
+        scoped_workflow["versions"][0]["id"],
+        seed["program_workflow_version_id"]
+    );
     assert_eq!(
         scoped_workflow["versions"][0]["workflow_revision_label"],
         "1"
@@ -448,908 +474,6 @@ async fn generated_form_workflow_is_replaced_after_shortcut_is_promoted() {
 }
 
 #[tokio::test]
-async fn assignee_pending_work_can_start_workflow_response() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let assignment_id = pending[0]["workflow_assignment_id"]
-        .as_str()
-        .expect("pending work should include assignment id");
-    let workflow_description = pending[0]["workflow_description"]
-        .as_str()
-        .expect("pending work should include workflow description");
-    assert!(
-        !workflow_description.trim().is_empty(),
-        "pending work should include a populated workflow description"
-    );
-
-    let started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-
-    let submission = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!(
-                "/api/submissions/{}",
-                started["id"]
-                    .as_str()
-                    .expect("start response should include id")
-            ),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(submission["status"], "draft");
-
-    let drafts = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/submissions?status=draft",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let draft = drafts
-        .as_array()
-        .expect("draft list should be an array")
-        .iter()
-        .find(|draft| draft["id"] == started["id"])
-        .expect("started draft should be included in the draft list");
-    assert_eq!(
-        draft["workflow_description"]
-            .as_str()
-            .expect("draft summary should include workflow description"),
-        workflow_description
-    );
-}
-
-#[tokio::test]
-async fn response_lifecycle_saves_resumes_submits_and_locks_submitted_records() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let assignment_id = pending[0]["workflow_assignment_id"]
-        .as_str()
-        .expect("pending work should include assignment id");
-    let started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let submission_id = started["id"]
-        .as_str()
-        .expect("start response should include submission id");
-
-    let missing_required_submit = request_status_and_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(missing_required_submit.0, StatusCode::BAD_REQUEST);
-    assert_eq!(missing_required_submit.1["code"], "bad_request");
-    assert!(
-        missing_required_submit.1["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("required field")
-    );
-
-    let draft_after_rejection = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(draft_after_rejection["status"], "draft");
-    assert_eq!(draft_after_rejection["submitted_at"], Value::Null);
-
-    let mut values = serde_json::Map::new();
-    let required_fields = draft_after_rejection["values"]
-        .as_array()
-        .expect("submission detail should include fields")
-        .iter()
-        .filter(|field| field["required"] == true)
-        .collect::<Vec<_>>();
-    assert!(
-        !required_fields.is_empty(),
-        "demo pending response should include required fields"
-    );
-    for field in required_fields {
-        values.insert(
-            field["key"]
-                .as_str()
-                .expect("field should include stable key")
-                .to_string(),
-            value_for_field_type(
-                field["field_type"]
-                    .as_str()
-                    .expect("field should include field type"),
-            ),
-        );
-    }
-
-    request_json(
-        app.clone(),
-        authorized_request(
-            "PUT",
-            &format!("/api/submissions/{submission_id}/values"),
-            &respondent_token,
-            Some(json!({ "values": values })),
-        ),
-    )
-    .await;
-
-    let resumed = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(resumed["status"], "draft");
-    assert!(
-        resumed["audit_events"]
-            .as_array()
-            .expect("audit events should be present")
-            .iter()
-            .any(|event| event["event_type"] == "save_draft")
-    );
-    assert!(
-        resumed["values"]
-            .as_array()
-            .expect("values should be present")
-            .iter()
-            .any(|value| value["required"] == true && value["value"] != Value::Null)
-    );
-
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let submitted = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(submitted["status"], "submitted");
-    assert_ne!(submitted["submitted_at"], Value::Null);
-    assert!(
-        submitted["audit_events"]
-            .as_array()
-            .expect("audit events should be present")
-            .iter()
-            .any(|event| event["event_type"] == "submit")
-    );
-
-    for request in [
-        authorized_request(
-            "PUT",
-            &format!("/api/submissions/{submission_id}/values"),
-            &respondent_token,
-            Some(json!({ "values": {} })),
-        ),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-        authorized_request(
-            "DELETE",
-            &format!("/api/submissions/{submission_id}"),
-            &respondent_token,
-            None,
-        ),
-    ] {
-        let rejected = request_status_and_json(app.clone(), request).await;
-        assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
-        assert_eq!(rejected.1["code"], "bad_request");
-    }
-}
-
-#[tokio::test]
-async fn multi_step_workflow_advances_to_next_form_for_same_assignee() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let state = test_state().await;
-    let app = router(state.clone());
-    let admin_token = login_token(app.clone()).await;
-
-    let seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-    let seed_form_id: uuid::Uuid = seed["form_id"]
-        .as_str()
-        .expect("seed should expose form id")
-        .parse()
-        .expect("form id should be uuid");
-    let seed_form_version_id: uuid::Uuid = sqlx::query_scalar(
-        r#"
-        SELECT id
-        FROM form_versions
-        WHERE form_id = $1
-          AND status = 'published'::form_version_status
-        ORDER BY published_at DESC NULLS LAST, created_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(seed_form_id)
-    .fetch_one(&state.pool)
-    .await
-    .expect("seed should expose a published form version");
-    let follow_up_form_id: uuid::Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO forms (name, slug, scope_node_type_id)
-        SELECT 'Sprint 2E Follow-up', 'sprint-2e-follow-up', scope_node_type_id
-        FROM forms
-        WHERE id = $1
-        RETURNING id
-        "#,
-    )
-    .bind(seed_form_id)
-    .fetch_one(&state.pool)
-    .await
-    .expect("follow-up form should be created");
-    let follow_up_form_version_id: uuid::Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO form_versions (form_id, version_label, status, published_at)
-        VALUES ($1, '2E follow-up', 'published'::form_version_status, now())
-        RETURNING id
-        "#,
-    )
-    .bind(follow_up_form_id)
-    .fetch_one(&state.pool)
-    .await
-    .expect("follow-up form version should be published");
-    let follow_up_section_id: uuid::Uuid = sqlx::query_scalar(
-        r#"
-        INSERT INTO form_sections (form_version_id, title, position)
-        VALUES ($1, 'Follow-up', 0)
-        RETURNING id
-        "#,
-    )
-    .bind(follow_up_form_version_id)
-    .fetch_one(&state.pool)
-    .await
-    .expect("follow-up section should be created");
-    sqlx::query(
-        r#"
-        INSERT INTO form_fields
-            (form_version_id, section_id, key, label, field_type, required, position)
-        VALUES ($1, $2, 'follow_up_note', 'Follow-up note', 'text'::field_type, true, 0)
-        "#,
-    )
-    .bind(follow_up_form_version_id)
-    .bind(follow_up_section_id)
-    .execute(&state.pool)
-    .await
-    .expect("follow-up response field should be created");
-
-    let workflows = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/workflows", &admin_token, None),
-    )
-    .await;
-    let workflow_id = workflows
-        .as_array()
-        .expect("workflow list should be an array")
-        .iter()
-        .find(|workflow| workflow["slug"] == "demo-session-log-workflow")
-        .and_then(|workflow| workflow["id"].as_str())
-        .expect("seed form should expose workflow")
-        .to_string();
-    let created_version = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflows/{workflow_id}/versions"),
-            &admin_token,
-            Some(json!({
-                "steps": [
-                    {
-                        "title": "Initial intake",
-                        "form_version_id": seed_form_version_id
-                    },
-                    {
-                        "title": "Follow-up collection",
-                        "form_version_id": follow_up_form_version_id
-                    }
-                ]
-            })),
-        ),
-    )
-    .await;
-    let workflow_version_id = created_version["id"]
-        .as_str()
-        .expect("created version should expose id");
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-versions/{workflow_version_id}/publish"),
-            &admin_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let follow_up_form_detail = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/forms/{follow_up_form_id}"),
-            &admin_token,
-            None,
-        ),
-    )
-    .await;
-    assert!(
-        follow_up_form_detail["workflows"]
-            .as_array()
-            .expect("follow-up form detail should include workflows")
-            .iter()
-            .any(|workflow| workflow["id"] == workflow_id),
-        "form detail should include workflows that use the form through any step"
-    );
-
-    let existing_assignments = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
-    )
-    .await;
-    let respondent_seed_assignment = existing_assignments
-        .as_array()
-        .expect("assignment list should be an array")
-        .iter()
-        .find(|assignment| assignment["account_email"] == "respondent@tessara.local")
-        .expect("seed should expose a respondent assignment");
-    let node_id = seed["session_node_id"]
-        .as_str()
-        .expect("seed should expose session node id");
-    let account_id = respondent_seed_assignment["account_id"]
-        .as_str()
-        .expect("assignment should expose account id");
-
-    let bulk = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            "/api/workflow-assignments/bulk",
-            &admin_token,
-            Some(json!({
-                "workflow_version_id": workflow_version_id,
-                "node_id": node_id,
-                "account_ids": [account_id]
-            })),
-        ),
-    )
-    .await;
-    assert_eq!(bulk["results"][0]["status"], "created");
-    let repeated_bulk = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            "/api/workflow-assignments/bulk",
-            &admin_token,
-            Some(json!({
-                "workflow_version_id": workflow_version_id,
-                "node_id": node_id,
-                "account_ids": [account_id]
-            })),
-        ),
-    )
-    .await;
-    assert_eq!(repeated_bulk["results"][0]["status"], "skipped");
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let first_assignment_id = pending
-        .as_array()
-        .expect("pending work should be an array")
-        .iter()
-        .find(|item| {
-            item["workflow_version_id"] == workflow_version_id
-                && item["workflow_step_title"] == "Initial intake"
-        })
-        .and_then(|item| item["workflow_assignment_id"].as_str())
-        .expect("first step should be pending");
-    let first_started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{first_assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let first_submission_id = first_started["id"]
-        .as_str()
-        .expect("first step start should return submission id");
-    save_required_values(app.clone(), &respondent_token, first_submission_id).await;
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{first_submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-
-    let pending_after_first = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let second_assignment = pending_after_first
-        .as_array()
-        .expect("pending work should be an array")
-        .iter()
-        .find(|item| {
-            item["workflow_version_id"] == workflow_version_id
-                && item["workflow_step_title"] == "Follow-up collection"
-        })
-        .cloned()
-        .expect("second step should become pending");
-    assert_eq!(second_assignment["form_name"], "Sprint 2E Follow-up");
-    assert_eq!(second_assignment["workflow_step_position"], 1);
-    assert_eq!(second_assignment["workflow_step_count"], 2);
-
-    let second_assignment_id = second_assignment["workflow_assignment_id"]
-        .as_str()
-        .expect("second step should expose assignment id");
-    let second_started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{second_assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let second_submission_id = second_started["id"]
-        .as_str()
-        .expect("second step start should return submission id");
-    save_required_values(app.clone(), &respondent_token, second_submission_id).await;
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{second_submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let second_detail = request_json(
-        app,
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{second_submission_id}"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(second_detail["runtime"]["step_count"], 2);
-    assert_eq!(
-        second_detail["runtime"]["history"]
-            .as_array()
-            .expect("runtime history should be an array")
-            .len(),
-        2
-    );
-    let instance_status: String = sqlx::query_scalar(
-        "SELECT status FROM workflow_instances WHERE id = (SELECT workflow_instance_id FROM submissions WHERE id = $1)",
-    )
-    .bind(
-        second_submission_id
-            .parse::<uuid::Uuid>()
-            .expect("submission id should be uuid"),
-    )
-    .fetch_one(&state.pool)
-    .await
-    .expect("workflow instance should be present");
-    assert_eq!(instance_status, "completed");
-}
-
-#[tokio::test]
-async fn multi_step_workflow_preserves_assignment_node_across_steps() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let state = test_state().await;
-    let app = router(state.clone());
-    let admin_token = login_token(app.clone()).await;
-
-    let seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-    let program_form_version_id = seed["program_form_version_id"]
-        .as_str()
-        .expect("seed should expose program form version id");
-    let activity_form_version_id = seed["activity_form_version_id"]
-        .as_str()
-        .expect("seed should expose activity form version id");
-    let program_node_id = seed["program_node_id"]
-        .as_str()
-        .expect("seed should expose program node id");
-    let partner_node_id = seed["partner_node_id"]
-        .as_str()
-        .expect("seed should expose partner node id");
-    let respondent_account_id: uuid::Uuid =
-        sqlx::query_scalar("SELECT id FROM accounts WHERE email = 'respondent@tessara.local'")
-            .fetch_one(&state.pool)
-            .await
-            .expect("respondent account should exist");
-
-    let workflow = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            "/api/workflows",
-            &admin_token,
-            Some(json!({
-                "available_node_ids": [program_node_id],
-                "name": "Program With Activity Follow-up",
-                "slug": "program-with-activity-follow-up",
-                "description": "Program assignment that collects an activity-scoped second step."
-            })),
-        ),
-    )
-    .await;
-    let workflow_id = workflow["id"].as_str().expect("workflow should expose id");
-    let created_version = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflows/{workflow_id}/versions"),
-            &admin_token,
-            Some(json!({
-                "steps": [
-                    {
-                        "title": "Program snapshot",
-                        "form_version_id": program_form_version_id
-                    },
-                    {
-                        "title": "Activity plan",
-                        "form_version_id": activity_form_version_id
-                    }
-                ]
-            })),
-        ),
-    )
-    .await;
-    let workflow_version_id = created_version["id"]
-        .as_str()
-        .expect("created version should expose id");
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-versions/{workflow_version_id}/publish"),
-            &admin_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-
-    let candidates = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/workflow-assignment-candidates?node_id={program_node_id}"),
-            &admin_token,
-            None,
-        ),
-    )
-    .await;
-    assert!(
-        candidates
-            .as_array()
-            .expect("candidate list should be an array")
-            .iter()
-            .any(|candidate| candidate["workflow_version_id"] == workflow_version_id),
-        "program node should be eligible when activity-scoped step can resolve to a descendant"
-    );
-    let partner_candidates = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/workflow-assignment-candidates?node_id={partner_node_id}"),
-            &admin_token,
-            None,
-        ),
-    )
-    .await;
-    assert!(
-        !partner_candidates
-            .as_array()
-            .expect("candidate list should be an array")
-            .iter()
-            .any(|candidate| candidate["workflow_version_id"] == workflow_version_id),
-        "workflow should be pinned to the highest component form scope, not an ancestor above it"
-    );
-
-    let bulk = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            "/api/workflow-assignments/bulk",
-            &admin_token,
-            Some(json!({
-                "workflow_version_id": workflow_version_id,
-                "node_id": program_node_id,
-                "account_ids": [respondent_account_id]
-            })),
-        ),
-    )
-    .await;
-    assert_eq!(bulk["results"][0]["status"], "created");
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let first_assignment_id = pending
-        .as_array()
-        .expect("pending work should be an array")
-        .iter()
-        .find(|item| {
-            item["workflow_version_id"] == workflow_version_id
-                && item["workflow_step_title"] == "Program snapshot"
-        })
-        .and_then(|item| item["workflow_assignment_id"].as_str())
-        .expect("program step should be pending");
-    let first_started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{first_assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let first_submission_id = first_started["id"]
-        .as_str()
-        .expect("first start should return submission id");
-    let first_submission_node_id: uuid::Uuid =
-        sqlx::query_scalar("SELECT node_id FROM submissions WHERE id = $1")
-            .bind(
-                first_submission_id
-                    .parse::<uuid::Uuid>()
-                    .expect("submission id should be uuid"),
-            )
-            .fetch_one(&state.pool)
-            .await
-            .expect("first submission should exist");
-    assert_eq!(
-        first_submission_node_id.to_string(),
-        program_node_id,
-        "program-scoped step should use the workflow assignment node"
-    );
-
-    save_required_values(app.clone(), &respondent_token, first_submission_id).await;
-    request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{first_submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-
-    let pending_after_first = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let second_assignment = pending_after_first
-        .as_array()
-        .expect("pending work should be an array")
-        .iter()
-        .find(|item| {
-            item["workflow_version_id"] == workflow_version_id
-                && item["workflow_step_title"] == "Activity plan"
-        })
-        .cloned()
-        .expect("activity step should become pending");
-    assert_eq!(second_assignment["form_name"], "Demo Activity Plan");
-
-    let second_assignment_id = second_assignment["workflow_assignment_id"]
-        .as_str()
-        .expect("second step should expose assignment id");
-    let second_started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{second_assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let second_submission_id = second_started["id"]
-        .as_str()
-        .expect("second start should return submission id");
-    let second_submission_node: (uuid::Uuid, Option<uuid::Uuid>, String) = sqlx::query_as(
-        r#"
-        SELECT nodes.id, nodes.parent_node_id, node_types.name
-        FROM submissions
-        JOIN nodes ON nodes.id = submissions.node_id
-        JOIN node_types ON node_types.id = nodes.node_type_id
-        WHERE submissions.id = $1
-        "#,
-    )
-    .bind(
-        second_submission_id
-            .parse::<uuid::Uuid>()
-            .expect("submission id should be uuid"),
-    )
-    .fetch_one(&state.pool)
-    .await
-    .expect("second submission should exist");
-    assert_eq!(second_submission_node.0.to_string(), program_node_id);
-    assert!(
-        second_submission_node.1.is_some(),
-        "program should have parent"
-    );
-    assert_eq!(second_submission_node.2, "Program");
-
-    save_required_values(app.clone(), &respondent_token, second_submission_id).await;
-    request_json(
-        app,
-        authorized_request(
-            "POST",
-            &format!("/api/submissions/{second_submission_id}/submit"),
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let instance_status: String = sqlx::query_scalar(
-        "SELECT status FROM workflow_instances WHERE id = (SELECT workflow_instance_id FROM submissions WHERE id = $1)",
-    )
-    .bind(
-        second_submission_id
-            .parse::<uuid::Uuid>()
-            .expect("submission id should be uuid"),
-    )
-    .fetch_one(&state.pool)
-    .await
-    .expect("workflow instance should be present");
-    assert_eq!(instance_status, "completed");
-}
-
-#[tokio::test]
 async fn workflow_publish_allows_branching_step_form_scopes() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let state = test_state().await;
@@ -1545,346 +669,6 @@ async fn workflow_publish_allows_sibling_step_assignment_nodes() {
 }
 
 #[tokio::test]
-async fn scoped_operator_cannot_review_out_of_scope_submission_by_uuid() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let operator_token = login_token_for(
-        app.clone(),
-        "operator@tessara.local",
-        "tessara-dev-operator",
-    )
-    .await;
-
-    let operator_nodes = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
-    )
-    .await;
-    let operator_node_ids = operator_nodes
-        .as_array()
-        .expect("operator nodes should be an array")
-        .iter()
-        .filter_map(|node| node["id"].as_str())
-        .collect::<Vec<_>>();
-    assert!(!operator_node_ids.is_empty());
-
-    let all_submissions = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/submissions", &admin_token, None),
-    )
-    .await;
-    let out_of_scope_submission = all_submissions
-        .as_array()
-        .expect("submission list should be an array")
-        .iter()
-        .find(|submission| {
-            submission["node_id"]
-                .as_str()
-                .is_some_and(|node_id| !operator_node_ids.contains(&node_id))
-        })
-        .expect("demo seed should expose out-of-scope response work");
-    let out_of_scope_submission_id = out_of_scope_submission["id"]
-        .as_str()
-        .expect("submission should expose id");
-
-    let rejected = request_status_and_json(
-        app,
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{out_of_scope_submission_id}"),
-            &operator_token,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(rejected.0, StatusCode::FORBIDDEN);
-    assert_eq!(rejected.1["code"], "forbidden");
-}
-
-#[tokio::test]
-async fn response_lifecycle_endpoints_accept_configured_cookie_name() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let state = test_state_with_cookie_name("custom_tessara_session").await;
-    let app = router(state);
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_cookie = login_cookie_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-    assert!(respondent_cookie.starts_with("custom_tessara_session="));
-
-    let pending = request_json(
-        app.clone(),
-        cookie_authenticated_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_cookie,
-            None,
-        ),
-    )
-    .await;
-    let assignment_id = pending[0]["workflow_assignment_id"]
-        .as_str()
-        .expect("pending work should include assignment id");
-
-    let started = request_json(
-        app.clone(),
-        cookie_authenticated_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_cookie,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let submission_id = started["id"]
-        .as_str()
-        .expect("start should include submission id");
-
-    let submission = request_json(
-        app,
-        cookie_authenticated_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            &respondent_cookie,
-            None,
-        ),
-    )
-    .await;
-    assert_eq!(submission["status"], "draft");
-}
-
-#[tokio::test]
-async fn pending_work_excludes_assignments_with_existing_drafts() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let respondent_token = login_token_for(
-        app.clone(),
-        "respondent@tessara.local",
-        "tessara-dev-respondent",
-    )
-    .await;
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    let assignment_id = pending[0]["workflow_assignment_id"]
-        .as_str()
-        .expect("pending work should include assignment id");
-
-    let started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-
-    let restarted = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    assert_eq!(restarted["id"], started["id"]);
-
-    let pending_after_start = request_json(
-        app,
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert!(
-        !pending_after_start
-            .as_array()
-            .expect("pending work should be an array")
-            .iter()
-            .any(|item| item["workflow_assignment_id"] == assignment_id)
-    );
-}
-
-#[tokio::test]
-async fn pending_work_excludes_assignments_with_submitted_responses_and_start_rejects_them() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-
-    let assignments = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
-    )
-    .await;
-    let submitted_assignment = assignments
-        .as_array()
-        .expect("assignment list should be an array")
-        .iter()
-        .find(|item| {
-            item["has_submitted"] == true
-                && matches!(
-                    item["account_email"].as_str(),
-                    Some("respondent@tessara.local")
-                        | Some("delegate@tessara.local")
-                        | Some("delegator@tessara.local")
-                )
-        })
-        .cloned()
-        .expect("seed should create a submitted workflow assignment");
-    let assignment_id = submitted_assignment["id"]
-        .as_str()
-        .expect("submitted assignment should include id");
-    let account_email = submitted_assignment["account_email"]
-        .as_str()
-        .expect("submitted assignment should include account email");
-    let account_password = match account_email {
-        "respondent@tessara.local" => "tessara-dev-respondent",
-        "delegate@tessara.local" => "tessara-dev-delegate",
-        "delegator@tessara.local" => "tessara-dev-delegator",
-        other => panic!("unexpected submitted assignment account: {other}"),
-    };
-
-    let respondent_token = login_token_for(app.clone(), account_email, account_password).await;
-
-    let pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &respondent_token,
-            None,
-        ),
-    )
-    .await;
-    assert!(
-        !pending
-            .as_array()
-            .expect("pending work should be an array")
-            .iter()
-            .any(|item| item["workflow_assignment_id"] == assignment_id)
-    );
-
-    let rejected = request_status_and_json(
-        app,
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{assignment_id}/start"),
-            &respondent_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
-    assert_eq!(
-        rejected.1["error"],
-        "submitted workflow assignments cannot start new response work"
-    );
-}
-
-#[tokio::test]
-async fn starting_distinct_assignments_returns_distinct_submission_ids() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let assignments = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
-    )
-    .await;
-    let pending_items = assignments
-        .as_array()
-        .expect("assignment list should be an array")
-        .iter()
-        .filter(|item| item["has_draft"] == false && item["has_submitted"] == false)
-        .cloned()
-        .collect::<Vec<_>>();
-    assert!(
-        pending_items.len() >= 2,
-        "seed should expose at least two startable assignments"
-    );
-
-    let first_assignment_id = pending_items[0]["id"]
-        .as_str()
-        .expect("assignment list should include assignment id");
-    let second_assignment_id = pending_items[1]["id"]
-        .as_str()
-        .expect("assignment list should include assignment id");
-
-    let first_started = request_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{first_assignment_id}/start"),
-            &admin_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    let second_started = request_json(
-        app,
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{second_assignment_id}/start"),
-            &admin_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-
-    assert_ne!(first_started["id"], second_started["id"]);
-}
-
-#[tokio::test]
 async fn workflow_assignments_can_be_deactivated() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let app = test_app().await;
@@ -2070,197 +854,6 @@ async fn workflow_assignment_filters_support_reactivation_and_context_queries() 
 }
 
 #[tokio::test]
-async fn scoped_operator_cannot_start_out_of_scope_workflow_assignment_by_uuid() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-    let operator_token = login_token_for(
-        app.clone(),
-        "operator@tessara.local",
-        "tessara-dev-operator",
-    )
-    .await;
-
-    let operator_nodes = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/nodes?q=Demo", &operator_token, None),
-    )
-    .await;
-    let operator_node_ids = operator_nodes
-        .as_array()
-        .expect("operator node list should be an array")
-        .iter()
-        .filter_map(|node| node["id"].as_str())
-        .collect::<Vec<_>>();
-    assert!(
-        !operator_node_ids.is_empty(),
-        "seeded operator should have effective scope"
-    );
-
-    let assignments = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/workflow-assignments", &admin_token, None),
-    )
-    .await;
-    let assignment_items = assignments
-        .as_array()
-        .expect("assignment list should be an array");
-    let is_startable = |item: &&Value| item["has_draft"] == false && item["has_submitted"] == false;
-    let in_scope_assignment = assignment_items
-        .iter()
-        .find(|item| {
-            is_startable(item)
-                && item["node_id"]
-                    .as_str()
-                    .is_some_and(|node_id| operator_node_ids.contains(&node_id))
-        })
-        .cloned()
-        .expect("seed should expose an in-scope startable assignment");
-    let out_of_scope_assignment = assignment_items
-        .iter()
-        .find(|item| {
-            is_startable(item)
-                && item["node_id"]
-                    .as_str()
-                    .is_some_and(|node_id| !operator_node_ids.contains(&node_id))
-        })
-        .cloned()
-        .expect("seed should expose an out-of-scope startable assignment");
-
-    let out_of_scope_assignment_id = out_of_scope_assignment["id"]
-        .as_str()
-        .expect("assignment should expose id");
-    let rejected = request_status_and_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{out_of_scope_assignment_id}/start"),
-            &operator_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    assert_eq!(rejected.0, StatusCode::FORBIDDEN);
-    assert_eq!(rejected.1["code"], "forbidden");
-
-    let admin_started = request_status_and_json(
-        app.clone(),
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{out_of_scope_assignment_id}/start"),
-            &admin_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    assert_eq!(admin_started.0, StatusCode::OK);
-    assert!(
-        admin_started.1["id"].as_str().is_some(),
-        "admin start should create or return a draft submission"
-    );
-
-    let in_scope_assignment_id = in_scope_assignment["id"]
-        .as_str()
-        .expect("assignment should expose id");
-    let operator_started = request_status_and_json(
-        app,
-        authorized_request(
-            "POST",
-            &format!("/api/workflow-assignments/{in_scope_assignment_id}/start"),
-            &operator_token,
-            Some(json!({})),
-        ),
-    )
-    .await;
-    assert_eq!(operator_started.0, StatusCode::OK);
-    assert!(
-        operator_started.1["id"].as_str().is_some(),
-        "in-scope operator start should create or return a draft submission"
-    );
-}
-
-#[tokio::test]
-async fn delegator_can_query_pending_work_for_an_accessible_delegate_account() {
-    let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
-    let admin_token = login_token(app.clone()).await;
-    let _seed = request_json(
-        app.clone(),
-        authorized_request("POST", "/api/demo/seed", &admin_token, None),
-    )
-    .await;
-
-    let delegate_token = login_token_for(
-        app.clone(),
-        "delegate@tessara.local",
-        "tessara-dev-delegate",
-    )
-    .await;
-    let delegate_pending = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            "/api/workflow-assignments/pending",
-            &delegate_token,
-            None,
-        ),
-    )
-    .await;
-    let delegate_pending_ids = delegate_pending
-        .as_array()
-        .expect("delegate pending work should be an array")
-        .iter()
-        .filter_map(|item| item["workflow_assignment_id"].as_str())
-        .collect::<Vec<_>>();
-    assert!(
-        !delegate_pending_ids.is_empty(),
-        "demo seed should expose delegate pending work"
-    );
-
-    let delegator_token = login_token_for(
-        app.clone(),
-        "delegator@tessara.local",
-        "tessara-dev-delegator",
-    )
-    .await;
-    let delegator_me = request_json(
-        app.clone(),
-        authorized_request("GET", "/api/me", &delegator_token, None),
-    )
-    .await;
-    let delegate_account_id = delegator_me["delegations"]
-        .as_array()
-        .expect("delegator should include delegations")
-        .first()
-        .and_then(|delegation| delegation["account_id"].as_str())
-        .expect("delegator should expose delegate account id");
-
-    let delegated_pending = request_json(
-        app,
-        authorized_request(
-            "GET",
-            &format!("/api/workflow-assignments/pending?delegate_account_id={delegate_account_id}"),
-            &delegator_token,
-            None,
-        ),
-    )
-    .await;
-    let delegated_pending_ids = delegated_pending
-        .as_array()
-        .expect("delegated pending work should be an array")
-        .iter()
-        .filter_map(|item| item["workflow_assignment_id"].as_str())
-        .collect::<Vec<_>>();
-    assert_eq!(delegated_pending_ids, delegate_pending_ids);
-}
-
-#[tokio::test]
 async fn logout_revokes_the_current_session_token() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
     let app = test_app().await;
@@ -2404,10 +997,11 @@ async fn forms_and_hierarchy_endpoints_accept_cookie_sessions_without_authorizat
 #[tokio::test]
 async fn operations_status_keeps_assignments_usable_when_dataset_provider_is_unavailable() {
     let _guard = TEST_DATABASE_LOCK.lock().await;
-    let app = test_app().await;
+    let state = test_state().await;
+    let app = router(state.clone());
     let admin_token = login_token(app.clone()).await;
 
-    let _seed = request_json(
+    let seed = request_json(
         app.clone(),
         authorized_request("POST", "/api/demo/seed", &admin_token, None),
     )
@@ -2424,16 +1018,86 @@ async fn operations_status_keeps_assignments_usable_when_dataset_provider_is_una
     assert!(datasets.is_empty());
     assert_eq!(status["dataset_readiness"]["state"], "unavailable");
     assert!(status["summary"]["dataset_attention_count"].is_null());
-    assert!(
-        status["workflow_assignments"]
-            .as_array()
-            .expect("operations status should include workflow assignments")
-            .iter()
-            .any(|assignment| {
-                assignment["workflow_id"].as_str().is_some()
-                    && assignment["workflow_assignment_id"].as_str().is_some()
-            })
+    let unstarted_assignment = status["workflow_assignments"]
+        .as_array()
+        .expect("operations status should include workflow assignments")
+        .iter()
+        .find(|assignment| {
+            assignment["workflow_assignment_id"] == seed["program_workflow_assignment_id"]
+        })
+        .expect("Operations should retain the unstarted Program workflow assignment");
+    assert_eq!(
+        unstarted_assignment["workflow_id"],
+        seed["program_workflow_id"]
     );
+    assert!(unstarted_assignment["workflow_instance_id"].is_null());
+    assert_eq!(unstarted_assignment["assignment_status"], "Not Started");
+    assert!(unstarted_assignment["current_step_title"].is_null());
+    assert_eq!(unstarted_assignment["completed_step_count"], 0);
+    assert_eq!(unstarted_assignment["total_step_count"], 3);
+    assert_eq!(unstarted_assignment["draft_response_count"], 0);
+    assert_eq!(unstarted_assignment["submitted_response_count"], 0);
+    assert!(unstarted_assignment["started_at"].is_null());
+    assert!(unstarted_assignment["completed_at"].is_null());
+
+    let workflow_assignment_id = seed["program_workflow_assignment_id"]
+        .as_str()
+        .expect("seed should expose Program workflow assignment id")
+        .parse::<uuid::Uuid>()
+        .expect("Program workflow assignment id should be a UUID");
+    let workflow_instance_id = sqlx::query_scalar::<_, uuid::Uuid>(
+        r#"
+        INSERT INTO workflow_instances (
+            workflow_assignment_id,
+            workflow_version_id,
+            node_id,
+            assignee_account_id,
+            started_by_account_id
+        )
+        SELECT id, workflow_version_id, node_id, account_id, account_id
+        FROM workflow_assignments
+        WHERE id = $1
+        RETURNING id
+        "#,
+    )
+    .bind(workflow_assignment_id)
+    .fetch_one(&state.pool)
+    .await
+    .expect("test setup should start the Program workflow assignment");
+    sqlx::query(
+        r#"
+        INSERT INTO workflow_step_instances (workflow_instance_id, workflow_step_id)
+        SELECT $1, workflow_step_id
+        FROM workflow_assignments
+        WHERE id = $2
+        "#,
+    )
+    .bind(workflow_instance_id)
+    .bind(workflow_assignment_id)
+    .execute(&state.pool)
+    .await
+    .expect("test setup should start the assigned Workflow step");
+
+    let started_status = request_json(
+        app.clone(),
+        authorized_request("GET", "/api/operations/status", &admin_token, None),
+    )
+    .await;
+    let started_assignment = started_status["workflow_assignments"]
+        .as_array()
+        .expect("operations status should retain started workflow assignments")
+        .iter()
+        .find(|assignment| {
+            assignment["workflow_assignment_id"] == seed["program_workflow_assignment_id"]
+        })
+        .expect("Operations should project the started Program workflow assignment");
+    assert_eq!(
+        started_assignment["workflow_instance_id"],
+        workflow_instance_id.to_string()
+    );
+    assert_eq!(started_assignment["assignment_status"], "In Progress");
+    assert_eq!(started_assignment["current_step_title"], "Program Snapshot");
+    assert!(started_assignment["started_at"].as_str().is_some());
     let app_summary = request_json(
         app.clone(),
         authorized_request("GET", "/api/summary", &admin_token, None),
@@ -2754,61 +1418,6 @@ async fn test_state_with_cookie_name(auth_cookie_name: &str) -> db::AppState {
     db::AppState { pool, config }
 }
 
-fn value_for_field_type(field_type: &str) -> Value {
-    match field_type {
-        "number" => json!(7),
-        "boolean" => json!(false),
-        "date" => json!("2026-05-04"),
-        "multi_choice" => json!(["Sprint 2D"]),
-        "single_choice" => json!("Sprint 2D"),
-        _ => json!("Sprint 2D response value"),
-    }
-}
-
-async fn save_required_values(app: axum::Router, token: &str, submission_id: &str) {
-    let detail = request_json(
-        app.clone(),
-        authorized_request(
-            "GET",
-            &format!("/api/submissions/{submission_id}"),
-            token,
-            None,
-        ),
-    )
-    .await;
-    let mut values = serde_json::Map::new();
-    for field in detail["values"]
-        .as_array()
-        .expect("submission detail should include values")
-        .iter()
-        .filter(|field| field["required"] == true)
-    {
-        values.insert(
-            field["key"]
-                .as_str()
-                .expect("field should include key")
-                .to_string(),
-            value_for_field_type(
-                field["field_type"]
-                    .as_str()
-                    .expect("field should include field type"),
-            ),
-        );
-    }
-    if !values.is_empty() {
-        request_json(
-            app,
-            authorized_request(
-                "PUT",
-                &format!("/api/submissions/{submission_id}/values"),
-                token,
-                Some(json!({ "values": values })),
-            ),
-        )
-        .await;
-    }
-}
-
 async fn login_token(app: axum::Router) -> String {
     login_token_for(app, "admin@tessara.local", "tessara-dev-admin").await
 }
@@ -2965,7 +1574,6 @@ async fn reset_database(database_url: &str) {
     for type_name in [
         "field_type",
         "form_version_status",
-        "submission_status",
         "dataset_revision_status",
         "component_type",
         "component_version_status",

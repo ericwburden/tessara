@@ -1103,6 +1103,7 @@ test.describe.serial("Sprint 6A Module Management", () => {
     );
     expect(independentEntries.map((entry) => entry.definition.id)).toEqual(
       expect.arrayContaining([
+        RESPONSES_DEFINITION,
         DATASETS_DEFINITION,
         COMPONENTS_DEFINITION,
         DASHBOARDS_DEFINITION,
@@ -1668,15 +1669,49 @@ test.describe.serial("Sprint 6A Module Management", () => {
 
     await gotoHydrated(page, `/administration/modules/${RESPONSES_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Responses" })).toBeVisible();
-    await page.getByRole("tab", { name: "Dependencies" }).click();
-    const responseDependencies = page.locator(".module-detail-dependencies");
-    await expect(
-      responseDependencies.getByText("Transition-internal only", { exact: true }),
-    ).toBeVisible();
-    await expect(responseDependencies).toContainText(
-      "2 declared relationships describe current in-process coupling and cannot be satisfied by a transition contribution provider.",
+    const responseDetail = await independentModuleDetail(
+      fixtures.reader.context,
+      RESPONSES_DEFINITION,
     );
-    await expect(page.getByText("transition_internal_only", { exact: true }).first()).toBeVisible();
+    expect(responseDetail.entry.release.version).toBe("1.0.0");
+    expect(responseDetail.entry.instance).toMatchObject({
+      ready: true,
+      enabled: true,
+      healthy: true,
+    });
+    expect(responseDetail.entry.configuration).toEqual({
+      declared: true,
+      valid: true,
+      values: {
+        schema_version: 1,
+        display_label: "Responses",
+        provider_request_timeout_seconds: 5,
+        workflow_event_page_size: 250,
+      },
+    });
+    expect(responseDetail.entry.manifest).not.toBeNull();
+    expect(responseDetail.entry.manifest?.browser_lifecycle).toEqual({
+      lifecycle_abi: "1.0.0",
+      entry_asset: "/response.js",
+      stylesheet_assets: ["/response.css"],
+      complete_document_fallback: true,
+      capabilities: {
+        navigation_guard: true,
+        suspend_resume: true,
+      },
+    });
+    expect(responseDetail.entry.findings).toEqual([]);
+    await page.getByRole("tab", { name: "Dependencies" }).click();
+    const responseDependencies = page.locator(
+      '.module-detail-sections > [data-module-section="dependencies"]',
+    );
+    await expect(responseDependencies).toContainText("tessara.forms.form-version-schema");
+    await expect(responseDependencies).toContainText("tessara.workflows.response-context");
+    await expect(responseDependencies).toContainText(
+      "tessara.workflows.response-assignment-catalog",
+    );
+    await expect(responseDependencies).not.toContainText("Transition-internal only");
+    await expect(page.getByText("transition_internal_only", { exact: true })).toHaveCount(0);
 
     await gotoHydrated(page, `/administration/modules/${MIGRATION_DEFINITION}`);
     await expect(page.getByRole("heading", { level: 1, name: "Migration" })).toBeVisible();
@@ -1694,9 +1729,25 @@ test.describe.serial("Sprint 6A Module Management", () => {
         fixtures.reader.context,
         `/api/admin/modules/${definitionId}`,
       );
-      expect(detail.entry, `${definitionId} detail must match its inventory entry`).toEqual(
-        inventoryEntry,
-      );
+      const stableInventoryEntry = structuredClone(inventoryEntry);
+      const stableDetailEntry = structuredClone(detail.entry);
+      for (const stableEntry of [stableInventoryEntry, stableDetailEntry]) {
+        if ("diagnostics" in stableEntry) {
+          const diagnosticFacts = stableEntry.diagnostics.details.facts;
+          if (
+            diagnosticFacts &&
+            typeof diagnosticFacts === "object" &&
+            !Array.isArray(diagnosticFacts)
+          ) {
+            delete (diagnosticFacts as Record<string, unknown>)
+              .workflow_event_consumer_last_stable_at;
+          }
+        }
+      }
+      expect(
+        stableDetailEntry,
+        `${definitionId} detail must match its inventory entry apart from the live consumer observation timestamp`,
+      ).toEqual(stableInventoryEntry);
 
       await gotoHydrated(page, `/administration/modules/${definitionId}`);
       const detailBootstrap = await moduleBootstrap(page);

@@ -1407,7 +1407,7 @@ completion claims.
 The exact closeout scope is governed by
 [`sprint-0a-validation-platform-foundation-validation-contract.json`](./sprints/sprint-0a-validation-platform-foundation-validation-contract.json).
 
-### Sprint 8C: Response Module Separation Slice (Next)
+### Sprint 8C: Response Module Separation Slice (Complete)
 
 **Entry condition:** the validation-platform diversion is independently marked
 Complete, its closeout candidate and evidence are sealed, and Sprint 8C begins
@@ -1429,7 +1429,7 @@ back to the diversion.
 
 **User-testable exit condition:** a tester can complete and review a response through module contracts and consume its output in Datasets without shared database access.
 
-### Sprint 8D1: Workflow Module Separation Slice
+### Sprint 8D1: Workflow Module Separation Slice (Next)
 
 **Outcome:** Workflows is independently deployed and coordinates Forms and Responses through public contracts.
 

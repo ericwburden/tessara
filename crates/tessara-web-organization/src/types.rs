@@ -33,8 +33,6 @@ pub struct OrganizationNodeDetail {
     pub(crate) metadata: Value,
     #[serde(default)]
     pub(crate) related_forms: Vec<NodeFormLink>,
-    #[serde(default)]
-    pub(crate) related_responses: Vec<NodeSubmissionLink>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -44,17 +42,6 @@ pub struct NodeFormLink {
     pub(crate) form_slug: String,
     pub(crate) published_version_count: i64,
     pub(crate) active_version_label: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-pub struct NodeSubmissionLink {
-    pub(crate) submission_id: String,
-    pub(crate) form_name: String,
-    pub(crate) version_label: String,
-    pub(crate) status: String,
-    pub(crate) created_at: String,
-    pub(crate) submitted_at: Option<String>,
-    pub(crate) submitted_by: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]

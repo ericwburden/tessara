@@ -3,8 +3,8 @@
 //! Keep read-focused panels and detail-page presentation here; mutation workflows should live in editor or API modules.
 
 use super::components::ResponseDetailContent as ResponseDetailBody;
-use super::loaders::load_submission_detail;
-use crate::types::SubmissionDetail;
+use super::loaders::load_response_detail;
+use crate::types::ResponseDetail;
 use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
 };
@@ -12,13 +12,13 @@ use tessara_module_ui::{
 use leptos::prelude::*;
 
 #[component]
-pub fn ResponseDetailContent(submission_id: String) -> impl IntoView {
-    let detail = RwSignal::new(None::<SubmissionDetail>);
+pub fn ResponseDetailContent(response_id: String) -> impl IntoView {
+    let detail = RwSignal::new(None::<ResponseDetail>);
     let is_loading = RwSignal::new(true);
     let load_error = RwSignal::new(None::<String>);
 
     Effect::new(move |_| {
-        load_submission_detail(submission_id.clone(), detail, is_loading, load_error);
+        load_response_detail(response_id.clone(), detail, is_loading, load_error);
     });
 
     view! {

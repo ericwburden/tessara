@@ -1,0 +1,240 @@
+{
+  "api_version": "tessara.io/release-catalog/v1",
+  "catalog_id": "tessara.local.sprint-8c",
+  "revision": 1,
+  "issued_at": "2026-08-23T00:00:00Z",
+  "core_releases": [
+    {
+      "version": "0.1.0",
+      "core_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000001",
+      "gateway_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000002",
+      "database_image": "sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d",
+      "deployment_profile": "tessara-oci-v1",
+      "capability_floor_version": "sprint-8b-v1",
+      "capability_floor": [
+        "admin:all",
+        "composition:approve",
+        "composition:plan",
+        "composition:read"
+      ],
+      "configuration_schema_version": "tessara.io/core-configuration/v1",
+      "provided_contracts": {
+        "tessara.forms.form-version-schema": "1.0.0",
+        "tessara.core.scope-catalog": "1.0.0",
+        "tessara.core.principal-display-catalog": "1.0.0",
+        "tessara.workflows.response-context": "1.0.0",
+        "tessara.workflows.response-assignment-catalog": "1.0.0"
+      }
+    }
+  ],
+  "module_releases": [
+    {
+      "definition_id": "tessara.responses",
+      "version": "1.0.0",
+      "manifest_digest": "sha256:69f935df56074ff9f89b9b2b5b36baa5cf5b3dd32b914da9ad2a56b18f359480",
+      "runtime_image": "sha256:8c00000000000000000000000000000000000000000000000000000000000003",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/response-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/response-bootstrap/v1",
+      "provided_contracts": {
+        "tessara.responses.response": "2.0.0",
+        "tessara.responses.response-lifecycle": "2.0.0",
+        "tessara.responses.submitted-response-export": "1.0.0",
+        "tessara.responses.response-events": "1.0.0",
+        "tessara.responses.start-reconciliation": "1.0.0",
+        "tessara.responses.form-version-usage": "1.0.0",
+        "tessara.responses.summary": "1.0.0",
+        "tessara.responses.operational-status": "1.0.0",
+        "tessara.responses.resource-observation": "1.0.0"
+      },
+      "dependencies": [
+        {
+          "binding_key": "tessara.responses.form-version",
+          "contract_id": "tessara.forms.form-version-schema",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        },
+        {
+          "binding_key": "tessara.responses.workflow-context",
+          "contract_id": "tessara.workflows.response-context",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        },
+        {
+          "binding_key": "tessara.responses.workflow-assignments",
+          "contract_id": "tessara.workflows.response-assignment-catalog",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        }
+      ],
+      "configuration_schema": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "display_label",
+          "provider_request_timeout_seconds",
+          "workflow_event_page_size"
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.datasets",
+      "version": "1.0.0",
+      "manifest_digest": "sha256:d865c8d8bffcef31a39dfa49dc8c3e73fb434098298821857588a978af0140d5",
+      "runtime_image": "sha256:8b00000000000000000000000000000000000000000000000000000000000003",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/dataset-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/dataset-bootstrap/v1",
+      "provided_contracts": {
+        "tessara.datasets.dataset-major-line": "2.0.0",
+        "tessara.datasets.authoring": "1.0.0"
+      },
+      "dependencies": [
+        {
+          "binding_key": "tessara.datasets.response-export",
+          "contract_id": "tessara.responses.submitted-response-export",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        },
+        {
+          "binding_key": "tessara.datasets.form-version-schema",
+          "contract_id": "tessara.forms.form-version-schema",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        },
+        {
+          "binding_key": "tessara.datasets.scope-catalog",
+          "contract_id": "tessara.core.scope-catalog",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        },
+        {
+          "binding_key": "tessara.datasets.principal-display-catalog",
+          "contract_id": "tessara.core.principal-display-catalog",
+          "version_requirement": "=1.0.0",
+          "optional": false
+        }
+      ],
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer",
+            "const": 1,
+            "default": 1
+          },
+          "display_label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "default": "Datasets"
+          },
+          "provider_request_timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "default": 5
+          },
+          "provider_retry_limit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3,
+            "default": 1
+          },
+          "response_export_page_size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 250
+          }
+        },
+        "required": [
+          "schema_version",
+          "display_label",
+          "provider_request_timeout_seconds",
+          "provider_retry_limit",
+          "response_export_page_size"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "definition_id": "tessara.components",
+      "version": "1.1.0",
+      "manifest_digest": "sha256:257a5d39b8ff1678c7b52a84b2defd88aee44b83c80ddc8c2e7af8c6b60748f7",
+      "runtime_image": "sha256:8b00000000000000000000000000000000000000000000000000000000000004",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/component-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/component-bootstrap/v1",
+      "provided_contracts": {
+        "tessara.components.component-version": "3.0.0",
+        "tessara.components.authoring": "1.0.0"
+      },
+      "dependencies": [
+        {
+          "binding_key": "tessara.components.dataset-major-line",
+          "contract_id": "tessara.datasets.dataset-major-line",
+          "version_requirement": "=2.0.0",
+          "optional": false
+        }
+      ],
+      "configuration_schema": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "display_label",
+          "dataset_request_timeout_seconds"
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.dashboards",
+      "version": "3.0.2",
+      "manifest_digest": "sha256:b6362cad71b5032c365ffa9d6e5e0d9b815bde2b7c7c4de3e998cc4ab92f07cf",
+      "runtime_image": "sha256:8b00000000000000000000000000000000000000000000000000000000000005",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/dashboard-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/dashboard-bootstrap/v2",
+      "provided_contracts": {
+        "tessara.dashboards.composition": "1.0.0",
+        "tessara.dashboards.dashboard": "1.0.0"
+      },
+      "dependencies": [
+        {
+          "binding_key": "tessara.dashboards.component-version",
+          "contract_id": "tessara.components.component-version",
+          "version_requirement": "=3.0.0",
+          "optional": false
+        }
+      ],
+      "configuration_schema": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "display_label",
+          "default_page_size"
+        ]
+      }
+    },
+    {
+      "definition_id": "tessara.reference.scoped-records",
+      "version": "1.0.2",
+      "manifest_digest": "sha256:f58d341a68daa4b1e78459ca50aaf1165003606ac83328f9e939112eb690f812",
+      "runtime_image": "sha256:8b00000000000000000000000000000000000000000000000000000000000006",
+      "deployment_profile": "tessara-oci-v1",
+      "configuration_schema_version": "tessara.io/scoped-records-configuration/v1",
+      "bootstrap_schema_version": "tessara.io/scoped-records-bootstrap/v1",
+      "provided_contracts": {
+        "tessara.reference.scoped-records.record": "1.0.0"
+      },
+      "dependencies": [],
+      "configuration_schema": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "display_label"
+        ]
+      }
+    }
+  ]
+}

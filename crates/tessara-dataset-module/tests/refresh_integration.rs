@@ -38,12 +38,12 @@ use tessara_responses_contract::{
     RESPONSE_EXPORT_BINDING_KEY, RESPONSE_EXPORT_CHECKPOINT_ACTION,
     RESPONSE_EXPORT_CHECKPOINT_PATH, RESPONSE_EXPORT_CONTRACT_ID, RESPONSE_EXPORT_MEDIA_TYPE,
     RESPONSE_EXPORT_PAGE_ACTION, RESPONSE_EXPORT_PAGE_PATH, RESPONSE_EXPORT_SCHEMA_VERSION,
-    RESPONSE_EXPORT_START_ACTION, RESPONSE_EXPORT_START_PATH, ResponseExportAction,
-    ResponseExportCheckpointRequest, ResponseExportCheckpointResponse, ResponseExportCursor,
-    ResponseExportEntry, ResponseExportPageRequest, ResponseExportPageResponse,
-    ResponseExportPartition, ResponseExportStartRequest, ResponseExportStartResponse,
-    ResponseTombstoneReason, SubmittedResponseChange, SubmittedResponseRestrictionTier,
-    SubmittedResponseUpsert, SubmittedResponseValue,
+    RESPONSE_EXPORT_START_ACTION, RESPONSE_EXPORT_START_PATH, RESPONSE_MODULE_DEFINITION_ID,
+    ResponseExportAction, ResponseExportCheckpointRequest, ResponseExportCheckpointResponse,
+    ResponseExportCursor, ResponseExportEntry, ResponseExportPageRequest,
+    ResponseExportPageResponse, ResponseExportPartition, ResponseExportStartRequest,
+    ResponseExportStartResponse, ResponseTombstoneReason, SubmittedResponseChange,
+    SubmittedResponseRestrictionTier, SubmittedResponseUpsert, SubmittedResponseValue,
 };
 use tokio::sync::Barrier;
 use tower::ServiceExt;
@@ -1531,8 +1531,13 @@ async fn mock_authorization_exchange(
         let request: AuthorizationExchangeRequestV2 = serde_json::from_slice(&body).ok()?;
         request.validate().ok()?;
         if request.target
-            != (AuthorizationAudienceV1::CoreInstallation {
-                installation_id: state.ids.installation_id,
+            != (AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: tessara_composition::module_instance_id(
+                    state.ids.installation_id,
+                    RESPONSE_MODULE_DEFINITION_ID,
+                ),
+                module_definition_id: ModuleDefinitionId::new(RESPONSE_MODULE_DEFINITION_ID)
+                    .ok()?,
             })
             || request.dependency_binding.as_str() != RESPONSE_EXPORT_BINDING_KEY
             || request.functional_contract.as_str() != RESPONSE_EXPORT_CONTRACT_ID
@@ -1788,8 +1793,13 @@ fn authorize_provider_request<T: serde::de::DeserializeOwned>(
                 module_instance_id: state.ids.module_instance_id,
                 module_definition_id: ModuleDefinitionId::new(DATASET_DEFINITION).ok()?,
             },
-            audience: AuthorizationAudienceV1::CoreInstallation {
-                installation_id: state.ids.installation_id,
+            audience: AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: tessara_composition::module_instance_id(
+                    state.ids.installation_id,
+                    RESPONSE_MODULE_DEFINITION_ID,
+                ),
+                module_definition_id: ModuleDefinitionId::new(RESPONSE_MODULE_DEFINITION_ID)
+                    .ok()?,
             },
             dependency_binding: DependencyBindingKey::new(RESPONSE_EXPORT_BINDING_KEY).ok()?,
             functional_contract: FunctionalContractId::new(RESPONSE_EXPORT_CONTRACT_ID).ok()?,

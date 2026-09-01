@@ -9,7 +9,7 @@ use tessara_module_contract::{
 };
 use uuid::Uuid;
 
-const FROZEN_CATALOG: [FrozenCatalogEntry; 4] = [
+const FROZEN_CATALOG: [FrozenCatalogEntry; 3] = [
     FrozenCatalogEntry {
         name: "Forms",
         definition_id: "tessara.forms",
@@ -19,11 +19,6 @@ const FROZEN_CATALOG: [FrozenCatalogEntry; 4] = [
         name: "Workflows",
         definition_id: "tessara.workflows",
         navigation: Some(("main_between_organization_and_operations", 1)),
-    },
-    FrozenCatalogEntry {
-        name: "Responses",
-        definition_id: "tessara.responses",
-        navigation: Some(("main_between_organization_and_operations", 2)),
     },
     FrozenCatalogEntry {
         name: "Migration",
@@ -157,17 +152,6 @@ pub(crate) fn canonical_inputs() -> Vec<CatalogInput> {
                 "../../../tessara-module-contract/tests/fixtures/transition-workflows-v1.json.sha256"
             ),
             Some(("main_between_organization_and_operations", 1)),
-        ),
-        canonical_input(
-            "Responses",
-            "tessara.responses",
-            include_bytes!(
-                "../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json"
-            ),
-            include_str!(
-                "../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json.sha256"
-            ),
-            Some(("main_between_organization_and_operations", 2)),
         ),
         canonical_input(
             "Migration",
@@ -503,12 +487,17 @@ mod tests {
                 .iter()
                 .map(|source| source.definition_id.as_str())
                 .collect::<Vec<_>>(),
-            [
-                "tessara.forms",
-                "tessara.workflows",
-                "tessara.responses",
-                "tessara.migration",
-            ]
+            ["tessara.forms", "tessara.workflows", "tessara.migration",]
+        );
+        assert!(
+            prepared
+                .iter()
+                .all(|source| source.definition_id != "tessara.responses")
+        );
+        assert!(
+            prepared
+                .iter()
+                .all(|source| source.definition_id != "tessara.datasets")
         );
         assert!(prepared.iter().all(|source| {
             source.source_digest.starts_with("sha256:") && source.source_bytes.ends_with(b"\n")
@@ -527,35 +516,7 @@ mod tests {
             .flat_map(|source| &source.findings)
             .filter(|finding| finding.code == "transition_internal_only")
             .count();
-        assert_eq!(dependency_finding_count, 3);
-
-        let response_findings = &prepared
-            .iter()
-            .find(|source| source.definition_id == "tessara.responses")
-            .expect("Responses source")
-            .findings;
-        assert_eq!(
-            response_findings
-                .iter()
-                .map(|finding| (
-                    finding.code.as_str(),
-                    finding.path.as_str(),
-                    finding.message.as_str()
-                ))
-                .collect::<Vec<_>>(),
-            [
-                (
-                    "transition_internal_only",
-                    "dependencies[0]",
-                    "Dependency binding 'tessara.responses.workflow-version' describes current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                ),
-                (
-                    "transition_internal_only",
-                    "dependencies[1]",
-                    "Dependency binding 'tessara.responses.form-version' describes current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                ),
-            ]
-        );
+        assert_eq!(dependency_finding_count, 1);
         assert_eq!(
             (
                 migration.findings[0].path.as_str(),

@@ -1,3 +1,7 @@
 * text=auto eol=lf
 
 *.ps1 text eol=crlf
+
+# Unified-diff context lines consist of one required leading space; do not
+# misclassify that patch syntax as blank-line trailing whitespace.
+deploy/sprint-8c/baselines/*.patch whitespace=-blank-at-eol

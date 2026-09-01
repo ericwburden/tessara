@@ -2,12 +2,10 @@ import { expect, type Page, type Response } from "@playwright/test";
 
 const DESKTOP_VIEWPORT = { width: 1440, height: 1000 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
-const EXPECTED_FORBIDDEN_RESOURCE_CONSOLE =
-  "Failed to load resource: the server responded with a status of 403 (Forbidden)";
-
 type ExpectedForbiddenGet = {
   path: string;
   count: number;
+  status?: 403 | 404;
 };
 
 type ExpectedHttpErrorScope = {
@@ -132,11 +130,15 @@ export function attachNativeRouteGuard(page: Page) {
     }
 
     const expectedResponses = expected
-      .flatMap(({ path, count }) => Array(count).fill(`GET ${path} 403`))
+      .flatMap(({ path, count, status = 403 }) =>
+        Array(count).fill(`GET ${path} ${status}`),
+      )
       .sort();
     const expectedConsoleIdentities = expected
-      .flatMap(({ path, count }) =>
-        Array(count).fill(`${path} :: ${EXPECTED_FORBIDDEN_RESOURCE_CONSOLE}`),
+      .flatMap(({ path, count, status = 403 }) =>
+        Array(count).fill(
+          `${path} :: Failed to load resource: the server responded with a status of ${status} (${status === 403 ? "Forbidden" : "Not Found"})`,
+        ),
       )
       .sort();
     expect(
@@ -255,7 +257,8 @@ export async function expectShellRouteDirectLoadAndRefresh(
   page: Page,
   expectation: ShellRouteExpectation,
 ) {
-  const documentRootSelector = expectation.path.startsWith("/datasets") ||
+  const documentRootSelector = expectation.path.startsWith("/responses") ||
+      expectation.path.startsWith("/datasets") ||
       expectation.path.startsWith("/components") ||
       expectation.path.startsWith("/dashboards")
     ? "#module-content"
@@ -326,8 +329,13 @@ export async function expectHydratedNativeRouteDirectLoadAndRefresh(
   page: Page,
   expectation: NativeRouteExpectation,
 ) {
-  const documentRootSelector =
-    expectation.documentRootSelector ?? "#app-root";
+  const documentRootSelector = expectation.documentRootSelector ??
+    (expectation.path.startsWith("/responses") ||
+      expectation.path.startsWith("/datasets") ||
+      expectation.path.startsWith("/components") ||
+      expectation.path.startsWith("/dashboards")
+      ? "#module-content"
+      : "#app-root");
   const expectedRootMarkup =
     expectation.expectedRootMarkup ??
     (documentRootSelector === "#module-content"
@@ -363,8 +371,13 @@ export async function expectNoJavaScriptNativeRouteDirectLoadAndRefresh(
   page: Page,
   expectation: NoJavaScriptNativeRouteExpectation,
 ) {
-  const documentRootSelector =
-    expectation.documentRootSelector ?? "#app-root";
+  const documentRootSelector = expectation.documentRootSelector ??
+    (expectation.path.startsWith("/responses") ||
+      expectation.path.startsWith("/datasets") ||
+      expectation.path.startsWith("/components") ||
+      expectation.path.startsWith("/dashboards")
+      ? "#module-content"
+      : "#app-root");
   const expectedRootMarkup =
     expectation.expectedRootMarkup ??
     (documentRootSelector === "#module-content"

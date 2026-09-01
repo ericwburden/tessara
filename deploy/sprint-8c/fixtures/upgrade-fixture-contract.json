@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "contract": "tessara.sprint-8c.response-upgrade-fixture",
+  "transition": {
+    "owner": "tessara.responses",
+    "mechanism": "resolved_one_owner_blueprint_delta",
+    "intended_release": "1.0.0"
+  },
+  "sequence": ["0.9.0", "1.0.0", "0.9.0", "1.0.0"],
+  "stages": [
+    "establish-compatible-baseline",
+    "upgrade-to-candidate",
+    "rollback-to-compatible-baseline",
+    "restore-intended-candidate"
+  ],
+  "prior_compatible_artifact": {
+    "release": "0.9.0",
+    "source_model": "authenticated-git-snapshot-plus-dedicated-patch",
+    "base_commit": "13eb6ffaa9479fa71f4270edb049d079495d1a79",
+    "base_tree": "c99cf7e156dd157a705b8354d706f9b8be7baeb9",
+    "patch_path": "deploy/sprint-8c/baselines/response-0.9.0.patch",
+    "patch_sha256": "0f34b14a2b052df160cb810fe9ca402163ff7de4ef83fea7105426f5f0be15a8",
+    "cargo_package": "tessara-response-module",
+    "cargo_features": [],
+    "dockerfile": "deploy/sprint-8c/Dockerfile.response-upgrade-baseline",
+    "builder": "scripts/build-sprint-8c-response-upgrade-baseline.ps1",
+    "executable": "/usr/local/bin/response-module",
+    "fixture_kind": "authenticated-independent-source-release-v2",
+    "manifest_source": "crates/tessara-response-module/manifest.json",
+    "manifest_projection": "independent-source-behavioral-compatibility",
+    "allowed_manifest_variations": ["release_version", "browser_lifecycle", "assets"],
+    "metadata_receipt_contract": "tessara.sprint-8c.response-prior-compatible-release"
+  },
+  "response_releases": {
+    "0.9.0": {
+      "contract": "tessara.responses.product",
+      "contract_version": "1.0.0",
+      "resource_contract": "tessara.responses.response",
+      "resource_contract_version": "2.0.0",
+      "lifecycle_contract": "tessara.responses.response-lifecycle",
+      "lifecycle_contract_version": "2.0.0",
+      "source_built": true
+    },
+    "1.0.0": {
+      "contract": "tessara.responses.product",
+      "contract_version": "1.0.0",
+      "resource_contract": "tessara.responses.response",
+      "resource_contract_version": "2.0.0",
+      "lifecycle_contract": "tessara.responses.response-lifecycle",
+      "lifecycle_contract_version": "2.0.0",
+      "source_built": true
+    }
+  },
+  "schema_compatibility": {
+    "mode": "reads_current_1_0_0_response_baseline_after_rollback",
+    "migration_path": "crates/tessara-response-module/migrations/001_response_module.sql",
+    "source_independence": "authenticated_pinned_git_tree_plus_dedicated_patch",
+    "candidate_source_dependency": "none",
+    "rollback_reader_contract": "same_owned_schema_and_product_read_paths",
+    "required_owned_tables": [
+      "response_module_configuration",
+      "response_module_security_state",
+      "response_provider_observations",
+      "response_consumed_service_nonces",
+      "response_consumed_bootstrap_service_nonces",
+      "response_consumed_core_service_nonces",
+      "responses",
+      "response_start_claims",
+      "response_values",
+      "response_audit_events",
+      "response_idempotency_receipts",
+      "response_workflow_event_state",
+      "response_workflow_events",
+      "response_export_state",
+      "response_export_changes",
+      "response_bootstrap_receipts"
+    ]
+  },
+  "fixed_dependencies": {
+    "core": "0.1.0",
+    "tessara.datasets": "1.0.0",
+    "tessara.components": "1.1.0",
+    "tessara.dashboards": "3.0.2",
+    "tessara.reference.scoped-records": "1.0.2"
+  },
+  "preserved": [
+    "response_state",
+    "module_instance_identity",
+    "typed_resource_identity",
+    "navigation_identity",
+    "outbox_positions"
+  ],
+  "unrelated_unchanged": [
+    "images",
+    "containers",
+    "restart_counts",
+    "owner_data",
+    "navigation",
+    "availability"
+  ]
+}

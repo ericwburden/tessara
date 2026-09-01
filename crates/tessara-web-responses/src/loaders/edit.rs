@@ -2,19 +2,19 @@
 
 #[cfg(feature = "hydrate")]
 use crate::http::redirect_to_login;
-use crate::types::{RenderedForm, SubmissionDetail};
+use crate::types::{ResponseDetail, ResponseFormSnapshot};
 #[cfg(feature = "hydrate")]
-use crate::value_collection::submission_value_maps;
+use crate::value_collection::response_value_maps;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
 #[cfg(feature = "hydrate")]
-use super::super::api::{ResponseApiError, fetch_rendered_form, fetch_submission_detail};
+use super::super::api::{ResponseApiError, fetch_response_detail};
 
-pub(crate) fn load_submission_edit_context(
-    submission_id: String,
-    detail: RwSignal<Option<SubmissionDetail>>,
-    rendered_form: RwSignal<Option<RenderedForm>>,
+pub(crate) fn load_response_edit_context(
+    response_id: String,
+    detail: RwSignal<Option<ResponseDetail>>,
+    rendered_form: RwSignal<Option<ResponseFormSnapshot>>,
     text_values: RwSignal<HashMap<String, String>>,
     boolean_values: RwSignal<HashMap<String, bool>>,
     is_loading: RwSignal<bool>,
@@ -26,7 +26,7 @@ pub(crate) fn load_submission_edit_context(
             is_loading.set(true);
             load_error.set(None);
 
-            let loaded_detail = match fetch_submission_detail(&submission_id).await {
+            let loaded_detail = match fetch_response_detail(&response_id).await {
                 Ok(detail) => detail,
                 Err(ResponseApiError::Unauthorized) => {
                     is_loading.set(false);
@@ -42,7 +42,7 @@ pub(crate) fn load_submission_edit_context(
 
             if loaded_detail.status != "draft" {
                 let (loaded_text_values, loaded_boolean_values) =
-                    submission_value_maps(&loaded_detail);
+                    response_value_maps(&loaded_detail);
                 text_values.set(loaded_text_values);
                 boolean_values.set(loaded_boolean_values);
                 detail.set(Some(loaded_detail));
@@ -51,21 +51,8 @@ pub(crate) fn load_submission_edit_context(
                 return;
             }
 
-            let loaded_rendered = match fetch_rendered_form(&loaded_detail.form_version_id).await {
-                Ok(rendered) => rendered,
-                Err(ResponseApiError::Unauthorized) => {
-                    is_loading.set(false);
-                    redirect_to_login();
-                    return;
-                }
-                Err(ResponseApiError::Message(error)) => {
-                    load_error.set(Some(error));
-                    is_loading.set(false);
-                    return;
-                }
-            };
-
-            let (loaded_text_values, loaded_boolean_values) = submission_value_maps(&loaded_detail);
+            let (loaded_text_values, loaded_boolean_values) = response_value_maps(&loaded_detail);
+            let loaded_rendered = loaded_detail.form.clone();
             text_values.set(loaded_text_values);
             boolean_values.set(loaded_boolean_values);
             detail.set(Some(loaded_detail));
@@ -77,7 +64,7 @@ pub(crate) fn load_submission_edit_context(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (
-            submission_id,
+            response_id,
             detail,
             rendered_form,
             text_values,

@@ -21,17 +21,3 @@ impl IntoNonemptyString for String {
         if self.is_empty() { None } else { Some(self) }
     }
 }
-
-pub(crate) fn sentence_label(value: &str) -> String {
-    value
-        .split('_')
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}

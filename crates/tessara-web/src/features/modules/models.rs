@@ -361,15 +361,15 @@ impl ModuleInventoryEntryV1 {
             }
         } else {
             let count = descriptor.dependencies.len();
+            let (relationship_label, verb) = if count == 1 {
+                ("relationship", "describes")
+            } else {
+                ("relationships", "describe")
+            };
             ModuleDetailDimensionV1 {
                 state: ModuleDetailDimensionStateV1::TransitionInternalOnly,
                 evidence: format!(
-                    "{count} declared {} describe current in-process coupling and cannot be satisfied by a transition contribution provider.",
-                    if count == 1 {
-                        "relationship"
-                    } else {
-                        "relationships"
-                    }
+                    "{count} declared {relationship_label} {verb} current in-process coupling and cannot be satisfied by a transition contribution provider."
                 ),
             }
         };
@@ -983,9 +983,9 @@ mod tests {
     fn transition_dependency_and_configuration_metadata_do_not_become_runtime_state() {
         let mut descriptor: TransitionalContributionDescriptorV1 =
             serde_json::from_str(include_str!(
-                "../../../../tessara-module-contract/tests/fixtures/transition-responses-v1.json"
+                "../../../../tessara-module-contract/tests/fixtures/transition-workflows-v1.json"
             ))
-            .expect("canonical Responses descriptor parses");
+            .expect("canonical Workflows descriptor parses");
         descriptor.configuration_schema = Some(json!({"type": "object"}));
         let entry: ModuleInventoryEntryV1 = serde_json::from_value(json!({
             "kind": "transitional_in_process",
@@ -1008,7 +1008,7 @@ mod tests {
         );
         assert_eq!(
             dimensions.dependency.evidence,
-            "2 declared relationships describe current in-process coupling and cannot be satisfied by a transition contribution provider."
+            "1 declared relationship describes current in-process coupling and cannot be satisfied by a transition contribution provider."
         );
         assert_eq!(
             dimensions.configuration.state,

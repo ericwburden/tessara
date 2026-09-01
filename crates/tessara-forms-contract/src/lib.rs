@@ -17,6 +17,9 @@ pub const FORM_VERSION_CATALOG_ACTION: &str = "forms.form_version_catalog";
 pub const FORM_VERSION_SCHEMA_ACTION: &str = "forms.form_version_schema";
 pub const FORM_VERSION_CATALOG_PATH: &str = "/api/private/forms/form-version-catalog";
 pub const FORM_VERSION_SCHEMA_PATH: &str = "/api/private/forms/form-version-schema";
+pub const RESPONSE_FORM_VERSION_SCHEMA_ACTION: &str = "forms.response_form_version_schema";
+pub const RESPONSE_FORM_VERSION_SCHEMA_PATH: &str =
+    "/api/private/forms/response-form-version-schema";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -82,6 +85,8 @@ pub struct FormVersionField {
     pub position: i32,
     pub grid_row: i32,
     pub grid_column: i32,
+    pub grid_width: i32,
+    pub grid_height: i32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -90,6 +95,7 @@ pub struct FormVersionSection {
     pub section_id: Uuid,
     pub key: String,
     pub label: String,
+    pub description: String,
     pub position: i32,
 }
 
@@ -302,6 +308,8 @@ impl FormVersionSchemaResponse {
                 || field.position < 0
                 || field.grid_row < 1
                 || field.grid_column < 1
+                || field.grid_width < 1
+                || field.grid_height < 1
                 || is_blank(&field.key)
                 || is_blank(&field.label)
                 || is_blank(&field.field_type)
@@ -429,6 +437,7 @@ mod tests {
                 section_id,
                 key: section_id.to_string(),
                 label: "Applicant".into(),
+                description: "Applicant details".into(),
                 position: 0,
             }],
             fields: vec![FormVersionField {
@@ -442,6 +451,8 @@ mod tests {
                 position: 0,
                 grid_row: 1,
                 grid_column: 1,
+                grid_width: 6,
+                grid_height: 1,
             }],
         }
         .with_recomputed_digests()

@@ -619,28 +619,33 @@ try {
         $componentsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/components" -Headers $headers
         $dashboardsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards" -Headers $headers
         $nodesForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
-        $submissionsForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/submissions" -Headers $headers
         $sessionForm = $formsForSeed | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
         $sessionDataset = $datasetsForSeed | Where-Object { $_.slug -eq "demo-session-log" } | Select-Object -First 1
         $sessionTableComponent = $componentsForSeed | Where-Object { $_.slug -eq "demo-session-log-table" } | Select-Object -First 1
         $dashboardForSeed = $dashboardsForSeed | Where-Object { $_.name -eq "Demo Operations Dashboard" } | Select-Object -First 1
-        $submissionForSeed = $submissionsForSeed | Where-Object { $_.form_name -eq "Demo Session Log" -and $_.status -eq "submitted" } | Select-Object -First 1
         if (-not $sessionForm -or -not $sessionDataset -or -not $sessionTableComponent -or
             (-not $independentDashboard -and -not $dashboardForSeed) -or
-            -not $submissionForSeed -or -not $nodesForSeed) {
+            -not $nodesForSeed) {
             throw "Smoke failure: required existing Demo Session Log assets could not be found."
         }
         $seed = [pscustomobject]@{
             seed_version          = "uat-demo-v2"
             organization_node_id  = ($nodesForSeed | Select-Object -First 1).id
             form_id               = $sessionForm.id
-            submission_id         = $submissionForSeed.id
             dataset_id            = $sessionDataset.id
             component_version_id  = $sessionTableComponent.current_version_id
             dashboard_id          = if ($dashboardForSeed) { $dashboardForSeed.id } else { $null }
             analytics_values      = 1
         }
     }
+    $responsesForSeed = Invoke-Json -Method "Get" -Uri "$baseUrl/api/responses" -Headers $headers
+    $responseForSeed = $responsesForSeed | Where-Object {
+        $_.form_name -eq "Demo Session Log" -and $_.status -eq "submitted"
+    } | Select-Object -First 1
+    if (-not $responseForSeed) {
+        throw "Smoke failure: the Response owner did not expose the submitted Demo Session Log fixture."
+    }
+    $seed | Add-Member -NotePropertyName response_id -NotePropertyValue $responseForSeed.id -Force
     if ($independentDashboard) {
         $sprint6cSeedScript = Join-Path $PSScriptRoot "seed-sprint-6c-demo.ps1"
         $sprint6cSeed = (& $sprint6cSeedScript -BaseUrl $baseUrl | Out-String) | ConvertFrom-Json
@@ -672,7 +677,7 @@ try {
     Register-Sprint6ACurrentRunSession -Sessions $currentRunSessions -Source bearer -Token ([string]$delegatorLogin.token)
     $delegatorHeaders = @{ Authorization = "Bearer $($delegatorLogin.token)" }
     if ($summary.published_form_versions -lt 1 -or $summary.submitted_submissions -lt 1 -or $summary.datasets -lt 1 -or $summary.components -lt 1) {
-        throw "Expected Core application summary to include seeded published forms, submissions, datasets, and components"
+        throw "Expected the application summary to include seeded published forms, Responses, datasets, and components"
     }
     $nodes = Invoke-Json -Method "Get" -Uri "$baseUrl/api/nodes" -Headers $headers
     $dashboard = Invoke-Json -Method "Get" -Uri "$baseUrl/api/dashboards/$($seed.dashboard_id)" -Headers $headers
@@ -873,7 +878,7 @@ try {
     Assert-ProtectedShell -Content $formNew -Needles @("Create Form") -Context "form create shell"
     $formEdit = Invoke-Html -Uri "$baseUrl/forms/$($seed.form_id)/edit" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $formEdit -Needles @("Edit Form") -Context "form edit shell"
-    $responseDetail = Invoke-Html -Uri "$baseUrl/responses/$($seed.submission_id)" -CookieJarPath $adminBrowserSession
+    $responseDetail = Invoke-Html -Uri "$baseUrl/responses/$($seed.response_id)" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseDetail -Needles @("Response Detail") -Context "response detail shell"
     $responseNew = Invoke-Html -Uri "$baseUrl/responses/new" -CookieJarPath $adminBrowserSession
     Assert-ProtectedShell -Content $responseNew -Needles @("Start Response") -Context "response create shell"

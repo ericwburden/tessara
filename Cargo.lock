@@ -4683,8 +4683,8 @@ dependencies = [
  "tessara-module-contract",
  "tessara-reference-scoped-records",
  "tessara-responses-contract",
- "tessara-submissions",
  "tessara-web",
+ "tessara-workflows-contract",
  "thiserror 2.0.18",
  "tokio",
  "tower",
@@ -5038,7 +5038,7 @@ version = "0.1.0"
 
 [[package]]
 name = "tessara-module-contract"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "chrono",
@@ -5152,8 +5152,62 @@ dependencies = [
 ]
 
 [[package]]
-name = "tessara-responses-contract"
+name = "tessara-response-module"
 version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "base64",
+ "chrono",
+ "leptos",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde_jcs",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tessara-composition",
+ "tessara-forms-contract",
+ "tessara-module-contract",
+ "tessara-module-runtime",
+ "tessara-module-testkit",
+ "tessara-module-ui",
+ "tessara-response-ui",
+ "tessara-responses-contract",
+ "tessara-workflows-contract",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "tessara-response-ui"
+version = "1.0.0"
+dependencies = [
+ "any_spawner",
+ "gloo-net",
+ "icons",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde_json",
+ "tessara-module-contract",
+ "tessara-module-ui",
+ "tessara-responses-contract",
+ "tessara-web-http",
+ "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "tessara-responses-contract"
+version = "2.0.0"
 dependencies = [
  "serde",
  "serde_jcs",
@@ -5163,10 +5217,6 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
 ]
-
-[[package]]
-name = "tessara-submissions"
-version = "0.1.0"
 
 [[package]]
 name = "tessara-supervisor"
@@ -5209,7 +5259,6 @@ dependencies = [
  "tessara-web-forms",
  "tessara-web-http",
  "tessara-web-organization",
- "tessara-web-responses",
  "tessara-web-workflows",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -5270,7 +5319,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tessara-web-responses"
+name = "tessara-web-workflows"
 version = "0.1.0"
 dependencies = [
  "gloo-net",
@@ -5287,20 +5336,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "tessara-web-workflows"
-version = "0.1.0"
+name = "tessara-workflows-contract"
+version = "1.0.0"
 dependencies = [
- "gloo-net",
- "icons",
- "js-sys",
- "leptos",
  "serde",
+ "serde_jcs",
  "serde_json",
- "tessara-module-ui",
- "tessara-web-http",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
+ "sha2",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

@@ -2,12 +2,12 @@
 
 use crate::display::response_value_label;
 use crate::metadata::metadata_label;
-use crate::types::SubmissionValueDetail;
+use crate::types::ResponseValueDetail;
 use leptos::prelude::*;
 use tessara_module_ui::DataTable;
 
 #[component]
-pub(crate) fn ResponseValuesTable(values: Vec<SubmissionValueDetail>) -> impl IntoView {
+pub(crate) fn ResponseValuesTable(values: Vec<ResponseValueDetail>) -> impl IntoView {
     view! {
         <DataTable>
             <thead>

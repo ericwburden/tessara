@@ -12,6 +12,10 @@ use leptos::prelude::*;
 pub(super) fn WorkflowAssignmentRow(instance: WorkflowAssignmentStatus) -> impl IntoView {
     let assignment_href = workflow_assignment_href(&instance);
     let step_summary = workflow_step_summary(&instance);
+    let started_at = match instance.started_at.clone() {
+        Some(value) => view! { <Timestamp value/> }.into_any(),
+        None => view! { <span>"Not started"</span> }.into_any(),
+    };
     view! {
         <tr>
             <th scope="row">
@@ -29,7 +33,7 @@ pub(super) fn WorkflowAssignmentRow(instance: WorkflowAssignmentStatus) -> impl 
                 <small class="workflow-assignment-step-meta">{step_summary}</small>
             </td>
             <td class="data-table__cell--center">{workflow_response_summary(&instance)}</td>
-            <td><Timestamp value=instance.started_at.clone()/></td>
+            <td>{started_at}</td>
         </tr>
     }
 }

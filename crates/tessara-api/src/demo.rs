@@ -15,7 +15,6 @@ use crate::{
 mod accounts;
 mod forms;
 mod hierarchy;
-mod responses;
 mod workflows;
 
 use accounts::{
@@ -27,7 +26,6 @@ use hierarchy::{
     DemoNodeSpec, MetadataFieldDef, ensure_demo_node, ensure_metadata_fields, ensure_node_type,
     ensure_node_type_relationship,
 };
-use responses::{SeedSubmissionSpec, ensure_seed_submission};
 use workflows::{
     WorkflowStepSeed, ensure_program_checkpoint_workflow, ensure_single_form_workflow_assignment,
 };
@@ -48,12 +46,9 @@ pub struct DemoSeedSummary {
     pub seed_version: &'static str,
     pub node_counts: DemoNodeCounts,
     pub form_count: i64,
-    pub draft_submission_count: i64,
-    pub submitted_submission_count: i64,
     pub organization_node_id: Uuid,
     pub form_id: Uuid,
     pub form_version_id: Uuid,
-    pub submission_id: Uuid,
     pub partner_node_id: Uuid,
     pub program_node_id: Uuid,
     pub activity_node_id: Uuid,
@@ -73,7 +68,6 @@ pub struct DemoSeedSummary {
     pub program_workflow_id: Uuid,
     pub program_workflow_version_id: Uuid,
     pub program_workflow_assignment_id: Uuid,
-    pub analytics_values: i64,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -934,240 +928,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
     )
     .await?;
 
-    let _partner_submitted_a = ensure_seed_submission(
-        pool,
-        account_id,
-        partner_form.form_version_id,
-        partner_a,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:partner-submitted-a",
-            status: "submitted",
-            values: vec![
-                ("contact_name", json!("Avery Johnson")),
-                ("reporting_region", json!("north")),
-                ("compliance_confirmed", json!(true)),
-                ("review_date", json!("2026-03-31")),
-                ("service_focus", json!(["family_support", "youth_services"])),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        account_id,
-        partner_form.form_version_id,
-        partner_b,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:partner-submitted-b",
-            status: "submitted",
-            values: vec![
-                ("contact_name", json!("Morgan Lee")),
-                ("reporting_region", json!("south")),
-                ("compliance_confirmed", json!(false)),
-                ("review_date", json!("2026-04-02")),
-                ("service_focus", Value::Null),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        delegator_account_id,
-        partner_form.form_version_id,
-        partner_a,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:partner-draft-a",
-            status: "draft",
-            values: vec![
-                ("contact_name", json!("Avery Johnson")),
-                ("reporting_region", json!("north")),
-                ("compliance_confirmed", json!(true)),
-                ("review_date", json!("2026-04-20")),
-            ],
-        },
-    )
-    .await?;
-
-    ensure_seed_submission(
-        pool,
-        operator_account_id,
-        program_form.form_version_id,
-        program_a,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:program-submitted-a",
-            status: "submitted",
-            values: vec![
-                ("snapshot_notes", json!("Enrollment remains on track.")),
-                ("participant_target", json!(120)),
-                ("funding_confirmed", json!(true)),
-                ("review_window_start", json!("2026-04-01")),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        account_id,
-        program_form.form_version_id,
-        program_c,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:program-submitted-b",
-            status: "submitted",
-            values: vec![
-                (
-                    "snapshot_notes",
-                    json!("Hiring delays require schedule changes."),
-                ),
-                ("participant_target", json!(150)),
-                ("funding_confirmed", json!(true)),
-                ("review_window_start", json!("2026-04-15")),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        delegator_account_id,
-        program_form.form_version_id,
-        program_b,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:program-draft-a",
-            status: "draft",
-            values: vec![
-                ("snapshot_notes", json!("Partner review is in progress.")),
-                ("participant_target", json!(90)),
-                ("funding_confirmed", json!(true)),
-                ("review_window_start", json!("2026-05-01")),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        operator_account_id,
-        activity_form.form_version_id,
-        activity_a,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:activity-submitted-a",
-            status: "submitted",
-            values: vec![
-                (
-                    "activity_summary",
-                    json!("Orientation sessions prepared for new intake."),
-                ),
-                ("delivery_mode", json!("in_person")),
-                ("focus_tags", json!(["orientation", "intake"])),
-                ("expected_attendees", json!(25)),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        operator_account_id,
-        activity_form.form_version_id,
-        activity_e,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:activity-submitted-b",
-            status: "submitted",
-            values: vec![
-                (
-                    "activity_summary",
-                    json!("Resume lab demand exceeded expectations."),
-                ),
-                ("delivery_mode", json!("hybrid")),
-                ("focus_tags", Value::Null),
-                ("expected_attendees", json!(16)),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        delegate_account_id,
-        activity_form.form_version_id,
-        activity_c,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:activity-draft-a",
-            status: "draft",
-            values: vec![
-                (
-                    "activity_summary",
-                    json!("Mentor kickoff planning is underway."),
-                ),
-                ("delivery_mode", json!("remote")),
-                ("expected_attendees", json!(30)),
-            ],
-        },
-    )
-    .await?;
-
-    let session_submitted_a = ensure_seed_submission(
-        pool,
-        respondent_account_id,
-        session_form.form_version_id,
-        session_a,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:session-submitted-a",
-            status: "submitted",
-            values: vec![
-                ("session_date", json!("2026-04-08")),
-                ("participants", json!(42)),
-                ("completed_as_planned", json!(true)),
-                (
-                    "facilitator_notes",
-                    json!("Orientation completed with strong attendance."),
-                ),
-                ("topics_covered", json!(["intake", "welcome"])),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        delegate_account_id,
-        session_form.form_version_id,
-        session_g,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:session-submitted-b",
-            status: "submitted",
-            values: vec![
-                ("session_date", json!("2026-06-10")),
-                ("participants", json!(18)),
-                ("completed_as_planned", json!(true)),
-                ("facilitator_notes", Value::Null),
-                ("topics_covered", json!(["resume", "job_search"])),
-            ],
-        },
-    )
-    .await?;
-    ensure_seed_submission(
-        pool,
-        respondent_account_id,
-        session_form.form_version_id,
-        session_b,
-        SeedSubmissionSpec {
-            seed_key: "seed_demo:session-draft-a",
-            status: "draft",
-            values: vec![
-                ("session_date", json!("2026-05-06")),
-                ("participants", json!(15)),
-                ("completed_as_planned", json!(false)),
-            ],
-        },
-    )
-    .await?;
-    ensure_analytics_session_responses(
-        pool,
-        session_form.form_version_id,
-        &[
-            (session_a, respondent_account_id),
-            (session_b, delegate_account_id),
-            (session_g, operator_account_id),
-        ],
-    )
-    .await?;
-
     ensure_single_form_workflow_assignment(
         pool,
         program_form.form_version_id,
@@ -1237,8 +997,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         )
         .await?;
 
-    let analytics_status = crate::analytics::refresh_projection(pool).await?;
-
     Ok(DemoSeedSummary {
         seed_version: DEMO_SEED_VERSION,
         node_counts: DemoNodeCounts {
@@ -1248,12 +1006,9 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
             sessions: 8,
         },
         form_count: 6,
-        draft_submission_count: 4,
-        submitted_submission_count: 58,
         organization_node_id: session_a,
         form_id: session_form.form_id,
         form_version_id: session_form.form_version_id,
-        submission_id: session_submitted_a,
         partner_node_id: partner_a,
         program_node_id: program_a,
         activity_node_id: activity_a,
@@ -1273,7 +1028,6 @@ pub async fn seed_demo(pool: &PgPool) -> ApiResult<DemoSeedSummary> {
         program_workflow_id,
         program_workflow_version_id,
         program_workflow_assignment_id,
-        analytics_values: analytics_status.value_count,
     })
 }
 
@@ -1289,7 +1043,6 @@ async fn require_demo_seed_target_empty(
           + (SELECT COUNT(*) FROM nodes)
           + (SELECT COUNT(*) FROM forms)
           + (SELECT COUNT(*) FROM form_versions)
-          + (SELECT COUNT(*) FROM submissions)
           + (SELECT COUNT(*) FROM workflows)
           + (SELECT COUNT(*) FROM workflow_versions)
         "#,
@@ -1305,69 +1058,4 @@ async fn require_demo_seed_target_empty(
     Err(ApiError::BadRequest(
         "Demo seed requires an empty database. Recreate the local database or run local launch with -FreshData before seeding.".into(),
     ))
-}
-
-async fn ensure_analytics_session_responses(
-    pool: &PgPool,
-    form_version_id: Uuid,
-    session_accounts: &[(Uuid, Uuid)],
-) -> ApiResult<()> {
-    const TOPIC_SETS: &[&[&str]] = &[
-        &["intake", "welcome"],
-        &["attendance", "check_in"],
-        &["family_support", "wellness"],
-        &["resume", "job_search"],
-        &["mentoring", "onboarding"],
-        &["nutrition", "follow_up"],
-    ];
-    const NOTE_PATTERNS: &[&str] = &[
-        "Session stayed on pace with steady participation.",
-        "Facilitator adjusted pacing after participant questions.",
-        "Follow-up materials were requested by several attendees.",
-        "Attendance was lower than planned but discussion quality was high.",
-        "Participants completed the core activities before wrap-up.",
-    ];
-
-    for index in 0..50 {
-        let (node_id, account_id) = session_accounts[index % session_accounts.len()];
-        let topic_set = TOPIC_SETS[index % TOPIC_SETS.len()];
-        let participant_count = 8 + ((index * 7) % 31) as i64;
-        let completed_as_planned = index % 7 != 3;
-        let month = 4 + (index / 17);
-        let day = 1 + ((index * 3) % 27);
-        let session_date = format!("2026-{month:02}-{day:02}");
-        let seed_key = format!("seed_demo:session-analytics-{index:02}");
-        let facilitator_notes = format!(
-            "{} Batch response {}.",
-            NOTE_PATTERNS[index % NOTE_PATTERNS.len()],
-            index + 1
-        );
-        let topics = Value::Array(
-            topic_set
-                .iter()
-                .map(|topic| Value::String((*topic).to_string()))
-                .collect(),
-        );
-
-        ensure_seed_submission(
-            pool,
-            account_id,
-            form_version_id,
-            node_id,
-            SeedSubmissionSpec {
-                seed_key: &seed_key,
-                status: "submitted",
-                values: vec![
-                    ("session_date", json!(session_date)),
-                    ("participants", json!(participant_count)),
-                    ("completed_as_planned", json!(completed_as_planned)),
-                    ("facilitator_notes", json!(facilitator_notes)),
-                    ("topics_covered", topics),
-                ],
-            },
-        )
-        .await?;
-    }
-
-    Ok(())
 }

@@ -1,0 +1,38 @@
+FROM rust:1.94-bookworm AS builder
+WORKDIR /app
+ARG TESSARA_RESPONSE_RELEASE=0.9.0
+RUN test "$TESSARA_RESPONSE_RELEASE" = "0.9.0"
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --locked -p tessara-response-module \
+    && cp /app/target/release/tessara-response-module /tmp/response-module
+
+FROM debian:trixie-slim
+ARG TESSARA_RESPONSE_RELEASE=0.9.0
+ARG TESSARA_BASELINE_SOURCE_COMMIT
+ARG TESSARA_BASELINE_SOURCE_TREE
+ARG TESSARA_BASELINE_PATCH_SHA256
+ARG TESSARA_BASELINE_MATERIALIZED_SOURCE_SHA256
+ARG TESSARA_BUILDER_SOURCE_COMMIT
+ARG TESSARA_BUILDER_SOURCE_TREE
+
+LABEL org.opencontainers.image.revision="$TESSARA_BASELINE_SOURCE_COMMIT" \
+      com.tessara.source-tree="$TESSARA_BASELINE_SOURCE_TREE" \
+      com.tessara.source-dirty="false" \
+      com.tessara.baseline-patch-sha256="$TESSARA_BASELINE_PATCH_SHA256" \
+      com.tessara.materialized-source-sha256="$TESSARA_BASELINE_MATERIALIZED_SOURCE_SHA256" \
+      com.tessara.builder-source-commit="$TESSARA_BUILDER_SOURCE_COMMIT" \
+      com.tessara.builder-source-tree="$TESSARA_BUILDER_SOURCE_TREE" \
+      com.tessara.build-profile="release" \
+      com.tessara.module-definition="tessara.responses" \
+      com.tessara.module-release="$TESSARA_RESPONSE_RELEASE" \
+      com.tessara.upgrade.fixture="authenticated-independent-source-release-v2"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /tmp/response-module /usr/local/bin/response-module
+EXPOSE 8094
+ENTRYPOINT ["/usr/local/bin/response-module"]

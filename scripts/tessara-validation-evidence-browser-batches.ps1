@@ -268,15 +268,15 @@ const outputPath = '__OUTPUT_PATH__';
 }
 
 $inventory = Read-AcceptanceManifest
-$temporaryRoot = Join-Path $repositoryRoot "target/sprint-8b-validation-platform/browser-batches-$([Guid]::NewGuid().ToString('N'))"
+$temporaryRoot = Join-Path $repositoryRoot "target/sprint-8c-validation-platform/browser-batches-$([Guid]::NewGuid().ToString('N'))"
 [IO.Directory]::CreateDirectory($temporaryRoot) | Out-Null
 try {
     $probePath = Join-Path $temporaryRoot "platform-probe.json"
     $probe = Invoke-SyntheticBrowserLifecycle -BatchPaths $inventory.Paths -OutputPath $probePath
     if ($SelfTest) {
-        if ($inventory.Total -ne 95 -or $inventory.Paths.Count -ne 11 -or
+        if ($inventory.Total -ne 105 -or $inventory.Paths.Count -ne 12 -or
             $inventory.Paths[-1] -cne "module-ui-visual.spec.ts") {
-            throw "Browser lifecycle self-test requires the exact current 95-test, 11-file inventory."
+            throw "Browser lifecycle self-test requires the exact current 105-test, 12-file inventory."
         }
         $syntheticReport = [ordered]@{
             config = [ordered]@{

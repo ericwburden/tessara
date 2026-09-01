@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.datasets",
   "release_version": "1.0.0",
   "publisher": "tessara.first_party",
@@ -443,14 +443,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -576,7 +576,7 @@
     {
       "path_template": "/api/datasets",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.list",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -586,7 +586,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.get",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -596,7 +596,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/revisions",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.list_revisions",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -606,7 +606,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/revisions/{revision_id}",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.get_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -616,7 +616,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/table",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.preview_table",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -626,7 +626,7 @@
     {
       "path_template": "/api/datasets/{dataset_id}/distinct-values",
       "method": "GET",
-      "required_capability": "datasets:read",
+      "required_capabilities_any_of": ["datasets:read"],
       "authorization_action": "datasets.distinct_values",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -636,7 +636,7 @@
     {
       "path_template": "/api/admin/datasets",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.create",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -644,9 +644,29 @@
       "idempotency": "forward_or_generate_header"
     },
     {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions",
+      "method": "GET",
+      "required_capabilities_any_of": ["datasets:manage"],
+      "authorization_action": "datasets.list_manageable_revisions",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
+      "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+      "method": "GET",
+      "required_capabilities_any_of": ["datasets:manage"],
+      "authorization_action": "datasets.get_manageable_revision",
+      "dependency_binding": "tessara.core.datasets",
+      "operation": "read",
+      "functional_contract": "tessara.datasets.authoring",
+      "idempotency": "none"
+    },
+    {
       "path_template": "/api/admin/datasets/{dataset_id}",
       "method": "DELETE",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.delete",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -656,7 +676,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/tags",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_tags",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -666,7 +686,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/draft-revision",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.save_draft_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -676,7 +696,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/publish",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.publish_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -686,7 +706,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/label",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_revision_label",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -696,7 +716,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}/options",
       "method": "PATCH",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.update_revision_options",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -706,7 +726,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
       "method": "DELETE",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.delete_revision",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -716,7 +736,7 @@
     {
       "path_template": "/api/admin/datasets/sql-preview",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.preview_sql",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -726,7 +746,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/sql-preview",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.preview_existing_sql",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -736,7 +756,7 @@
     {
       "path_template": "/api/admin/datasets/{dataset_id}/refresh",
       "method": "POST",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.refresh",
       "dependency_binding": "tessara.core.datasets",
       "operation": "mutation",
@@ -746,7 +766,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/forms",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_forms",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -756,7 +776,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/forms/{form_version_id}",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_form_schema",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -766,7 +786,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/scopes",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_scopes",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -776,7 +796,7 @@
     {
       "path_template": "/api/admin/datasets/editor-options/principals",
       "method": "GET",
-      "required_capability": "datasets:manage",
+      "required_capabilities_any_of": ["datasets:manage"],
       "authorization_action": "datasets.editor_principals",
       "dependency_binding": "tessara.core.datasets",
       "operation": "read",
@@ -914,7 +934,7 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
+      "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -929,17 +949,17 @@
     },
     {
       "path": "/dataset.js",
-      "digest": "sha256:44ee9c5350497e3c74a86f2cca8afb07f5ae198648a54caa99179cb741a14107",
+      "digest": "sha256:a8383170f74cb2d22f2431892443c5dcb11084f88fb3b96814e028a55a9f6832",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset-bindings.js",
-      "digest": "sha256:98cf0aae3429c493ff5a2acc9cf44b7ba685d002f76c8f296d41c53f0215f1e8",
+      "digest": "sha256:96b6f3f5367b9a23a54e588af9102839f02fad2a93e25849bafdebbbdd01b47a",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/dataset.wasm",
-      "digest": "sha256:1af68faba1af0f235fc4bfb0c6b0495a33d6a0783ee2c9210a2e2437466f8652",
+      "digest": "sha256:3f5716f723a1cfce34def71b2cdea25495bb660374145b747817d5a1de30edd5",
       "content_type": "application/wasm"
     }
   ]

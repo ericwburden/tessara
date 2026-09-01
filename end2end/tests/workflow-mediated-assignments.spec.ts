@@ -78,19 +78,7 @@ type WorkflowAssignmentSummary = {
   has_submitted: boolean;
 };
 
-type PendingWorkflowWork = {
-  workflow_assignment_id: string;
-  workflow_id: string;
-  workflow_name: string;
-  form_id: string;
-  form_name: string;
-  node_id: string;
-  node_name: string;
-  account_id: string;
-  account_display_name: string;
-};
-
-type SubmissionDetail = {
+type ResponseDetail = {
   id: string;
   form_id: string;
   form_version_id: string;
@@ -104,7 +92,7 @@ type SubmissionDetail = {
   } | null;
 };
 
-type AssignmentResponseStartOptions = {
+type ResponseStartOptions = {
   assignments: Array<{
     workflow_assignment_id: string;
     workflow_name: string;
@@ -116,6 +104,8 @@ type AssignmentResponseStartOptions = {
     account_display_name: string;
   }>;
 };
+
+let responseMutationSequence = 0;
 
 async function expectJson<T>(response: APIResponse): Promise<T> {
   const text = await response.text();
@@ -135,7 +125,13 @@ async function apiPost<T>(
   url: string,
   data?: Record<string, unknown>,
 ): Promise<T> {
-  return expectJson<T>(await page.request.post(url, { data }));
+  const headers = url === "/api/responses"
+    ? {
+        "x-idempotency-key":
+          `workflow-response-start-${Date.now()}-${responseMutationSequence++}`,
+      }
+    : undefined;
+  return expectJson<T>(await page.request.post(url, { data, headers }));
 }
 
 async function signIn(page: Page, email: string, password: string) {
@@ -263,8 +259,16 @@ async function assignWorkflowToDelegate(
     "/api/workflow-assignment-candidates",
   );
   const candidate =
-    candidates.find((item) => item.workflow_version_id === workflowVersionId) ??
-    candidates.find((item) => item.workflow_id === workflowId);
+    candidates.find(
+      (item) =>
+        item.workflow_version_id === workflowVersionId &&
+        item.node_name === "Reference Organization",
+    ) ??
+    candidates.find(
+      (item) =>
+        item.workflow_id === workflowId &&
+        item.node_name === "Reference Organization",
+    );
   expect(candidate, "generated workflow should be assignable to at least one node").toBeTruthy();
 
   const assignees = await apiGet<WorkflowAssigneeOption[]>(
@@ -362,7 +366,7 @@ test.describe("workflow-mediated form shortcuts", () => {
     ).toBeVisible();
   });
 
-  test("Assign Form uses workflow assignments and delegates start assigned work", async ({
+  test("Assign Form uses workflow assignments and the Response-owned start contract", async ({
     page,
   }) => {
     const assertNativeRouteGuard = attachNativeRouteGuard(page);
@@ -400,27 +404,36 @@ test.describe("workflow-mediated form shortcuts", () => {
     });
 
     await signInAsDelegate(page);
-    const pending = await apiGet<PendingWorkflowWork[]>(
+    const pending = await apiGet<ResponseStartOptions>(
       page,
-      "/api/workflow-assignments/pending",
+      "/api/responses/start-options",
     );
     expect(
-      pending.some((item) => item.workflow_assignment_id === assignment.assignmentId),
-      "delegate pending work should include the workflow assignment",
+      pending.assignments.some(
+        (item) => item.workflow_assignment_id === assignment.assignmentId,
+      ),
+      "Response-owned start options should include the workflow assignment",
     ).toBe(true);
 
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Assigned to Me" })).toBeVisible();
-    await expect(page.getByRole("link", { name: setup.formName })).toBeVisible();
+    await expect(page.locator("#app-root")).toHaveAttribute("data-hydration", "ready");
+    await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Assigned to Me" })).toHaveCount(0);
+    const mobileNavigation = page.locator(".mobile-nav");
+    await mobileNavigation.getByRole("button", { name: "Open navigation" }).click();
+    await expect(
+      mobileNavigation.getByRole("link", { name: "Responses", exact: true }),
+    ).toBeVisible();
+    await mobileNavigation.getByRole("button", { name: "Close navigation" }).click();
 
     const submission = await apiPost<IdResponse>(
       page,
-      `/api/workflow-assignments/${assignment.assignmentId}/start`,
-      {},
+      "/api/responses",
+      { workflow_assignment_id: assignment.assignmentId },
     );
-    const detail = await apiGet<SubmissionDetail>(
+    const detail = await apiGet<ResponseDetail>(
       page,
-      `/api/submissions/${submission.id}`,
+      `/api/responses/${submission.id}`,
     );
     expect(detail.status).toBe("draft");
     expect(detail.form_id).toBe(setup.formId);
@@ -465,9 +478,9 @@ test.describe("workflow-mediated form shortcuts", () => {
     );
 
     await signInAsDelegate(page);
-    const options = await apiGet<AssignmentResponseStartOptions>(
+    const options = await apiGet<ResponseStartOptions>(
       page,
-      "/api/responses/options",
+      "/api/responses/start-options",
     );
     const option = options.assignments.find(
       (item) => item.workflow_assignment_id === assignment.assignmentId,
@@ -493,6 +506,29 @@ test.describe("workflow-mediated form shortcuts", () => {
         await expect(routePage.getByRole("button", { name: "Start Draft" })).toBeDisabled();
       },
     });
+
+    const assignedWork = page.getByLabel("Assigned Work");
+    const assignmentIndex = options.assignments.findIndex(
+      (item) => item.workflow_assignment_id === assignment.assignmentId,
+    );
+    expect(assignmentIndex).toBeGreaterThanOrEqual(0);
+    await assignedWork.selectOption(assignmentIndex.toString());
+    await expect(assignedWork).toHaveValue(assignmentIndex.toString());
+    const startButton = page.getByRole("button", { name: "Start Draft" });
+    await expect(startButton).toBeEnabled();
+    const startedResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/responses",
+    );
+    await startButton.click();
+    const startResult = await startedResponse;
+    expect(startResult.status()).toBe(201);
+    expect(await startResult.request().headerValue("x-idempotency-key")).toMatch(
+      /^[0-9a-f-]{36}$/i,
+    );
+    await expect(page).toHaveURL(
+      /\/responses\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/edit$/i,
+    );
 
     const removedStart = await page.request.post("/api/responses/start", {
       data: {

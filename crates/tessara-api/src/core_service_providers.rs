@@ -4,10 +4,6 @@
 use semver::Version;
 use tessara_module_contract::{AuthorizationGrantOperationV1, ServiceActionMethod};
 
-pub(crate) const RESPONSE_EXPORT_CONTRACT: &str =
-    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID;
-pub(crate) const RESPONSE_EXPORT_CONTRACT_VERSION: &str =
-    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_VERSION;
 pub(crate) const FORM_VERSION_SCHEMA_CONTRACT: &str =
     tessara_forms_contract::FORM_VERSION_SCHEMA_CONTRACT_ID;
 pub(crate) const FORM_VERSION_SCHEMA_CONTRACT_VERSION: &str =
@@ -20,6 +16,10 @@ pub(crate) const PRINCIPAL_DISPLAY_CONTRACT: &str =
     tessara_control_plane_contract::PRINCIPAL_DISPLAY_CONTRACT_ID;
 pub(crate) const PRINCIPAL_DISPLAY_CONTRACT_VERSION: &str =
     tessara_control_plane_contract::PRINCIPAL_DISPLAY_CONTRACT_VERSION;
+pub(crate) const WORKFLOW_RESPONSE_CONTEXT_CONTRACT: &str =
+    tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_CONTRACT_ID;
+pub(crate) const WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT: &str =
+    tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT_ID;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct CoreServiceAction {
@@ -27,44 +27,17 @@ pub(crate) struct CoreServiceAction {
     pub(crate) method: ServiceActionMethod,
     pub(crate) authorization_action: &'static str,
     pub(crate) operation: AuthorizationGrantOperationV1,
-    pub(crate) required_capability: &'static str,
+    pub(crate) required_capabilities_any_of: &'static [&'static str],
     pub(crate) functional_contract: &'static str,
 }
 
-const RESPONSE_EXPORT_ACTIONS: [CoreServiceAction; 3] = [
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_START_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_START_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-    CoreServiceAction {
-        path: tessara_responses_contract::RESPONSE_EXPORT_PAGE_PATH,
-        method: ServiceActionMethod::Post,
-        authorization_action: tessara_responses_contract::RESPONSE_EXPORT_PAGE_ACTION,
-        operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
-        functional_contract: RESPONSE_EXPORT_CONTRACT,
-    },
-];
-
-const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 2] = [
+const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 3] = [
     CoreServiceAction {
         path: tessara_forms_contract::FORM_VERSION_CATALOG_PATH,
         method: ServiceActionMethod::Post,
         authorization_action: tessara_forms_contract::FORM_VERSION_CATALOG_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
     CoreServiceAction {
@@ -72,7 +45,15 @@ const FORM_VERSION_SCHEMA_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_forms_contract::FORM_VERSION_SCHEMA_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
+        functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
+    },
+    CoreServiceAction {
+        path: tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action: tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capabilities_any_of: &["submissions:respond", "submissions:manage"],
         functional_contract: FORM_VERSION_SCHEMA_CONTRACT,
     },
 ];
@@ -83,7 +64,7 @@ const CONTROL_PLANE_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_control_plane_contract::SCOPE_CATALOG_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: SCOPE_CATALOG_CONTRACT,
     },
     CoreServiceAction {
@@ -91,8 +72,28 @@ const CONTROL_PLANE_ACTIONS: [CoreServiceAction; 2] = [
         method: ServiceActionMethod::Post,
         authorization_action: tessara_control_plane_contract::PRINCIPAL_DISPLAY_ACTION,
         operation: AuthorizationGrantOperationV1::Read,
-        required_capability: "datasets:manage",
+        required_capabilities_any_of: &["datasets:manage"],
         functional_contract: PRINCIPAL_DISPLAY_CONTRACT,
+    },
+];
+
+const WORKFLOW_RESPONSE_ACTIONS: [CoreServiceAction; 2] = [
+    CoreServiceAction {
+        path: tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action: tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capabilities_any_of: &["submissions:respond", "submissions:manage"],
+        functional_contract: WORKFLOW_RESPONSE_CONTEXT_CONTRACT,
+    },
+    CoreServiceAction {
+        path: tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_PATH,
+        method: ServiceActionMethod::Post,
+        authorization_action:
+            tessara_workflows_contract::WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_ACTION,
+        operation: AuthorizationGrantOperationV1::Read,
+        required_capabilities_any_of: &["submissions:respond"],
+        functional_contract: WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT,
     },
 ];
 
@@ -100,10 +101,10 @@ pub(crate) fn resolve_service_action(
     functional_contract: &str,
     authorization_action: &str,
 ) -> Option<CoreServiceAction> {
-    RESPONSE_EXPORT_ACTIONS
+    FORM_VERSION_SCHEMA_ACTIONS
         .iter()
-        .chain(FORM_VERSION_SCHEMA_ACTIONS.iter())
         .chain(CONTROL_PLANE_ACTIONS.iter())
+        .chain(WORKFLOW_RESPONSE_ACTIONS.iter())
         .copied()
         .find(|declaration| {
             declaration.functional_contract == functional_contract
@@ -113,9 +114,6 @@ pub(crate) fn resolve_service_action(
 
 pub(crate) fn contract_version(functional_contract: &str) -> Option<Version> {
     match functional_contract {
-        RESPONSE_EXPORT_CONTRACT => {
-            Some(Version::parse(RESPONSE_EXPORT_CONTRACT_VERSION).expect("static version"))
-        }
         FORM_VERSION_SCHEMA_CONTRACT => {
             Some(Version::parse(FORM_VERSION_SCHEMA_CONTRACT_VERSION).expect("static version"))
         }
@@ -124,6 +122,9 @@ pub(crate) fn contract_version(functional_contract: &str) -> Option<Version> {
         }
         PRINCIPAL_DISPLAY_CONTRACT => {
             Some(Version::parse(PRINCIPAL_DISPLAY_CONTRACT_VERSION).expect("static version"))
+        }
+        WORKFLOW_RESPONSE_CONTEXT_CONTRACT | WORKFLOW_RESPONSE_ASSIGNMENT_CATALOG_CONTRACT => {
+            Some(Version::new(1, 0, 0))
         }
         _ => None,
     }
@@ -162,9 +163,53 @@ mod tests {
             assert_eq!(declaration.path, path);
             assert_eq!(declaration.method, ServiceActionMethod::Post);
             assert_eq!(declaration.operation, AuthorizationGrantOperationV1::Read);
-            assert_eq!(declaration.required_capability, "datasets:manage");
+            assert_eq!(
+                declaration.required_capabilities_any_of,
+                &["datasets:manage"]
+            );
             assert_eq!(contract_version(contract).unwrap(), Version::new(1, 0, 0));
         }
+    }
+
+    #[test]
+    fn response_start_providers_accept_respond_or_manage_authority() {
+        for (contract, action) in [
+            (
+                FORM_VERSION_SCHEMA_CONTRACT,
+                tessara_forms_contract::RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+            ),
+            (
+                WORKFLOW_RESPONSE_CONTEXT_CONTRACT,
+                tessara_workflows_contract::WORKFLOW_RESPONSE_CONTEXT_ACTION,
+            ),
+        ] {
+            assert_eq!(
+                resolve_service_action(contract, action)
+                    .expect("Response start provider action")
+                    .required_capabilities_any_of,
+                &["submissions:respond", "submissions:manage"]
+            );
+        }
+    }
+
+    #[test]
+    fn response_export_is_not_a_core_service_provider() {
+        for action in [
+            tessara_responses_contract::RESPONSE_EXPORT_CHECKPOINT_ACTION,
+            tessara_responses_contract::RESPONSE_EXPORT_START_ACTION,
+            tessara_responses_contract::RESPONSE_EXPORT_PAGE_ACTION,
+        ] {
+            assert!(
+                resolve_service_action(
+                    tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID,
+                    action,
+                )
+                .is_none()
+            );
+        }
+        assert!(
+            contract_version(tessara_responses_contract::RESPONSE_EXPORT_CONTRACT_ID).is_none()
+        );
     }
 
     #[test]

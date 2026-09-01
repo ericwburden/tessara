@@ -28,10 +28,16 @@ async fn main() -> anyhow::Result<()> {
 
     let state = db::AppState { pool, config };
     let addr: SocketAddr = state.config.bind_addr.parse()?;
+    let workflow_response_event_consumer_state = state.clone();
     let app = tessara_api::router(state);
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    let workflow_response_event_consumer =
+        tessara_api::spawn_workflow_response_event_consumer(workflow_response_event_consumer_state);
     tracing::info!(%addr, "starting tessara api");
-    axum::serve(listener, app).await?;
+    let server_result = axum::serve(listener, app).await;
+    workflow_response_event_consumer.abort();
+    let _ = workflow_response_event_consumer.await;
+    server_result?;
 
     Ok(())
 }

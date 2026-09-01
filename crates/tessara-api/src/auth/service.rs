@@ -244,27 +244,6 @@ fn implied_capabilities(granted: &str) -> Vec<String> {
     }
 }
 
-pub async fn resolve_accessible_delegate_account_id(
-    _pool: &PgPool,
-    context: &AccountContext,
-    requested_account_id: Option<Uuid>,
-) -> ApiResult<Uuid> {
-    let mut allowed = vec![context.account_id];
-    allowed.extend(
-        context
-            .delegations
-            .iter()
-            .map(|delegate| delegate.account_id),
-    );
-
-    let selected = requested_account_id.unwrap_or(context.account_id);
-    if allowed.contains(&selected) {
-        Ok(selected)
-    } else {
-        Err(ApiError::Forbidden("responses:delegate-context".into()))
-    }
-}
-
 pub fn build_session_cookie(
     config: &Config,
     token: Uuid,

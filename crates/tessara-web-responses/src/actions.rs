@@ -4,40 +4,51 @@
 
 #[cfg(feature = "hydrate")]
 use crate::api::{
-    ResponseApiError, save_submission_values_api, start_assignment_response, submit_submission_api,
+    ResponseApiError, save_response_values_api, start_assignment_response, submit_response_api,
 };
 #[cfg(feature = "hydrate")]
 use crate::http::{navigate_to_href, redirect_to_login};
-use crate::types::RenderedForm;
+use crate::types::ResponseFormSnapshot;
 #[cfg(feature = "hydrate")]
-use crate::types::SaveSubmissionValuesPayload;
+use crate::types::SaveResponseValuesRequest;
 #[cfg(feature = "hydrate")]
 use crate::value_collection::collect_response_values;
 use leptos::prelude::*;
 use std::collections::HashMap;
+#[cfg(feature = "hydrate")]
+use tessara_responses_contract::ResponseMutationResult;
+use uuid::Uuid;
 
 #[cfg(feature = "hydrate")]
-fn prepare_submission_values_payload(
-    rendered_form: &RenderedForm,
+fn prepare_response_values_payload(
+    rendered_form: &ResponseFormSnapshot,
+    expected_revision: u64,
     text_values: &HashMap<String, String>,
     boolean_values: &HashMap<String, bool>,
-) -> Result<SaveSubmissionValuesPayload, ResponseApiError> {
+) -> Result<SaveResponseValuesRequest, ResponseApiError> {
     collect_response_values(rendered_form, text_values, boolean_values)
-        .map(|values| SaveSubmissionValuesPayload { values })
+        .map(|values| SaveResponseValuesRequest {
+            expected_revision,
+            values,
+        })
         .map_err(ResponseApiError::message)
 }
 
 #[cfg(feature = "hydrate")]
 async fn save_response_draft(
-    submission_id: &str,
-    rendered_form: &RenderedForm,
+    response_id: Uuid,
+    rendered_form: &ResponseFormSnapshot,
+    expected_revision: u64,
     text_values: &HashMap<String, String>,
     boolean_values: &HashMap<String, bool>,
-) -> Result<(), ResponseApiError> {
-    let payload = prepare_submission_values_payload(rendered_form, text_values, boolean_values)?;
-    save_submission_values_api(submission_id, payload)
-        .await
-        .map(|_| ())
+) -> Result<ResponseMutationResult, ResponseApiError> {
+    let payload = prepare_response_values_payload(
+        rendered_form,
+        expected_revision,
+        text_values,
+        boolean_values,
+    )?;
+    save_response_values_api(response_id, payload).await
 }
 
 #[cfg(feature = "hydrate")]
@@ -59,7 +70,7 @@ fn handle_response_action_error(
 }
 
 pub(crate) fn start_assignment_response_and_navigate(
-    workflow_assignment_id: String,
+    workflow_assignment_id: Uuid,
     is_saving: RwSignal<bool>,
     message: RwSignal<Option<String>>,
 ) {
@@ -69,7 +80,7 @@ pub(crate) fn start_assignment_response_and_navigate(
             is_saving.set(true);
             message.set(Some("Starting assigned response...".into()));
 
-            match start_assignment_response(&workflow_assignment_id).await {
+            match start_assignment_response(workflow_assignment_id).await {
                 Ok(id) => {
                     navigate_to_href(&format!("/responses/{id}/edit"));
                 }
@@ -84,9 +95,10 @@ pub(crate) fn start_assignment_response_and_navigate(
     }
 }
 
-pub(crate) fn save_submission_values(
-    submission_id: String,
-    rendered_form: RenderedForm,
+pub(crate) fn save_response_values(
+    response_id: Uuid,
+    rendered_form: ResponseFormSnapshot,
+    revision: RwSignal<u64>,
     text_values: HashMap<String, String>,
     boolean_values: HashMap<String, bool>,
     is_saving: RwSignal<bool>,
@@ -99,14 +111,17 @@ pub(crate) fn save_submission_values(
             message.set(None);
 
             match save_response_draft(
-                &submission_id,
+                response_id,
                 &rendered_form,
+                revision.get_untracked(),
                 &text_values,
                 &boolean_values,
             )
             .await
             {
-                Ok(_) => {
+                Ok(saved) => {
+                    revision.set(saved.revision);
+                    crate::set_lifecycle_dirty(false);
                     message.set(Some("Draft saved.".into()));
                     is_saving.set(false);
                 }
@@ -118,8 +133,9 @@ pub(crate) fn save_submission_values(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (
-            submission_id,
+            response_id,
             rendered_form,
+            revision,
             text_values,
             boolean_values,
             is_saving,
@@ -129,8 +145,9 @@ pub(crate) fn save_submission_values(
 }
 
 pub(crate) fn submit_response_values(
-    submission_id: String,
-    rendered_form: RenderedForm,
+    response_id: Uuid,
+    rendered_form: ResponseFormSnapshot,
+    revision: RwSignal<u64>,
     text_values: HashMap<String, String>,
     boolean_values: HashMap<String, bool>,
     is_saving: RwSignal<bool>,
@@ -143,17 +160,21 @@ pub(crate) fn submit_response_values(
             message.set(None);
 
             match save_response_draft(
-                &submission_id,
+                response_id,
                 &rendered_form,
+                revision.get_untracked(),
                 &text_values,
                 &boolean_values,
             )
             .await
             {
-                Ok(_) => match submit_submission_api(&submission_id).await {
-                    Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
-                    Err(error) => handle_response_action_error(error, is_saving, message),
-                },
+                Ok(saved) => {
+                    crate::set_lifecycle_dirty(false);
+                    match submit_response_api(response_id, saved.revision).await {
+                        Ok(response) => navigate_to_href(&format!("/responses/{}", response.id)),
+                        Err(error) => handle_response_action_error(error, is_saving, message),
+                    }
+                }
                 Err(error) => handle_response_action_error(error, is_saving, message),
             }
         });
@@ -162,8 +183,9 @@ pub(crate) fn submit_response_values(
     #[cfg(not(feature = "hydrate"))]
     {
         let _ = (
-            submission_id,
+            response_id,
             rendered_form,
+            revision,
             text_values,
             boolean_values,
             is_saving,

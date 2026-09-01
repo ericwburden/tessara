@@ -36,21 +36,22 @@ The normal deployment unit is a full-stack module with its own product or admini
 
 The current codebase is a useful transition baseline:
 
-- Core, Components, Dashboard, and Scoped Records run as separate processes
-  with separate databases, while Forms, Workflows, Responses, and Datasets
-  still run through the Core Axum/Leptos application and Core database
+- Core, Responses, Datasets, Components, Dashboard, and Scoped Records run as
+  separate processes with separate databases; only Forms and Workflows remain
+  in-process transition areas in the Core Axum/Leptos application
 - `tessara-web` owns the Core shell, authentication policy, and document,
   hydration, CSS, asset, and route adapters for Core and still-in-process
-  feature areas; Components and Dashboard own their release documents,
-  hydration entrypoints, and versioned assets behind the generic same-origin
-  gateway seam
+  feature areas; Responses, Components, and Dashboard own their release
+  documents, hydration entrypoints, and versioned assets behind the generic
+  same-origin gateway seam
 - focused `tessara-web-*` and domain crates separate several feature areas at
   compile time
 - remaining in-process feature routes and DTOs are still registered at the
   root application
-- Components, Dashboard, and Scoped Records use the canonical module contract,
-  runtime, and UI packages without depending on the root `tessara-web`
-  application
+- Responses, Datasets, Components, Dashboard, and Scoped Records use the
+  canonical module contract/runtime boundary without depending on the Core API
+  product implementation; full-stack UI modules also use the canonical UI
+  packages without depending on the root `tessara-web` application
 
 These are descriptions of current implementation, not target deployment constraints. Feature crates are extraction seams. They should first acquire explicit manifests and contracts, then move behind module-owned APIs and routes, and finally into independent processes and databases.
 
@@ -59,19 +60,18 @@ No production consumer depends on the current internal database layout. The tran
 `transitional_in_process` contribution descriptors reserve discovery metadata and possibly a future Module Definition identity, but create no Module Release or Module Instance. If an extracted first-party module must consume a still-in-process provider, it binds to an explicitly versioned Core Release compatibility contract. Resources returned by that adapter remain `core_installation`-owned with transition-specific types. Tessara is pre-production throughout Phase 8, so provider extraction does not preserve transition product data or references: it materializes fresh owner databases, rebuilds the disposable reference-application seed through owner-controlled bootstrap contracts, creates new Module Instance references directly, and removes the old adapter and readers in the same source-exact cutover. Old transition references are unsupported after their provider is extracted and are never silently reinterpreted. Supported legacy import, mapping, rebinding, partial-failure resume, and audit behavior belongs to Phase 9 rather than the Phase 8 extraction path.
 
 An independently deployed module must not also appear in Core's frozen
-transition catalog. In the Sprint 8A baseline the exact Core transition
-identities are `tessara.forms`, `tessara.workflows`, `tessara.responses`,
-`tessara.datasets`, and `tessara.migration`. Dashboard and Components are
-represented only by their real Module Releases and Module Instances, and their
-navigation is contributed only by their enrolled manifests. The reference
-navigation order is Scoped Records `7`, Components `8`, and Dashboard `9`.
+transition catalog. In the Sprint 8C baseline the exact Core transition
+identities are `tessara.forms`, `tessara.workflows`, and `tessara.migration`.
+Responses, Datasets, Components, Dashboard, and Scoped Records are represented
+only by real Module Releases and Module Instances; their navigation is
+contributed only by enrolled manifests.
 
-### Sprint 8A container view
+### Sprint 8C container view
 
-This view shows the current deployable and persistence boundaries. Dataset is
-still a Core-hosted transition provider; Component and Dashboard are real
-Module Releases and Module Instances and never share a database or forwarded
-module grant. Every signed service request binds the exact outbound body bytes.
+This view shows the current deployable and persistence boundaries. Response,
+Dataset, Component, and Dashboard are real Module Releases and Module Instances
+and never share a database or forwarded module grant. Every signed service
+request binds the exact outbound body bytes.
 For JSON-bearing calls the receiver verifies the declared media type,
 authorization and service envelopes, correlation identity, and raw-body digest
 before deserializing the payload; parsing and re-encoding semantically
@@ -92,10 +92,20 @@ flowchart LR
 
         subgraph coreBoundary[Core Release]
             core[Core API, shell, authentication,<br/>composition and authorization exchange]
-            dataset[Core-hosted Dataset<br/>transition provider]
             coreDb[(Core database)]
             core --> coreDb
-            dataset --> coreDb
+        end
+
+        subgraph responseBoundary[Responses Module Instance]
+            responses[Response process<br/>documents, APIs and assets]
+            responseDb[(Response database)]
+            responses --> responseDb
+        end
+
+        subgraph datasetBoundary[Datasets Module Instance]
+            dataset[Dataset process<br/>APIs and materialization]
+            datasetDb[(Dataset database)]
+            dataset --> datasetDb
         end
 
         subgraph componentBoundary[Components Module Instance]
@@ -117,10 +127,14 @@ flowchart LR
         end
 
         gateway --> core
+        gateway --> responses
+        gateway --> dataset
         gateway --> components
         gateway --> dashboards
         gateway --> scoped
 
+        responses -->|typed FormVersion and Workflow context requests| core
+        dataset -->|signed submitted-Response export requests| responses
         dashboards -->|exchange inbound authority<br/>plus exact ComponentVersion assertion| core
         core -->|Components-audience grant<br/>bound to resource assertion| dashboards
         dashboards -->|exact signed body;<br/>joint governing-node scope| components
@@ -132,19 +146,21 @@ flowchart LR
     browser --> gateway
     supervisor -. materializes and health-gates .-> gateway
     supervisor -. materializes and health-gates .-> core
+    supervisor -. materializes and health-gates .-> responses
+    supervisor -. materializes and health-gates .-> dataset
     supervisor -. materializes and health-gates .-> components
     supervisor -. materializes and health-gates .-> dashboards
     supervisor -. materializes and health-gates .-> scoped
 ```
 
-The Sprint 8A release exercise uses this control path rather than replacing a
-container directly: a separately compiled compatible Component `0.9.0`
-release and the intended `1.0.0` release resolve as exact Component-only
+The Sprint 8C release exercise uses this control path rather than replacing a
+container directly: an independently source-built compatible Response `0.9.0`
+release and the intended `1.0.0` release resolve as exact Response-only
 Blueprint deltas, and the Supervisor applies each delta through its Compose
 deployment adapter. Upgrade, rollback, and intended-release restoration must
 leave every unrelated container and semantic projection unchanged.
 
-### Sprint 8A Rust module view
+### Sprint 8C Rust module view
 
 Arrows are compile-time dependencies or typed contract use. In particular,
 neither extracted product depends on the root Core API or web application.
@@ -566,25 +582,23 @@ The Core database contains these still-in-process table families together:
 - Core candidates: `accounts`, `roles`, `capabilities`, `role_capabilities`, `role_assignments`, `account_delegations`, and `nodes`
 - Forms: option, lookup, field, form, form-version, and field-placement tables
 - Workflows: workflow, version, step, transition, assignment, and instance tables
-- Responses: form-response and response-runtime tables
-- Datasets: dataset, revision, source, and major-materialization tables
 
-Components and Dashboards own their product tables in their respective module
-databases and are absent from the Core relational baseline. This Core inventory
-is an extraction map, not permission for new cross-area relationships. As each
-remaining feature becomes a module, its tables move into the module database
-and all consumers switch to public contracts before direct access is removed.
+Responses, Datasets, Components, and Dashboards own their product tables in
+their respective module databases and are absent from the Core relational
+baseline. This Core inventory is an extraction map, not permission for new
+cross-area relationships. As each remaining feature becomes a module, its
+tables move into the module database and all consumers switch to public
+contracts before direct access is removed.
 
 ### Current flat API baseline
 
 Current root API families for users, roles, role assignments, Organization,
-fields/options/lookups, Forms, Workflows, Responses, and Datasets remain Core
-or transitional endpoints. Components and Dashboard own their product APIs
-and same-origin routes through their enrolled modules. While a provider remains
-in process, a first-party extracted consumer may use its narrowly versioned
-Core Release compatibility contract. Provider extraction removes that adapter
-with the old storage and readers; no adapter for extracted Components or
-Dashboard remains.
+fields/options/lookups, Forms, and Workflows remain Core or transitional
+endpoints. Responses, Datasets, Components, and Dashboard own their product APIs
+and same-origin routes through enrolled modules. While a provider remains in
+process, a first-party extracted consumer may use its narrowly versioned Core
+Release contract. No Core product adapter or compatibility reader remains for
+an extracted module.
 
 ## Frontend And SDK Direction
 
@@ -620,10 +634,11 @@ Core and unrelated modules to be redeployed.
 Sprint 6C established the Dashboard process and database boundary. Sprint 6D
 extracted the canonical contract, runtime, UI SDK/design-system, asset, and
 testkit packages; Sprint 6E completed Dashboard adoption and removed its root
-application dependencies. Sprint 8A applies that completed boundary to
-Components, whose release likewise owns its documents, hydration, assets,
-product APIs, and persistence. Forms, Workflows, Responses, and Datasets remain
-the in-process feature areas awaiting the same pass.
+application dependencies. Sprint 8A applied that completed boundary to
+Components, Sprint 8B extracted Datasets, and Sprint 8C extracts Responses,
+whose release owns its documents, hydration, assets, product APIs, persistence,
+events, and export contracts. Forms and Workflows remain the in-process feature
+areas awaiting the same pass.
 
 The SDK/runtime dependency graph must not lead from a module to the Core
 application binary, root route tree, Core API state, Core-private DTOs, or

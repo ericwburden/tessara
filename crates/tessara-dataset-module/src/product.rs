@@ -59,11 +59,13 @@ use uuid::Uuid;
 
 use crate::{
     DatasetModuleError, DatasetModuleState, MANAGE_CAPABILITY, MODULE_DEFINITION_ID,
-    READ_CAPABILITY, load_security_state, provider_client::ProviderAction,
+    READ_CAPABILITY, load_security_state,
+    provider_client::{ProviderAction, ProviderAudience},
 };
 
 const CORE_DATASET_BINDING: &str = "tessara.core.datasets";
 const FORM_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: FORM_VERSION_SCHEMA_BINDING_KEY,
     contract: FORM_VERSION_SCHEMA_CONTRACT_ID,
     action: FORM_VERSION_CATALOG_ACTION,
@@ -72,6 +74,7 @@ const FORM_CATALOG_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const FORM_SCHEMA_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: FORM_VERSION_SCHEMA_BINDING_KEY,
     contract: FORM_VERSION_SCHEMA_CONTRACT_ID,
     action: FORM_VERSION_SCHEMA_ACTION,
@@ -80,6 +83,7 @@ const FORM_SCHEMA_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const SCOPE_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: SCOPE_CATALOG_BINDING_KEY,
     contract: SCOPE_CATALOG_CONTRACT_ID,
     action: SCOPE_CATALOG_ACTION,
@@ -88,6 +92,7 @@ const SCOPE_CATALOG_PROVIDER: ProviderAction = ProviderAction {
     retry_safe_observation: true,
 };
 const PRINCIPAL_CATALOG_PROVIDER: ProviderAction = ProviderAction {
+    audience: ProviderAudience::Core,
     binding: PRINCIPAL_DISPLAY_BINDING_KEY,
     contract: PRINCIPAL_DISPLAY_CONTRACT_ID,
     action: PRINCIPAL_DISPLAY_ACTION,
@@ -137,6 +142,14 @@ pub(super) fn routes() -> Router<DatasetModuleState> {
         .route(
             "/api/datasets/{dataset_id}/revisions/{revision_id}",
             get(get_dataset_revision),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions",
+            get(list_manageable_dataset_revisions),
+        )
+        .route(
+            "/api/admin/datasets/{dataset_id}/revisions/{revision_id}",
+            get(get_manageable_dataset_revision),
         )
         .route(
             "/api/admin/datasets/{dataset_id}/tags",
@@ -1740,7 +1753,7 @@ pub(crate) async fn list_dataset_summaries(
     state: &DatasetModuleState,
     grant: &AuthorizationGrantV3,
 ) -> Result<Vec<DatasetProductSummaryV1>, DatasetModuleError> {
-    let scopes = authorized_organizations(grant, READ_CAPABILITY);
+    let scopes = readable_organizations(grant);
     if scopes.is_empty() {
         return Err(DatasetModuleError::Forbidden);
     }
@@ -1943,7 +1956,7 @@ pub(crate) async fn dataset_definition(
     grant: &AuthorizationGrantV3,
     dataset_id: Uuid,
 ) -> Result<DatasetProductDefinitionV1, DatasetModuleError> {
-    let scopes = authorized_organizations(grant, READ_CAPABILITY);
+    let scopes = readable_organizations(grant);
     if scopes.is_empty() {
         return Err(undisclosed_dataset());
     }
@@ -2201,7 +2214,7 @@ pub(crate) async fn dataset_table(
     grant: &AuthorizationGrantV3,
     dataset_id: Uuid,
 ) -> Result<DatasetProductTableV1, DatasetModuleError> {
-    let read_scopes = authorized_organizations(grant, READ_CAPABILITY);
+    let read_scopes = readable_organizations(grant);
     require_visible_dataset(state, dataset_id, &read_scopes).await?;
     let materialization = sqlx::query(
         "SELECT materialized_schema,materialized_table
@@ -2259,7 +2272,7 @@ async fn list_dataset_distinct_values(
     Query(query): Query<DatasetProductDistinctValuesQueryV1>,
 ) -> Result<Json<DatasetProductDistinctValuesV1>, DatasetModuleError> {
     let grant = authorize_read(&state, &headers, "datasets.distinct_values").await?;
-    let read_scopes = authorized_organizations(&grant.payload, READ_CAPABILITY);
+    let read_scopes = readable_organizations(&grant.payload);
     require_visible_dataset(&state, dataset_id, &read_scopes).await?;
     if query.version_major < 1 {
         return Err(DatasetModuleError::ValidationFailed(
@@ -2467,12 +2480,30 @@ async fn list_dataset_revisions(
     ))
 }
 
+async fn list_manageable_dataset_revisions(
+    State(state): State<DatasetModuleState>,
+    headers: HeaderMap,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<Vec<DatasetProductRevisionSummaryV1>>, DatasetModuleError> {
+    let grant = authorize_product(
+        &state,
+        &headers,
+        "datasets.list_manageable_revisions",
+        AuthorizationGrantOperationV1::Read,
+        "tessara.datasets.authoring",
+    )
+    .await?;
+    Ok(Json(
+        dataset_revision_summaries(&state, &grant.payload, dataset_id).await?,
+    ))
+}
+
 pub(crate) async fn dataset_revision_summaries(
     state: &DatasetModuleState,
     grant: &AuthorizationGrantV3,
     dataset_id: Uuid,
 ) -> Result<Vec<DatasetProductRevisionSummaryV1>, DatasetModuleError> {
-    let read_scopes = authorized_organizations(grant, READ_CAPABILITY);
+    let read_scopes = readable_organizations(grant);
     require_visible_dataset(state, dataset_id, &read_scopes).await?;
     let can_manage = dataset_fully_in_scope(
         state,
@@ -2567,13 +2598,31 @@ async fn get_dataset_revision(
     ))
 }
 
+async fn get_manageable_dataset_revision(
+    State(state): State<DatasetModuleState>,
+    headers: HeaderMap,
+    Path((dataset_id, revision_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<DatasetProductRevisionDetailV1>, DatasetModuleError> {
+    let grant = authorize_product(
+        &state,
+        &headers,
+        "datasets.get_manageable_revision",
+        AuthorizationGrantOperationV1::Read,
+        "tessara.datasets.authoring",
+    )
+    .await?;
+    Ok(Json(
+        dataset_revision_detail(&state, &grant.payload, dataset_id, revision_id).await?,
+    ))
+}
+
 pub(crate) async fn dataset_revision_detail(
     state: &DatasetModuleState,
     grant: &AuthorizationGrantV3,
     dataset_id: Uuid,
     revision_id: Uuid,
 ) -> Result<DatasetProductRevisionDetailV1, DatasetModuleError> {
-    let read_scopes = authorized_organizations(grant, READ_CAPABILITY);
+    let read_scopes = readable_organizations(grant);
     require_visible_dataset(state, dataset_id, &read_scopes).await?;
     let can_manage = dataset_fully_in_scope(
         state,
@@ -3633,4 +3682,10 @@ fn authorized_organizations(grant: &AuthorizationGrantV3, capability: &str) -> B
                 .chain(binding.authorized_organization_ids.iter().copied())
         })
         .collect()
+}
+
+fn readable_organizations(grant: &AuthorizationGrantV3) -> BTreeSet<Uuid> {
+    let mut organizations = authorized_organizations(grant, READ_CAPABILITY);
+    organizations.extend(authorized_organizations(grant, MANAGE_CAPABILITY));
+    organizations
 }

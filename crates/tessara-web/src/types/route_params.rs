@@ -22,11 +22,6 @@ pub(crate) struct WorkflowRouteParams {
 }
 
 #[derive(PartialEq, Clone, Debug)]
-pub(crate) struct SubmissionRouteParams {
-    pub submission_id: String,
-}
-
-#[derive(PartialEq, Clone, Debug)]
 pub(crate) struct AccountRouteParams {
     pub account_id: String,
 }
@@ -56,14 +51,6 @@ impl Params for WorkflowRouteParams {
     fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
         Ok(Self {
             workflow_id: require_map_value(map, "workflow_id")?,
-        })
-    }
-}
-
-impl Params for SubmissionRouteParams {
-    fn from_map(map: &ParamsMap) -> Result<Self, ParamsError> {
-        Ok(Self {
-            submission_id: require_map_value(map, "submission_id")?,
         })
     }
 }

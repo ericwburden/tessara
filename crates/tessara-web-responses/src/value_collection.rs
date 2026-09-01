@@ -1,10 +1,10 @@
 //! Response value collection helpers.
 //!
-//! Keep form-field value extraction and submission value maps here so response start and edit flows share one conversion path.
+//! Keep form-field value extraction and response value maps here so response start and edit flows share one conversion path.
 
-use crate::types::{RenderedForm, SubmissionDetail};
+use crate::types::{ResponseDetail, ResponseFormSnapshot};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 pub(crate) fn response_input_value(value: Option<&Value>) -> String {
@@ -23,8 +23,8 @@ pub(crate) fn response_input_value(value: Option<&Value>) -> String {
 }
 
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
-pub(crate) fn submission_value_maps(
-    detail: &SubmissionDetail,
+pub(crate) fn response_value_maps(
+    detail: &ResponseDetail,
 ) -> (HashMap<String, String>, HashMap<String, bool>) {
     let mut text_values = HashMap::new();
     let mut boolean_values = HashMap::new();
@@ -53,11 +53,11 @@ pub(crate) fn submission_value_maps(
 #[cfg_attr(not(feature = "hydrate"), allow(dead_code))]
 /// Collects the collect response values values.
 pub(crate) fn collect_response_values(
-    rendered_form: &RenderedForm,
+    rendered_form: &ResponseFormSnapshot,
     text_values: &HashMap<String, String>,
     boolean_values: &HashMap<String, bool>,
-) -> Result<HashMap<String, Value>, String> {
-    let mut values = HashMap::new();
+) -> Result<BTreeMap<String, Value>, String> {
+    let mut values = BTreeMap::new();
 
     for section in &rendered_form.sections {
         for field in &section.fields {

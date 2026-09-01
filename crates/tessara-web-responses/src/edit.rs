@@ -3,8 +3,8 @@
 //! Keep functionality here when it is owned by Responses and specifically supports the Edit concern.
 
 use super::components::ResponseEditForm;
-use super::loaders::load_submission_edit_context;
-use crate::types::{RenderedForm, SubmissionDetail};
+use super::loaders::load_response_edit_context;
+use crate::types::{ResponseDetail, ResponseFormSnapshot};
 use std::collections::HashMap;
 use tessara_module_ui::{
     Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbPage, BreadcrumbSeparator, PageHeader,
@@ -13,19 +13,20 @@ use tessara_module_ui::{
 use leptos::prelude::*;
 
 #[component]
-pub fn ResponseEditContent(submission_id: String) -> impl IntoView {
-    let detail = RwSignal::new(None::<SubmissionDetail>);
-    let rendered_form = RwSignal::new(None::<RenderedForm>);
+pub fn ResponseEditContent(response_id: String) -> impl IntoView {
+    let detail = RwSignal::new(None::<ResponseDetail>);
+    let rendered_form = RwSignal::new(None::<ResponseFormSnapshot>);
     let text_values = RwSignal::new(HashMap::<String, String>::new());
     let boolean_values = RwSignal::new(HashMap::<String, bool>::new());
     let is_loading = RwSignal::new(true);
     let is_saving = RwSignal::new(false);
     let load_error = RwSignal::new(None::<String>);
     let message = RwSignal::new(None::<String>);
+    on_cleanup(|| crate::set_lifecycle_dirty(false));
 
     Effect::new(move |_| {
-        load_submission_edit_context(
-            submission_id.clone(),
+        load_response_edit_context(
+            response_id.clone(),
             detail,
             rendered_form,
             text_values,

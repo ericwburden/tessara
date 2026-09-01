@@ -37,7 +37,7 @@ struct LiveModule {
 #[derive(Clone)]
 struct ResolvedProviderAction {
     operation: AuthorizationGrantOperationV1,
-    required_capability: String,
+    required_capabilities_any_of: Vec<String>,
     contract_version: Version,
 }
 
@@ -98,18 +98,18 @@ async fn exchange(
         &provider_action.contract_version,
     )?;
 
-    let bindings = capability_bindings(
-        &state.pool,
-        inbound.payload.original_actor_id,
-        &provider_action.required_capability,
-    )
-    .await?;
+    let mut bindings = Vec::new();
+    for capability in &provider_action.required_capabilities_any_of {
+        bindings.extend(
+            capability_bindings(&state.pool, inbound.payload.original_actor_id, capability).await?,
+        );
+    }
     if bindings.is_empty() {
         return Err(restricted());
     }
     if !resource_assertion_is_authorized(
         &bindings,
-        &provider_action.required_capability,
+        &provider_action.required_capabilities_any_of,
         request.resource_assertion.as_ref(),
     ) {
         return Err(restricted());
@@ -165,7 +165,7 @@ async fn exchange(
 
 fn resource_assertion_is_authorized(
     bindings: &[CapabilityScopeBindingV1],
-    required_capability: &str,
+    required_capabilities_any_of: &[String],
     assertion: Option<&ResourceAuthorizationAssertionV2>,
 ) -> bool {
     assertion.is_none_or(|assertion| {
@@ -174,7 +174,9 @@ fn resource_assertion_is_authorized(
             .iter()
             .any(|organization_id| {
                 bindings.iter().any(|binding| {
-                    binding.capability.as_str() == required_capability
+                    required_capabilities_any_of
+                        .iter()
+                        .any(|capability| binding.capability.as_str() == capability)
                         && (binding.organization_root_id == *organization_id
                             || binding
                                 .authorized_organization_ids
@@ -191,7 +193,7 @@ async fn validate_inbound_grant(
     audience: &LiveModule,
 ) -> ApiResult<()> {
     require_applied_module(lockfile, audience)?;
-    let (operation, required_capability) = match &grant.presenting_service {
+    let (operation, required_capabilities_any_of) = match &grant.presenting_service {
         ModuleServicePrincipalV1::CoreGateway => resolve_manifest_entry_action(
             &audience.manifest,
             grant.dependency_binding.as_str(),
@@ -224,14 +226,14 @@ async fn validate_inbound_grant(
                 &grant.action,
                 &action.contract_version,
             )?;
-            (action.operation, action.required_capability)
+            (action.operation, action.required_capabilities_any_of)
         }
     };
-    if !grant
-        .capability_scope_bindings
-        .iter()
-        .any(|binding| binding.capability.as_str() == required_capability)
-    {
+    if !grant.capability_scope_bindings.iter().any(|binding| {
+        required_capabilities_any_of
+            .iter()
+            .any(|capability| binding.capability.as_str() == capability)
+    }) {
         return Err(restricted());
     }
     let revisions = security_revisions(state).await?;
@@ -259,14 +261,21 @@ fn resolve_manifest_entry_action(
     functional_contract: &str,
     action: &str,
     operation: AuthorizationGrantOperationV1,
-) -> ApiResult<(AuthorizationGrantOperationV1, String)> {
+) -> ApiResult<(AuthorizationGrantOperationV1, Vec<String>)> {
     if let Some(route) = manifest.public_api_routes.iter().find(|route| {
         route.dependency_binding.as_str() == dependency_binding
             && route.functional_contract.as_str() == functional_contract
             && route.authorization_action == action
             && route.operation == operation
     }) {
-        return Ok((route.operation, route.required_capability.to_string()));
+        return Ok((
+            route.operation,
+            route
+                .required_capabilities_any_of
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+        ));
     }
     if operation == AuthorizationGrantOperationV1::Read
         && let Some(route) = manifest.browser_routes.iter().find(|route| {
@@ -277,7 +286,7 @@ fn resolve_manifest_entry_action(
     {
         return Ok((
             AuthorizationGrantOperationV1::Read,
-            route.required_capability.to_string(),
+            vec![route.required_capability.to_string()],
         ));
     }
     Err(restricted())
@@ -303,7 +312,11 @@ async fn resolve_requested_provider_action(
                     .ok_or_else(restricted)?;
             Ok(ResolvedProviderAction {
                 operation: declaration.operation,
-                required_capability: declaration.required_capability.into(),
+                required_capabilities_any_of: declaration
+                    .required_capabilities_any_of
+                    .iter()
+                    .map(|capability| (*capability).to_string())
+                    .collect(),
                 contract_version,
             })
         }
@@ -346,7 +359,7 @@ fn resolve_module_provider_action(
         .ok_or_else(restricted)?;
     Ok(ResolvedProviderAction {
         operation: declaration.operation,
-        required_capability: declaration.required_capability.to_string(),
+        required_capabilities_any_of: vec![declaration.required_capability.to_string()],
         contract_version,
     })
 }
@@ -567,35 +580,40 @@ mod tests {
             binding("components:read", 10, &[11]),
             binding("components:manage", 20, &[21]),
         ];
+        let read = vec!["components:read".to_string()];
 
+        assert!(resource_assertion_is_authorized(&bindings, &read, None));
         assert!(resource_assertion_is_authorized(
             &bindings,
-            "components:read",
-            None
-        ));
-        assert!(resource_assertion_is_authorized(
-            &bindings,
-            "components:read",
+            &read,
             Some(&assertion(&[10]))
         ));
         assert!(resource_assertion_is_authorized(
             &bindings,
-            "components:read",
+            &read,
             Some(&assertion(&[11]))
         ));
         assert!(resource_assertion_is_authorized(
             &bindings,
-            "components:read",
+            &read,
             Some(&assertion(&[99, 11]))
         ));
         assert!(!resource_assertion_is_authorized(
             &bindings,
-            "components:read",
+            &read,
             Some(&assertion(&[99]))
         ));
         assert!(!resource_assertion_is_authorized(
             &bindings,
-            "components:read",
+            &read,
+            Some(&assertion(&[20, 21]))
+        ));
+        assert!(resource_assertion_is_authorized(
+            &bindings,
+            &[
+                "components:read".to_string(),
+                "components:manage".to_string()
+            ],
             Some(&assertion(&[20, 21]))
         ));
     }

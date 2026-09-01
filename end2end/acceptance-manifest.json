@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "expected_total": 95,
+  "expected_total": 105,
   "files": [
     {
       "path": "analytics-sprint-7a.spec.ts",
@@ -23,7 +23,7 @@
     {
       "path": "app.spec.ts",
       "tests": [
-        "root route renders assigned work in the native shell",
+        "root route renders the native Home shell without a Core-owned Response projection",
         "login is a bare root-level route",
         "protected native routes redirect unauthenticated browsers to login",
         "authenticated primary routes render in the native shell",
@@ -59,7 +59,13 @@
         "canonical module UI visual baselines › Datasets editor at 390 px (dark)",
         "canonical module UI visual baselines › Datasets revisions at 1024 px",
         "canonical module UI visual baselines › Datasets preview at 1440 px",
-        "canonical module UI visual baselines › Datasets, Components, Dashboards, and Scoped Records share one module canvas"
+        "canonical module UI visual baselines › Datasets, Components, Dashboards, and Scoped Records share one module canvas",
+        "canonical module UI visual baselines › Responses directory at 1440 px (light)",
+        "canonical module UI visual baselines › Responses start at 390 px (dark)",
+        "canonical module UI visual baselines › Responses draft detail at 1024 px (light)",
+        "canonical module UI visual baselines › Responses draft editor at 1440 px (dark)",
+        "canonical module UI visual baselines › Responses submitted detail at 390 px (light)",
+        "canonical module UI visual baselines › Responses Module Management at 1440 px (light)"
       ]
     },
     {
@@ -70,7 +76,7 @@
         "Sprint 5A Dashboard routes and composition › viewer request permits execute twelve visible placements fairly without exceeding six in flight",
         "Sprint 5A Dashboard routes and composition › viewer keeps provider failure contained while bounded retries run",
         "Sprint 5A Dashboard routes and composition › saved viewer uses the shared Table toolbar while stat cards stay intrinsic and charts stay absent",
-        "Sprint 5A Dashboard routes and composition › embedded Table keeps full server-backed paging and page-size controls",
+        "Sprint 5A Dashboard routes and composition › embedded Table keeps server-backed terminal paging and page-size controls",
         "Sprint 5A Dashboard routes and composition › mobile Table fullscreen survives returning to a lazily executed viewer",
         "Sprint 5A Dashboard routes and composition › all native routes keep metadata-only surfaces inert and the focused viewer executes exact versions",
         "Sprint 5A Dashboard routes and composition › JavaScript-disabled direct loads preserve useful and redacted-safe Dashboard SSR"
@@ -144,10 +150,19 @@
       ]
     },
     {
+      "path": "responses-module.spec.ts",
+      "tests": [
+        "Sprint 8C independent Response module › direct documents use only Response-owned public browser routes",
+        "Sprint 8C independent Response module › assignment-only start options reject retired Core start routes",
+        "Sprint 8C independent Response module › lifecycle navigation preserves unsaved draft state when discard is declined",
+        "Sprint 8C independent Response module › scoped review and module diagnostics remain explicit and nondisclosing"
+      ]
+    },
+    {
       "path": "workflow-mediated-assignments.spec.ts",
       "tests": [
         "workflow-mediated form shortcuts › publishing a form creates a visible generated single-form workflow",
-        "workflow-mediated form shortcuts › Assign Form uses workflow assignments and delegates start assigned work",
+        "workflow-mediated form shortcuts › Assign Form uses workflow assignments and the Response-owned start contract",
         "workflow-mediated form shortcuts › editing a generated workflow into multiple steps promotes it and form shortcut creates a fresh workflow",
         "workflow-mediated form shortcuts › response start options are assignment-only"
       ]

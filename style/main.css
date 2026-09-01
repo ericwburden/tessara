@@ -1,3 +1,4 @@
 @import "tailwindcss";
 @import "../crates/tessara-module-ui/assets/module-ui.css";
+@import "../crates/tessara-web-responses/assets/response.css";
 @import "./core.css";

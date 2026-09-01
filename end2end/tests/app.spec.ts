@@ -53,7 +53,7 @@ async function signInAsAdmin(page: Page) {
 // - Add admin-only administration route checks for users, roles, capabilities,
 //   node types, and the future /administration/users/new screen.
 
-test("root route renders assigned work in the native shell", async ({ page }) => {
+test("root route renders the native Home shell without a Core-owned Response projection", async ({ page }) => {
   const assertNoConsoleErrors = attachConsoleGuard(page);
   await signInAsAdmin(page);
 
@@ -62,9 +62,8 @@ test("root route renders assigned work in the native shell", async ({ page }) =>
   await expect(
     page.getByRole("heading", { level: 1, name: "Home" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Assigned to Me" }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Assigned to Me" })).toHaveCount(0);
+  await expect(page.locator('a[href^="/responses/"]')).toHaveCount(0);
   const primaryNavigation = page.getByRole("complementary", {
     name: "Primary navigation",
   });
@@ -82,6 +81,7 @@ test("root route renders assigned work in the native shell", async ({ page }) =>
     primaryNavigation.getByRole("link", { name: "Administration" }),
   ).toHaveCount(0);
   await expect(page.locator('a[href="/forms"]').first()).toBeVisible();
+  await expect(page.locator('a[href="/responses"]').first()).toBeVisible();
   await expect(page.locator('a[href^="/app"]')).toHaveCount(0);
   await assertNoConsoleErrors();
 });

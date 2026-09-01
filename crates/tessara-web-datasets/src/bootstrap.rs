@@ -72,6 +72,11 @@ pub enum DatasetRouteBootstrap {
         message: String,
         can_manage: bool,
     },
+    RevisionDeferred {
+        dataset_id: String,
+        revision_id: String,
+        can_manage: bool,
+    },
     RevisionEdit {
         dataset_id: String,
         revision_id: String,
@@ -91,6 +96,7 @@ impl DatasetRouteBootstrap {
             | Self::Revisions { can_manage, .. }
             | Self::RevisionDetail { can_manage, .. }
             | Self::RevisionUnavailable { can_manage, .. }
+            | Self::RevisionDeferred { can_manage, .. }
             | Self::RevisionEdit { can_manage, .. } => *can_manage,
         }
     }

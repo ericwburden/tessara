@@ -75,7 +75,6 @@ pub struct WorkflowAssignmentQuery {
     pub account_id: Option<Uuid>,
     pub node_id: Option<Uuid>,
     pub active: Option<bool>,
-    pub delegate_account_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -174,30 +173,6 @@ pub struct WorkflowDefinition {
     pub source_form_id: Option<Uuid>,
     pub versions: Vec<WorkflowVersionSummary>,
     pub assignments: Vec<WorkflowAssignmentSummary>,
-}
-
-#[derive(Serialize)]
-pub struct PendingWorkflowWork {
-    pub workflow_assignment_id: Uuid,
-    pub workflow_id: Uuid,
-    pub workflow_name: String,
-    pub workflow_description: String,
-    pub workflow_version_id: Uuid,
-    pub workflow_version_label: Option<String>,
-    pub workflow_step_title: String,
-    pub workflow_step_position: i32,
-    pub workflow_step_count: i64,
-    pub next_workflow_step_title: Option<String>,
-    pub next_workflow_step_form_name: Option<String>,
-    pub form_id: Uuid,
-    pub form_name: String,
-    pub form_version_id: Uuid,
-    pub form_version_label: Option<String>,
-    pub node_id: Uuid,
-    pub node_name: String,
-    pub account_id: Uuid,
-    pub account_display_name: String,
-    pub assigned_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]

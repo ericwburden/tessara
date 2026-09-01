@@ -581,8 +581,8 @@ async fn exchange_authorization(
     .ok_or_else(restricted_authorization)?;
     let target_definition: String = instance.try_get("definition_id")?;
     let operation = operation_text(payload.operation);
-    let required_capability: String = sqlx::query_scalar(
-        "SELECT required_capability FROM core_module_action_declarations
+    let required_capabilities: sqlx::types::Json<Vec<String>> = sqlx::query_scalar(
+        "SELECT required_capabilities_any_of FROM core_module_action_declarations
          WHERE target_definition_id=$1 AND dependency_binding=$2
            AND functional_contract=$3 AND action=$4 AND operation=$5",
     )
@@ -595,29 +595,26 @@ async fn exchange_authorization(
     .await?
     .ok_or_else(restricted_authorization)?;
 
-    let bindings = capability_bindings(
-        &state.pool,
-        request.account.account_id,
-        &required_capability,
-    )
-    .await?;
+    let mut bindings = Vec::new();
+    for capability in &required_capabilities.0 {
+        bindings.extend(
+            capability_bindings(&state.pool, request.account.account_id, capability).await?,
+        );
+    }
     if bindings.is_empty() {
         return Err(restricted_authorization());
     }
-    if let Some(resource) = &payload.resource_assertion {
-        let capability = SecurityCapabilityId::new(required_capability.clone())
-            .map_err(|error| ApiError::Internal(error.into()))?;
-        if !resource
+    if let Some(resource) = &payload.resource_assertion
+        && !resource
             .governing_organization_ids
             .iter()
             .any(|organization_id| {
                 bindings
                     .iter()
-                    .any(|binding| binding.authorizes(&capability, *organization_id))
+                    .any(|binding| binding.authorizes(&binding.capability, *organization_id))
             })
-        {
-            return Err(restricted_authorization());
-        }
+    {
+        return Err(restricted_authorization());
     }
     let revisions = sqlx::query(
         "SELECT authorization_revision, organization_revision
@@ -1539,8 +1536,8 @@ async fn scoped_records_authorization(
         return Err(ApiError::NotFound("module route unavailable".into()));
     }
     let operation_name = operation_text(operation);
-    let required_capability: String = sqlx::query_scalar(
-        "SELECT required_capability FROM core_module_action_declarations
+    let required_capabilities: sqlx::types::Json<Vec<String>> = sqlx::query_scalar(
+        "SELECT required_capabilities_any_of FROM core_module_action_declarations
          WHERE target_definition_id=$1 AND dependency_binding=$2
            AND functional_contract=$3 AND action=$4 AND operation=$5",
     )
@@ -1552,8 +1549,10 @@ async fn scoped_records_authorization(
     .fetch_optional(pool)
     .await?
     .ok_or_else(restricted_authorization)?;
-    let bindings =
-        capability_bindings(pool, request.account.account_id, &required_capability).await?;
+    let mut bindings = Vec::new();
+    for capability in &required_capabilities.0 {
+        bindings.extend(capability_bindings(pool, request.account.account_id, capability).await?);
+    }
     if bindings.is_empty() {
         return Err(restricted_authorization());
     }

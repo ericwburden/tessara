@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.reference.scoped-records",
   "release_version": "1.0.2",
   "publisher": "tessara.first_party",
@@ -182,14 +182,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -224,8 +224,8 @@
   ],
   "assets": [
     {
-      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc/module-ui.css",
-      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
+      "path": "/_tessara/modules/tessara.reference.scoped-records/1.0.2/sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f/module-ui.css",
+      "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f",
       "content_type": "text/css; charset=utf-8"
     },
     {
@@ -238,7 +238,7 @@
     {
       "path_template": "/reference/scoped-records/api/records",
       "method": "GET",
-      "required_capability": "tessara.reference.scoped-records:read",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:read"],
       "authorization_action": "records.list",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "read",
@@ -248,7 +248,7 @@
     {
       "path_template": "/reference/scoped-records/api/records/{record_id}",
       "method": "GET",
-      "required_capability": "tessara.reference.scoped-records:read",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:read"],
       "authorization_action": "records.get",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "read",
@@ -258,7 +258,7 @@
     {
       "path_template": "/reference/scoped-records/api/records",
       "method": "POST",
-      "required_capability": "tessara.reference.scoped-records:manage",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:manage"],
       "authorization_action": "records.create",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "mutation",
@@ -268,7 +268,7 @@
     {
       "path_template": "/reference/scoped-records/api/records/{record_id}",
       "method": "PUT",
-      "required_capability": "tessara.reference.scoped-records:manage",
+      "required_capabilities_any_of": ["tessara.reference.scoped-records:manage"],
       "authorization_action": "records.update",
       "dependency_binding": "tessara.core.scoped-records",
       "operation": "mutation",

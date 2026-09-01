@@ -19,6 +19,7 @@ use tessara_forms_contract::{
     FORM_VERSION_SCHEMA_VERSION, FormVersionCatalogItem, FormVersionCatalogRequest,
     FormVersionCatalogResponse, FormVersionField, FormVersionSchemaAction,
     FormVersionSchemaRequest, FormVersionSchemaResponse, FormVersionSection,
+    RESPONSE_FORM_VERSION_SCHEMA_ACTION, RESPONSE_FORM_VERSION_SCHEMA_PATH,
 };
 use uuid::Uuid;
 
@@ -33,6 +34,7 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(FORM_VERSION_CATALOG_PATH, post(catalog))
         .route(FORM_VERSION_SCHEMA_PATH, post(schema))
+        .route(RESPONSE_FORM_VERSION_SCHEMA_PATH, post(response_schema))
 }
 
 async fn catalog(
@@ -92,7 +94,13 @@ async fn catalog(
     let mut items = Vec::new();
     for row in selected {
         let form_version_id: Uuid = row.try_get("form_version_id")?;
-        let schema = load_schema(&state, form_version_id, &scopes).await?;
+        let schema = load_schema(
+            &state,
+            form_version_id,
+            &scopes,
+            FormSchemaScopeRequirement::WholeSource,
+        )
+        .await?;
         let field_count = i64::try_from(schema.fields.len()).map_err(|_| {
             ApiError::Internal(anyhow::anyhow!(
                 "FormVersion field count exceeds the contract limit"
@@ -164,7 +172,56 @@ async fn schema(
     if scopes.is_empty() {
         return Err(restricted());
     }
-    contract_response(&load_schema(&state, request.form_version_id, &scopes).await?)
+    contract_response(
+        &load_schema(
+            &state,
+            request.form_version_id,
+            &scopes,
+            FormSchemaScopeRequirement::WholeSource,
+        )
+        .await?,
+    )
+}
+
+async fn response_schema(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> ApiResult<Response> {
+    require_media_type(&headers)?;
+    let grant = authorize(
+        &state,
+        &headers,
+        RESPONSE_FORM_VERSION_SCHEMA_ACTION,
+        RESPONSE_FORM_VERSION_SCHEMA_PATH,
+        &body,
+    )
+    .await?;
+    let request: FormVersionSchemaRequest =
+        serde_json::from_slice(&body).map_err(|_| restricted())?;
+    if request.action != FormVersionSchemaAction::ResolveSchema {
+        return Err(restricted());
+    }
+    let mut scopes = authorized_response_scope(&grant);
+    if has_global_response_scope(&grant) {
+        scopes.extend(
+            sqlx::query_scalar::<_, Uuid>("SELECT id FROM nodes ORDER BY id")
+                .fetch_all(&state.pool)
+                .await?,
+        );
+    }
+    if scopes.is_empty() {
+        return Err(restricted());
+    }
+    contract_response(
+        &load_schema(
+            &state,
+            request.form_version_id,
+            &scopes,
+            FormSchemaScopeRequirement::AnyAssignedSource,
+        )
+        .await?,
+    )
 }
 
 async fn authorize(
@@ -201,10 +258,46 @@ fn authorized_scope(
         .collect()
 }
 
+fn authorized_response_scope(
+    grant: &crate::module_service_requests::CoreProviderAuthorizationV1,
+) -> BTreeSet<Uuid> {
+    grant
+        .payload
+        .capability_scope_bindings
+        .iter()
+        .filter(|binding| {
+            matches!(
+                binding.capability.as_str(),
+                "submissions:respond" | "submissions:manage"
+            )
+        })
+        .flat_map(|binding| {
+            std::iter::once(binding.organization_root_id)
+                .chain(binding.authorized_organization_ids.iter().copied())
+        })
+        .collect()
+}
+
+fn has_global_response_scope(
+    grant: &crate::module_service_requests::CoreProviderAuthorizationV1,
+) -> bool {
+    grant
+        .payload
+        .capability_scope_bindings
+        .iter()
+        .any(|binding| {
+            matches!(
+                binding.capability.as_str(),
+                "submissions:respond" | "submissions:manage"
+            ) && binding.organization_root_id == grant.payload.installation_id
+        })
+}
+
 async fn load_schema(
     state: &AppState,
     form_version_id: Uuid,
     authorized_scopes: &BTreeSet<Uuid>,
+    scope_requirement: FormSchemaScopeRequirement,
 ) -> ApiResult<FormVersionSchemaResponse> {
     let version = sqlx::query(
         "SELECT fv.form_id,f.name AS form_name,f.slug AS form_slug,
@@ -223,11 +316,11 @@ async fn load_schema(
     .bind(form_id)
     .fetch_all(&state.pool)
     .await?;
-    if !source_scope_fully_managed(&source_scope_node_ids, authorized_scopes) {
+    if !source_scope_authorized(&source_scope_node_ids, authorized_scopes, scope_requirement) {
         return Err(restricted());
     }
     let section_rows = sqlx::query(
-        "SELECT id,title,position FROM form_sections
+        "SELECT id,title,description,position FROM form_sections
          WHERE form_version_id=$1 ORDER BY position,id",
     )
     .bind(form_version_id)
@@ -241,13 +334,15 @@ async fn load_schema(
                 section_id,
                 key: section_id.to_string(),
                 label: row.try_get("title")?,
+                description: row.try_get("description")?,
                 position: row.try_get("position")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
     let field_rows = sqlx::query(
         "SELECT ff.field_id,ff.key,ff.label,ff.field_type::text AS field_type,
-                ff.required,ff.section_id,ff.position,ff.grid_row,ff.grid_column
+                ff.required,ff.section_id,ff.position,ff.grid_row,ff.grid_column,
+                ff.grid_width,ff.grid_height
          FROM form_fields ff
          JOIN form_sections fs ON fs.id=ff.section_id
          WHERE ff.form_version_id=$1
@@ -271,6 +366,8 @@ async fn load_schema(
                 position: row.try_get("position")?,
                 grid_row: row.try_get("grid_row")?,
                 grid_column: row.try_get("grid_column")?,
+                grid_width: row.try_get("grid_width")?,
+                grid_height: row.try_get("grid_height")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()?;
@@ -298,14 +395,26 @@ async fn load_schema(
     .map_err(|_| restricted())
 }
 
-fn source_scope_fully_managed(
+#[derive(Clone, Copy)]
+enum FormSchemaScopeRequirement {
+    WholeSource,
+    AnyAssignedSource,
+}
+
+fn source_scope_authorized(
     source_scope_node_ids: &[Uuid],
     authorized_scopes: &BTreeSet<Uuid>,
+    requirement: FormSchemaScopeRequirement,
 ) -> bool {
     !source_scope_node_ids.is_empty()
-        && source_scope_node_ids
-            .iter()
-            .all(|node_id| authorized_scopes.contains(node_id))
+        && match requirement {
+            FormSchemaScopeRequirement::WholeSource => source_scope_node_ids
+                .iter()
+                .all(|node_id| authorized_scopes.contains(node_id)),
+            FormSchemaScopeRequirement::AnyAssignedSource => source_scope_node_ids
+                .iter()
+                .any(|node_id| authorized_scopes.contains(node_id)),
+        }
 }
 
 fn require_media_type(headers: &HeaderMap) -> ApiResult<()> {
@@ -349,17 +458,43 @@ mod tests {
         let second = Uuid::from_u128(2);
         let source_scope = vec![first, second];
 
-        assert!(source_scope_fully_managed(
+        assert!(source_scope_authorized(
             &source_scope,
-            &BTreeSet::from([first, second, Uuid::from_u128(3)])
+            &BTreeSet::from([first, second, Uuid::from_u128(3)]),
+            FormSchemaScopeRequirement::WholeSource,
         ));
-        assert!(!source_scope_fully_managed(
+        assert!(!source_scope_authorized(
             &source_scope,
-            &BTreeSet::from([first])
+            &BTreeSet::from([first]),
+            FormSchemaScopeRequirement::WholeSource,
         ));
-        assert!(!source_scope_fully_managed(
+        assert!(!source_scope_authorized(
             &[],
-            &BTreeSet::from([first, second])
+            &BTreeSet::from([first, second]),
+            FormSchemaScopeRequirement::WholeSource,
+        ));
+    }
+
+    #[test]
+    fn response_form_source_scope_requires_one_authorized_assignment_scope() {
+        let first = Uuid::from_u128(1);
+        let second = Uuid::from_u128(2);
+        let source_scope = vec![first, second];
+
+        assert!(source_scope_authorized(
+            &source_scope,
+            &BTreeSet::from([first]),
+            FormSchemaScopeRequirement::AnyAssignedSource,
+        ));
+        assert!(!source_scope_authorized(
+            &source_scope,
+            &BTreeSet::from([Uuid::from_u128(3)]),
+            FormSchemaScopeRequirement::AnyAssignedSource,
+        ));
+        assert!(!source_scope_authorized(
+            &[],
+            &BTreeSet::from([first]),
+            FormSchemaScopeRequirement::AnyAssignedSource,
         ));
     }
 }

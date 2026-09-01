@@ -15,7 +15,6 @@ CREATE TYPE field_type AS ENUM (
     'static_text'
 );
 CREATE TYPE form_version_status AS ENUM ('draft', 'published', 'superseded');
-CREATE TYPE submission_status AS ENUM ('draft', 'submitted');
 
 CREATE TABLE accounts (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -277,309 +276,77 @@ CREATE TABLE workflow_instances (
     CHECK (status IN ('in_progress', 'completed'))
 );
 
-CREATE TABLE submissions (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    form_version_id uuid NOT NULL REFERENCES form_versions(id) ON DELETE RESTRICT,
-    node_id uuid NOT NULL REFERENCES nodes(id) ON DELETE RESTRICT,
-    workflow_assignment_id uuid NOT NULL REFERENCES workflow_assignments(id) ON DELETE RESTRICT,
-    workflow_instance_id uuid REFERENCES workflow_instances(id) ON DELETE SET NULL,
-    status submission_status NOT NULL DEFAULT 'draft',
-    submitted_at timestamptz,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
 
 CREATE TABLE workflow_step_instances (
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     workflow_instance_id uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
     workflow_step_id uuid NOT NULL REFERENCES workflow_steps(id) ON DELETE RESTRICT,
-    submission_id uuid UNIQUE REFERENCES submissions(id) ON DELETE SET NULL,
     status text NOT NULL DEFAULT 'in_progress',
     started_at timestamptz NOT NULL DEFAULT now(),
     completed_at timestamptz,
     CHECK (status IN ('in_progress', 'completed'))
 );
 
-ALTER TABLE submissions
-    ADD COLUMN workflow_step_instance_id uuid REFERENCES workflow_step_instances(id) ON DELETE SET NULL;
-
-CREATE TABLE submission_values (
-    submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-    form_version_id uuid NOT NULL,
-    field_id uuid NOT NULL,
-    value jsonb NOT NULL,
-    PRIMARY KEY (submission_id, field_id),
-    FOREIGN KEY (form_version_id, field_id) REFERENCES form_fields(form_version_id, field_id) ON DELETE RESTRICT
+CREATE TABLE workflow_response_reservations (
+    workflow_assignment_id uuid NOT NULL REFERENCES workflow_assignments(id) ON DELETE CASCADE,
+    workflow_instance_id uuid NOT NULL UNIQUE REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    workflow_step_instance_id uuid NOT NULL UNIQUE REFERENCES workflow_step_instances(id) ON DELETE CASCADE,
+    started_by_account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    one_use_nonce uuid PRIMARY KEY,
+    context_payload jsonb NOT NULL,
+    context_digest text NOT NULL CHECK (context_digest ~ '^sha256:[0-9a-f]{64}$'),
+    expires_at timestamptz NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    consumed_response_id uuid,
+    consumed_at timestamptz,
+    CHECK ((consumed_response_id IS NULL) = (consumed_at IS NULL))
 );
+CREATE UNIQUE INDEX workflow_response_reservations_unconsumed_assignment_idx
+    ON workflow_response_reservations (workflow_assignment_id)
+    WHERE consumed_at IS NULL;
 
-CREATE TABLE submission_value_multi (
-    submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-    form_version_id uuid NOT NULL,
-    field_id uuid NOT NULL,
-    value text NOT NULL,
-    PRIMARY KEY (submission_id, field_id, value),
-    FOREIGN KEY (form_version_id, field_id) REFERENCES form_fields(form_version_id, field_id) ON DELETE RESTRICT
+CREATE TABLE workflow_response_projection (
+    workflow_assignment_id uuid NOT NULL REFERENCES workflow_assignments(id) ON DELETE CASCADE,
+    workflow_instance_id uuid NOT NULL REFERENCES workflow_instances(id) ON DELETE CASCADE,
+    workflow_step_instance_id uuid NOT NULL REFERENCES workflow_step_instances(id) ON DELETE CASCADE,
+    response_installation_id uuid NOT NULL,
+    response_module_instance_id uuid NOT NULL,
+    response_id uuid PRIMARY KEY,
+    response_revision bigint NOT NULL CHECK (response_revision > 0),
+    response_state text NOT NULL CHECK (response_state IN ('draft', 'submitted', 'deleted')),
+    last_event_sequence bigint NOT NULL CHECK (last_event_sequence >= 0),
+    updated_at timestamptz NOT NULL,
+    UNIQUE (response_installation_id, response_module_instance_id, response_id)
 );
+CREATE UNIQUE INDEX workflow_response_projection_active_assignment_idx
+    ON workflow_response_projection (workflow_assignment_id)
+    WHERE response_state IN ('draft', 'submitted');
 
-CREATE TABLE submission_audit_events (
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    submission_id uuid NOT NULL REFERENCES submissions(id) ON DELETE CASCADE,
-    event_type text NOT NULL,
-    account_id uuid REFERENCES accounts(id) ON DELETE SET NULL,
-    created_at timestamptz NOT NULL DEFAULT now()
-);
-
--- Responses-owned monotonic export state. The singleton row is locked by each
--- writer, so sequence assignment is serialized inside the product mutation
--- transaction and reflects commit order rather than timestamp or PostgreSQL
--- sequence allocation order.
-CREATE TABLE response_export_state (
+CREATE TABLE workflow_response_event_consumer_state (
     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-    provider_epoch uuid NOT NULL,
-    next_sequence bigint NOT NULL DEFAULT 0 CHECK (next_sequence >= 0)
+    provider_epoch uuid,
+    committed_sequence bigint NOT NULL DEFAULT 0 CHECK (committed_sequence >= 0),
+    observed_head_sequence bigint NOT NULL DEFAULT 0 CHECK (observed_head_sequence >= 0),
+    last_attempt_at timestamptz,
+    synchronized_at timestamptz,
+    last_error_at timestamptz,
+    last_error_code text CHECK (last_error_code IN (
+        'response_provider_unavailable',
+        'response_provider_undisclosed',
+        'consumer_failure'
+    )),
+    CHECK ((last_error_at IS NULL) = (last_error_code IS NULL))
 );
+INSERT INTO workflow_response_event_consumer_state (singleton) VALUES (true);
 
-INSERT INTO response_export_state (singleton, provider_epoch, next_sequence)
-VALUES (true, uuid_generate_v4(), 0);
-
-CREATE TABLE response_export_changes (
-    change_sequence bigint PRIMARY KEY CHECK (change_sequence > 0),
-    response_id uuid NOT NULL,
-    form_version_id uuid NOT NULL,
-    node_id uuid NOT NULL,
-    change_kind text NOT NULL CHECK (change_kind IN ('upsert', 'tombstone')),
-    payload jsonb NOT NULL,
+CREATE TABLE workflow_response_consumed_events (
+    event_id uuid PRIMARY KEY,
+    sequence bigint NOT NULL UNIQUE CHECK (sequence > 0),
     content_digest text NOT NULL CHECK (content_digest ~ '^sha256:[0-9a-f]{64}$'),
-    recorded_at timestamptz NOT NULL DEFAULT now()
+    consumed_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX response_export_changes_partition_order
-    ON response_export_changes(form_version_id, node_id, change_sequence);
 
-CREATE FUNCTION append_response_export_change(
-    target_response_id uuid,
-    target_form_version_id uuid,
-    target_node_id uuid,
-    target_change_kind text,
-    target_payload jsonb
-) RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    allocated_sequence bigint;
-    payload_digest text;
-BEGIN
-    UPDATE response_export_state
-       SET next_sequence = next_sequence + 1
-     WHERE singleton
-     RETURNING next_sequence INTO allocated_sequence;
-    payload_digest := 'sha256:' || encode(digest(convert_to(target_payload::text, 'UTF8'), 'sha256'), 'hex');
-    INSERT INTO response_export_changes
-        (change_sequence, response_id, form_version_id, node_id, change_kind, payload, content_digest)
-    VALUES
-        (allocated_sequence, target_response_id, target_form_version_id, target_node_id,
-         target_change_kind, target_payload, payload_digest);
-END;
-$$;
-
-CREATE FUNCTION append_current_response_export_upsert(target_response_id uuid)
-RETURNS void
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    response_record submissions%ROWTYPE;
-    aggregate_payload jsonb;
-    response_form_id uuid;
-    response_node_name text;
-    response_last_modified_at timestamptz;
-    response_last_modified_by_user_name text;
-BEGIN
-    -- Serialize before reading the aggregate. A concurrent audit mutation must
-    -- not capture an older value snapshot, wait behind a value mutation during
-    -- sequence allocation, and then publish that stale snapshot at the newer
-    -- position.
-    PERFORM 1
-      FROM response_export_state
-     WHERE singleton
-     FOR UPDATE;
-    SELECT * INTO response_record FROM submissions WHERE id = target_response_id;
-    IF NOT FOUND OR response_record.status <> 'submitted'::submission_status THEN
-        RETURN;
-    END IF;
-    SELECT form_versions.form_id, nodes.name
-      INTO response_form_id, response_node_name
-      FROM form_versions
-      JOIN nodes ON nodes.id = response_record.node_id
-     WHERE form_versions.id = response_record.form_version_id;
-    SELECT submission_audit_events.created_at, accounts.display_name
-      INTO response_last_modified_at, response_last_modified_by_user_name
-      FROM submission_audit_events
-      LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
-     WHERE submission_audit_events.submission_id = response_record.id
-     ORDER BY submission_audit_events.created_at DESC, submission_audit_events.id DESC
-     LIMIT 1;
-    SELECT jsonb_build_object(
-        'response_id', response_record.id,
-        'form_id', response_form_id,
-        'form_version_id', response_record.form_version_id,
-        'node_id', response_record.node_id,
-        'node_name', response_node_name,
-        'submitted_at', response_record.submitted_at,
-        'created_at', response_record.created_at,
-        'last_modified_at', COALESCE(response_last_modified_at, response_record.created_at),
-        'last_modified_by_user_name', response_last_modified_by_user_name,
-        'status', response_record.status::text,
-        'restriction_tier', 'public',
-        'scope_node_ids', jsonb_build_array(response_record.node_id),
-        'values', COALESCE(jsonb_object_agg(
-            fields.key,
-            jsonb_build_object(
-                'field_id', fields.field_id,
-                'value', values.value,
-                'value_text', CASE jsonb_typeof(values.value)
-                    WHEN 'string' THEN trim(both '"' from values.value::text)
-                    ELSE values.value::text
-                END
-            )
-        )
-                           FILTER (WHERE fields.key IS NOT NULL), '{}'::jsonb)
-    )
-      INTO aggregate_payload
-      FROM submission_values values
-      JOIN form_fields fields
-        ON fields.form_version_id = values.form_version_id
-       AND fields.field_id = values.field_id
-     WHERE values.submission_id = response_record.id;
-    PERFORM append_response_export_change(
-        response_record.id, response_record.form_version_id, response_record.node_id,
-        'upsert', aggregate_payload
-    );
-END;
-$$;
-
-CREATE FUNCTION capture_submission_response_export_change()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        PERFORM append_response_export_change(
-            OLD.id, OLD.form_version_id, OLD.node_id, 'tombstone',
-            jsonb_build_object('response_id', OLD.id, 'reason', 'deleted')
-        );
-        RETURN OLD;
-    END IF;
-    IF NEW.status = 'submitted'::submission_status THEN
-        PERFORM append_current_response_export_upsert(NEW.id);
-    ELSIF TG_OP = 'UPDATE' AND OLD.status = 'submitted'::submission_status THEN
-        PERFORM append_response_export_change(
-            OLD.id, OLD.form_version_id, OLD.node_id, 'tombstone',
-            jsonb_build_object('response_id', OLD.id, 'reason', 'status_excluded')
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER submissions_response_export_change
-AFTER INSERT OR UPDATE OR DELETE ON submissions
-FOR EACH ROW EXECUTE FUNCTION capture_submission_response_export_change();
-
-CREATE FUNCTION capture_submission_value_response_export_change()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    PERFORM append_current_response_export_upsert(COALESCE(NEW.submission_id, OLD.submission_id));
-    RETURN NULL;
-END;
-$$;
-
-CREATE TRIGGER submission_values_response_export_change
-AFTER INSERT OR UPDATE OR DELETE ON submission_values
-FOR EACH ROW EXECUTE FUNCTION capture_submission_value_response_export_change();
-
--- The audit row is the authoritative source of the exported last-modifier
--- timestamp and actor-safe display label. Capture after every audit mutation
--- so the final immutable aggregate cannot lag the audit event that completed
--- a submit, correction, or workflow-owned state change.
-CREATE FUNCTION capture_submission_audit_response_export_change()
-RETURNS trigger
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    PERFORM append_current_response_export_upsert(
-        CASE WHEN TG_OP = 'DELETE' THEN OLD.submission_id ELSE NEW.submission_id END
-    );
-    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
-END;
-$$;
-
-CREATE TRIGGER submission_audit_response_export_change
-AFTER INSERT OR UPDATE OR DELETE ON submission_audit_events
-FOR EACH ROW EXECUTE FUNCTION capture_submission_audit_response_export_change();
-
-CREATE SCHEMA IF NOT EXISTS analytics;
-
-CREATE TABLE analytics.node_dim (
-    node_id uuid PRIMARY KEY,
-    node_name text NOT NULL,
-    node_type_id uuid NOT NULL,
-    parent_node_id uuid
-);
-
-CREATE TABLE analytics.form_dim (
-    form_id uuid PRIMARY KEY,
-    form_name text NOT NULL,
-    form_slug text NOT NULL
-);
-
-CREATE TABLE analytics.form_version_dim (
-    form_version_id uuid PRIMARY KEY,
-    form_id uuid NOT NULL,
-    version_label text NOT NULL,
-    compatibility_group_id uuid
-);
-
-CREATE TABLE analytics.field_dim (
-    form_version_id uuid NOT NULL,
-    field_id uuid NOT NULL,
-    field_key text NOT NULL,
-    field_label text NOT NULL,
-    field_type text NOT NULL,
-    PRIMARY KEY (form_version_id, field_id)
-);
-
-CREATE TABLE analytics.compatibility_group_dim (
-    compatibility_group_id uuid PRIMARY KEY,
-    form_id uuid NOT NULL,
-    name text NOT NULL
-);
-
-CREATE TABLE analytics.submission_fact (
-    submission_id uuid PRIMARY KEY,
-    form_version_id uuid NOT NULL,
-    node_id uuid NOT NULL,
-    status text NOT NULL,
-    submitted_at timestamptz,
-    created_at timestamptz,
-    last_modified_at timestamptz,
-    last_modified_by_user_name text
-);
-
-CREATE TABLE analytics.submission_value_fact (
-    submission_id uuid NOT NULL,
-    form_version_id uuid NOT NULL,
-    field_id uuid NOT NULL,
-    field_key text NOT NULL,
-    value_text text,
-    value_json jsonb NOT NULL,
-    PRIMARY KEY (submission_id, field_id)
-);
-
-CREATE INDEX analytics_submission_fact_form_version_idx
-    ON analytics.submission_fact (form_version_id);
-CREATE INDEX analytics_submission_value_fact_form_version_field_idx
-    ON analytics.submission_value_fact (form_version_id, field_id, submission_id);
 
 CREATE INDEX workflow_versions_workflow_idx
     ON workflow_versions (workflow_id, status, created_at);
@@ -1183,7 +950,9 @@ CREATE TABLE core_module_action_declarations (
     functional_contract TEXT NOT NULL,
     action TEXT NOT NULL,
     operation TEXT NOT NULL CHECK (operation IN ('read', 'mutation')),
-    required_capability TEXT NOT NULL,
+    required_capabilities_any_of JSONB NOT NULL
+        CHECK (jsonb_typeof(required_capabilities_any_of) = 'array'
+               AND jsonb_array_length(required_capabilities_any_of) > 0),
     PRIMARY KEY (target_definition_id, dependency_binding, functional_contract, action)
 );
 
@@ -1390,236 +1159,3 @@ CREATE TABLE core_bootstrap_receipts (
     receipt JSONB NOT NULL,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
--- Response-owner action receipts and final-envelope capture. This forward-only
--- patch deliberately follows the historical trigger definitions above: the
--- baseline remains readable as a chronology while these definitions are the
--- sole active producer semantics after migration completion.
-ALTER TABLE submissions
-    ADD COLUMN response_export_exclusion_reason TEXT
-    CHECK (response_export_exclusion_reason IN ('redacted'));
-
-CREATE TABLE response_owner_action_receipts (
-    idempotency_key TEXT PRIMARY KEY
-        CHECK (btrim(idempotency_key) = idempotency_key AND length(idempotency_key) BETWEEN 1 AND 128),
-    actor_account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE RESTRICT,
-    action TEXT NOT NULL
-        CHECK (action IN ('create', 'correct', 'status_out', 'status_in', 'redact', 'delete')),
-    logical_key TEXT NOT NULL
-        CHECK (logical_key ~ '^[a-z][a-z0-9._/:-]{0,127}$'),
-    request_method TEXT NOT NULL CHECK (request_method = 'POST'),
-    request_path TEXT NOT NULL CHECK (request_path = '/api/admin/responses/owner-actions'),
-    raw_body_digest TEXT NOT NULL CHECK (raw_body_digest ~ '^sha256:[0-9a-f]{64}$'),
-    idempotency_key_digest TEXT NOT NULL CHECK (idempotency_key_digest ~ '^sha256:[0-9a-f]{64}$'),
-    signed_receipt JSONB NOT NULL,
-    committed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX response_owner_action_receipts_actor_time
-    ON response_owner_action_receipts (actor_account_id, committed_at, idempotency_key);
-
-CREATE FUNCTION append_response_export_change_owned(
-    target_response_id UUID,
-    target_form_version_id UUID,
-    target_node_id UUID,
-    target_change_kind TEXT,
-    target_payload JSONB
-) RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    allocated_sequence BIGINT;
-    payload_digest TEXT;
-BEGIN
-    UPDATE response_export_state
-       SET next_sequence = next_sequence + 1
-     WHERE singleton
-     RETURNING next_sequence INTO allocated_sequence;
-    IF allocated_sequence IS NULL THEN
-        RAISE EXCEPTION 'Response export state is unavailable';
-    END IF;
-    payload_digest := 'sha256:' || encode(
-        digest(convert_to(target_payload::text, 'UTF8'), 'sha256'), 'hex'
-    );
-    INSERT INTO response_export_changes
-        (change_sequence, response_id, form_version_id, node_id, change_kind, payload, content_digest)
-    VALUES
-        (allocated_sequence, target_response_id, target_form_version_id, target_node_id,
-         target_change_kind, target_payload, payload_digest);
-    RETURN allocated_sequence;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION append_response_export_change(
-    target_response_id UUID,
-    target_form_version_id UUID,
-    target_node_id UUID,
-    target_change_kind TEXT,
-    target_payload JSONB
-) RETURNS VOID
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    PERFORM append_response_export_change_owned(
-        target_response_id,
-        target_form_version_id,
-        target_node_id,
-        target_change_kind,
-        target_payload
-    );
-END;
-$$;
-
-CREATE FUNCTION append_current_response_export_upsert_owned(target_response_id UUID)
-RETURNS BIGINT
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    response_record submissions%ROWTYPE;
-    aggregate_payload JSONB;
-    response_form_id UUID;
-    response_node_name TEXT;
-    response_last_modified_at TIMESTAMPTZ;
-    response_last_modified_by_user_name TEXT;
-    allocated_sequence BIGINT;
-BEGIN
-    PERFORM 1
-      FROM response_export_state
-     WHERE singleton
-     FOR UPDATE;
-    SELECT * INTO response_record FROM submissions WHERE id = target_response_id;
-    IF NOT FOUND
-       OR response_record.status <> 'submitted'::submission_status
-       OR response_record.response_export_exclusion_reason IS NOT NULL THEN
-        RETURN NULL;
-    END IF;
-    SELECT form_versions.form_id, nodes.name
-      INTO response_form_id, response_node_name
-      FROM form_versions
-      JOIN nodes ON nodes.id = response_record.node_id
-     WHERE form_versions.id = response_record.form_version_id;
-    SELECT submission_audit_events.created_at, accounts.display_name
-      INTO response_last_modified_at, response_last_modified_by_user_name
-      FROM submission_audit_events
-      LEFT JOIN accounts ON accounts.id = submission_audit_events.account_id
-     WHERE submission_audit_events.submission_id = response_record.id
-     ORDER BY submission_audit_events.created_at DESC, submission_audit_events.id DESC
-     LIMIT 1;
-    SELECT jsonb_build_object(
-        'response_id', response_record.id,
-        'form_id', response_form_id,
-        'form_version_id', response_record.form_version_id,
-        'node_id', response_record.node_id,
-        'node_name', response_node_name,
-        'submitted_at', response_record.submitted_at,
-        'created_at', response_record.created_at,
-        'last_modified_at', COALESCE(response_last_modified_at, response_record.created_at),
-        'last_modified_by_user_name', response_last_modified_by_user_name,
-        'status', response_record.status::text,
-        'restriction_tier', 'public',
-        'scope_node_ids', jsonb_build_array(response_record.node_id),
-        'values', COALESCE(jsonb_object_agg(
-            fields.key,
-            jsonb_build_object(
-                'field_id', fields.field_id,
-                'value', values.value,
-                'value_text', CASE jsonb_typeof(values.value)
-                    WHEN 'string' THEN trim(both '"' from values.value::text)
-                    ELSE values.value::text
-                END
-            )
-        ) FILTER (WHERE fields.key IS NOT NULL), '{}'::jsonb)
-    )
-      INTO aggregate_payload
-      FROM submission_values values
-      JOIN form_fields fields
-        ON fields.form_version_id = values.form_version_id
-       AND fields.field_id = values.field_id
-     WHERE values.submission_id = response_record.id;
-    SELECT append_response_export_change_owned(
-        response_record.id,
-        response_record.form_version_id,
-        response_record.node_id,
-        'upsert',
-        aggregate_payload
-    ) INTO allocated_sequence;
-    RETURN allocated_sequence;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION append_current_response_export_upsert(target_response_id UUID)
-RETURNS VOID
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    PERFORM append_current_response_export_upsert_owned(target_response_id);
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION capture_submission_response_export_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    IF current_setting('tessara.response_export_capture', true) = 'deferred' THEN
-        RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
-    END IF;
-    IF TG_OP = 'DELETE' THEN
-        IF OLD.status = 'submitted'::submission_status
-           AND OLD.response_export_exclusion_reason IS NULL THEN
-            PERFORM append_response_export_change_owned(
-                OLD.id, OLD.form_version_id, OLD.node_id, 'tombstone',
-                jsonb_build_object('response_id', OLD.id, 'reason', 'deleted')
-            );
-        END IF;
-        RETURN OLD;
-    END IF;
-    IF TG_OP = 'UPDATE'
-       AND NEW.response_export_exclusion_reason = 'redacted'
-       AND OLD.response_export_exclusion_reason IS DISTINCT FROM 'redacted' THEN
-        PERFORM append_response_export_change_owned(
-            NEW.id, NEW.form_version_id, NEW.node_id, 'tombstone',
-            jsonb_build_object('response_id', NEW.id, 'reason', 'redacted')
-        );
-    ELSIF NEW.status = 'submitted'::submission_status
-          AND NEW.response_export_exclusion_reason IS NULL THEN
-        PERFORM append_current_response_export_upsert_owned(NEW.id);
-    ELSIF TG_OP = 'UPDATE'
-          AND OLD.status = 'submitted'::submission_status
-          AND OLD.response_export_exclusion_reason IS NULL THEN
-        PERFORM append_response_export_change_owned(
-            OLD.id, OLD.form_version_id, OLD.node_id, 'tombstone',
-            jsonb_build_object('response_id', OLD.id, 'reason', 'status_excluded')
-        );
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION capture_submission_value_response_export_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    IF current_setting('tessara.response_export_capture', true) IS DISTINCT FROM 'deferred' THEN
-        PERFORM append_current_response_export_upsert_owned(
-            COALESCE(NEW.submission_id, OLD.submission_id)
-        );
-    END IF;
-    RETURN NULL;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION capture_submission_audit_response_export_change()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    IF current_setting('tessara.response_export_capture', true) IS DISTINCT FROM 'deferred' THEN
-        PERFORM append_current_response_export_upsert_owned(
-            CASE WHEN TG_OP = 'DELETE' THEN OLD.submission_id ELSE NEW.submission_id END
-        );
-    END IF;
-    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
-END;
-$$;

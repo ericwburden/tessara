@@ -1,0 +1,205 @@
+{
+  "schema_version": 4,
+  "definition_id": "tessara.responses",
+  "release_version": "1.0.0",
+  "publisher": "tessara.first_party",
+  "support": {
+    "support_tier": "first_party",
+    "contact": "support@tessara.example",
+    "documentation": "https://docs.tessara.example/modules/responses"
+  },
+  "platform_versions": {
+    "core_release": "0.1.0",
+    "shell_context_schema": "2.0.0",
+    "module_control_protocol": "1.1.0",
+    "module_contract": "0.4.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0",
+    "design_system_asset_abi": "2.0.0",
+    "conformance_suite": "1.2.0"
+  },
+  "linked_packages": {
+    "module_contract": "0.4.0",
+    "module_runtime": "0.3.0",
+    "module_ui": "0.3.0"
+  },
+  "deployment": {
+    "profile": "tessara-oci-v1",
+    "declaration": {
+      "runtime_image": {
+        "image_reference": "registry.example/tessara/response-module@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/usr/local/bin/response-module", "serve"]
+      },
+      "migration_image": {
+        "image_reference": "registry.example/tessara/response-module@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "platform": "linux",
+        "architecture": "amd64",
+        "command": ["/usr/local/bin/response-module", "migrate"]
+      },
+      "listen": { "protocol": "http", "port": 8094, "registration_name": "responses" },
+      "configuration_keys": [
+        "DISPLAY_LABEL",
+        "PROVIDER_REQUEST_TIMEOUT_SECONDS",
+        "WORKFLOW_EVENT_PAGE_SIZE",
+        "RESPONSE_MODULE_BIND_ADDR",
+        "TESSARA_CORE_INTERNAL_URL",
+        "TESSARA_RESPONSE_PROVIDER_ENDPOINTS",
+        "TESSARA_CORE_AUTHORIZATION_PUBLIC_KEY",
+        "TESSARA_CORE_AUTHORIZATION_KEY_ID",
+        "TESSARA_RESPONSE_SERVICE_SIGNING_KEY_ID",
+        "TESSARA_MODULE_SERVICE_IDENTITIES"
+      ],
+      "secret_keys": ["DATABASE_URL", "TESSARA_RESPONSE_SERVICE_SIGNING_KEY", "TESSARA_MODULE_CONTROL_SHARED_KEY"],
+      "runtime_identity": "responses-runtime",
+      "migration_identity": "responses-migration",
+      "readiness_path": "/health/ready",
+      "liveness_path": "/health/live",
+      "graceful_shutdown_seconds": 30,
+      "resources": { "cpu_request_millis": 100, "cpu_limit_millis": 500, "memory_request_mebibytes": 128, "memory_limit_mebibytes": 512 }
+    }
+  },
+  "features": [
+    {
+      "id": "tessara.responses.start",
+      "name": "Start response",
+      "description": "Start assigned response work from an authenticated Workflow context.",
+      "use_cases": ["Start an assigned response"],
+      "inputs": ["Workflow assignment context", "FormVersion schema"],
+      "outcomes": ["Draft Response"],
+      "constraints": ["Assignment-only start"],
+      "contracts": ["tessara.responses.response", "tessara.responses.response-lifecycle", "tessara.responses.start-reconciliation"],
+      "resource_types": ["tessara.responses.response"],
+      "destinations": ["responses.start"],
+      "capabilities": ["submissions:respond"],
+      "configuration_pointers": ["/properties/provider_request_timeout_seconds"]
+    },
+    {
+      "id": "tessara.responses.manage",
+      "name": "Response lifecycle",
+      "description": "List, edit, submit, and review Responses.",
+      "use_cases": ["Save a draft", "Submit a response", "Review scoped responses"],
+      "inputs": ["Pinned source snapshots", "Response values"],
+      "outcomes": ["Durable Response lifecycle and exports"],
+      "constraints": ["Owner and scope authorization"],
+      "contracts": ["tessara.responses.response", "tessara.responses.response-lifecycle", "tessara.responses.submitted-response-export", "tessara.responses.response-events"],
+      "resource_types": ["tessara.responses.response"],
+      "destinations": ["responses.directory", "responses.detail", "responses.edit"],
+      "capabilities": ["submissions:read_own", "submissions:respond", "submissions:manage"],
+      "configuration_pointers": ["/properties/workflow_event_page_size"]
+    }
+  ],
+  "provided_contracts": [
+    { "id": "tessara.responses.response", "version": "2.0.0", "kind": "resource", "description": "Resolve a Module Instance-owned Response." },
+    { "id": "tessara.responses.response-lifecycle", "version": "2.0.0", "kind": "behavior", "description": "Start, save, submit, and review Responses." },
+    { "id": "tessara.responses.submitted-response-export", "version": "1.0.0", "kind": "api", "description": "Fixed-bound submitted Response export." },
+    { "id": "tessara.responses.response-events", "version": "1.0.0", "kind": "event", "description": "Ordered Workflow lifecycle events." },
+    { "id": "tessara.responses.start-reconciliation", "version": "1.0.0", "kind": "api", "description": "Race-safe Workflow start reservation reconciliation." },
+    { "id": "tessara.responses.form-version-usage", "version": "1.0.0", "kind": "behavior", "description": "Authorized reverse usage for Forms." },
+    { "id": "tessara.responses.summary", "version": "1.0.0", "kind": "behavior", "description": "Scoped Response summary." },
+    { "id": "tessara.responses.operational-status", "version": "1.0.0", "kind": "behavior", "description": "Sanitized Response owner status." },
+    { "id": "tessara.responses.resource-observation", "version": "1.0.0", "kind": "behavior", "description": "Authorized Response resource observation." }
+  ],
+  "dependencies": [
+    { "contract_id": "tessara.forms.form-version-schema", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.form-version", "optional": false },
+    { "contract_id": "tessara.workflows.response-context", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.workflow-context", "optional": false },
+    { "contract_id": "tessara.workflows.response-assignment-catalog", "version_requirement": "=1.0.0", "binding_key": "tessara.responses.workflow-assignments", "optional": false }
+  ],
+  "resource_types": [{ "id": "tessara.responses.response", "description": "A Response owned by the Response Module Instance." }],
+  "typed_reference_schemas": [{ "resource_type": "tessara.responses.response", "resource_id": { "format": "uuid" } }],
+  "routes": [
+    { "name": "responses.directory", "kind": "product", "parameters": [] },
+    { "name": "responses.start", "kind": "product", "parameters": [] },
+    { "name": "responses.detail", "kind": "product", "parameters": [{ "name": "response_id", "value_type": "uuid", "required": true }] },
+    { "name": "responses.edit", "kind": "product", "parameters": [{ "name": "response_id", "value_type": "uuid", "required": true }] },
+    { "name": "tessara.responses.configuration.validate", "kind": "configuration", "parameters": [] },
+    { "name": "tessara.responses.compatibility", "kind": "diagnostics", "parameters": [] },
+    { "name": "tessara.responses.status", "kind": "diagnostics", "parameters": [] },
+    { "name": "tessara.responses.diagnostics", "kind": "diagnostics", "parameters": [] }
+  ],
+  "browser_routes": [
+    { "destination": "responses.directory", "path_template": "/responses", "methods": ["GET", "HEAD"], "required_capability": "submissions:read_own", "authorization_action": "responses.list", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null },
+    { "destination": "responses.start", "path_template": "/responses/new", "methods": ["GET", "HEAD"], "required_capability": "submissions:respond", "authorization_action": "responses.start", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null },
+    { "destination": "responses.edit", "path_template": "/responses/{response_id}/edit", "methods": ["GET", "HEAD"], "required_capability": "submissions:respond", "authorization_action": "responses.edit", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null },
+    { "destination": "responses.detail", "path_template": "/responses/{response_id}", "methods": ["GET", "HEAD"], "required_capability": "submissions:read_own", "authorization_action": "responses.get", "dependency_binding": "tessara.core.module-document", "functional_contract": "tessara.responses.response-lifecycle", "organization_scope_parameter": null }
+  ],
+  "browser_lifecycle": {
+    "lifecycle_abi": "1.0.0",
+    "entry_asset": "/response.js",
+    "stylesheet_assets": [
+      "/response.css"
+    ],
+    "complete_document_fallback": true,
+    "capabilities": {
+      "navigation_guard": true,
+      "suspend_resume": true
+    }
+  },
+  "public_api_routes": [
+    { "path_template": "/api/responses", "method": "GET", "authorization_action": "responses.list", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
+    { "path_template": "/api/responses/start-options", "method": "GET", "authorization_action": "responses.start_options", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "none" },
+    { "path_template": "/api/responses", "method": "POST", "authorization_action": "responses.start", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}", "method": "GET", "authorization_action": "responses.get", "dependency_binding": "tessara.core.responses", "operation": "read", "required_capabilities_any_of": ["submissions:read_own", "submissions:manage"], "functional_contract": "tessara.responses.response", "idempotency": "none" },
+    { "path_template": "/api/responses/{response_id}/values", "method": "PUT", "authorization_action": "responses.save", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}/submit", "method": "POST", "authorization_action": "responses.submit", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" },
+    { "path_template": "/api/responses/{response_id}", "method": "DELETE", "authorization_action": "responses.delete", "dependency_binding": "tessara.core.responses", "operation": "mutation", "required_capabilities_any_of": ["submissions:respond", "submissions:manage"], "functional_contract": "tessara.responses.response-lifecycle", "idempotency": "forward_or_generate_header" }
+  ],
+  "control_projections": [
+    {
+      "kind": "security_state",
+      "path": "/api/private/security-state",
+      "revision_field": "authorization_revision"
+    }
+  ],
+  "assets": [
+    { "path": "/module-ui.css", "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f", "content_type": "text/css; charset=utf-8" },
+    { "path": "/response.css", "digest": "sha256:e1580f8e8d7e3a58443734e37ff630014a57d79f6c125c220e7de9b852c712c7", "content_type": "text/css; charset=utf-8" },
+    { "path": "/response.js", "digest": "sha256:fee5dcb70cd6987e673b557c404c29fd8fb872b83601341e67e9a1207e974462", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response-bindings.js", "digest": "sha256:67df799cbf64eac17e122b7aa2e68f1f9bbc885e68a408d208b6dc3285bbaddf", "content_type": "text/javascript; charset=utf-8" },
+    { "path": "/response.wasm", "digest": "sha256:245e9dc803bc24790f9e84af94d592a1ef4563b269b2b36529bcc8081a8c6273", "content_type": "application/wasm" }
+  ],
+  "provided_service_actions": [
+    { "path": "/api/private/responses/submitted-export/checkpoint", "method": "POST", "authorization_action": "responses.export_checkpoint", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },
+    { "path": "/api/private/responses/submitted-export/start", "method": "POST", "authorization_action": "responses.export_start", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },
+    { "path": "/api/private/responses/submitted-export/page", "method": "POST", "authorization_action": "responses.export_page", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.submitted-response-export" },
+    { "path": "/api/private/responses/events/checkpoint", "method": "POST", "authorization_action": "responses.events_checkpoint", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-events" },
+    { "path": "/api/private/responses/events/start", "method": "POST", "authorization_action": "responses.events_start", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-events" },
+    { "path": "/api/private/responses/events/page", "method": "POST", "authorization_action": "responses.events_page", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.response-events" },
+    { "path": "/api/private/responses/start-reconciliation", "method": "POST", "authorization_action": "responses.reconcile_start", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.start-reconciliation" },
+    { "path": "/api/private/responses/form-version-usage", "method": "POST", "authorization_action": "responses.form_version_usage", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.form-version-usage" },
+    { "path": "/api/private/responses/summary", "method": "POST", "authorization_action": "responses.summary", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.summary" },
+    { "path": "/api/private/responses/operations-status", "method": "POST", "authorization_action": "responses.operations_status", "operation": "read", "required_capability": "submissions:manage", "functional_contract": "tessara.responses.operational-status" },
+    { "path": "/api/private/responses/resolve", "method": "POST", "authorization_action": "responses.resolve", "operation": "read", "required_capability": "submissions:read_own", "functional_contract": "tessara.responses.resource-observation" }
+  ],
+  "consumed_service_actions": [
+    { "dependency_binding": "tessara.responses.form-version", "functional_contract": "tessara.forms.form-version-schema", "authorization_action": "forms.response_form_version_schema" },
+    { "dependency_binding": "tessara.responses.workflow-context", "functional_contract": "tessara.workflows.response-context", "authorization_action": "workflows.issue_response_context" },
+    { "dependency_binding": "tessara.responses.workflow-assignments", "functional_contract": "tessara.workflows.response-assignment-catalog", "authorization_action": "workflows.response_assignment_catalog" }
+  ],
+  "navigation": [{ "id": "tessara.responses.navigation", "destination": "responses.directory", "label": "Responses", "group": "Main", "order_hint": 40, "required_capabilities_any_of": ["submissions:read_own", "submissions:respond", "submissions:manage"] }],
+  "security_capabilities": [
+    { "id": "submissions:read_own", "description": "Read Responses owned or delegated to the actor." },
+    { "id": "submissions:respond", "description": "Start and complete assigned Response work." },
+    { "id": "submissions:manage", "description": "Review and administer Responses within authorized scope." }
+  ],
+  "configuration_schema": {
+    "type": "object",
+    "required": ["schema_version", "display_label", "provider_request_timeout_seconds", "workflow_event_page_size"],
+    "properties": {
+      "schema_version": { "type": "integer", "minimum": 1, "maximum": 1, "default": 1 },
+      "display_label": { "type": "string", "title": "Display label", "default": "Responses" },
+      "provider_request_timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 30, "default": 5 },
+      "workflow_event_page_size": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 250 }
+    }
+  },
+  "operational_routes": {
+    "configuration_validation": "tessara.responses.configuration.validate",
+    "compatibility": "tessara.responses.compatibility",
+    "status": "tessara.responses.status",
+    "diagnostics": "tessara.responses.diagnostics"
+  },
+  "shell_contribution_contracts": null
+}

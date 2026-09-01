@@ -5,7 +5,6 @@
 //! public Rust API stays focused on service startup, shared configuration, and
 //! deterministic demo seeding.
 
-mod analytics;
 mod app_summary;
 mod auth;
 mod composition;
@@ -21,20 +20,14 @@ mod forms;
 mod hierarchy;
 mod module_authorization_exchange;
 mod module_gateway;
+mod module_provider_compatibility;
 mod module_service_requests;
 mod modules;
 mod operations;
-mod response_export_provider;
-mod response_owner_actions;
-mod submissions;
 mod users;
+mod workflow_response_consumer;
+mod workflow_response_provider;
 mod workflows;
-
-/// Test-facing projection of the exact fail-closed row validator used by the
-/// private Response export page handler. This keeps integration tests on the
-/// production validation path without exposing provider internals.
-#[doc(hidden)]
-pub use response_export_provider::validate_stored_export_row as validate_response_export_storage_row;
 
 #[cfg(feature = "ssr")]
 use axum::http::header;
@@ -49,6 +42,12 @@ use axum::{
 use db::AppState;
 use error::ApiError;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
+
+/// Starts the durable Core-owned Response event consumer.
+#[must_use]
+pub fn spawn_workflow_response_event_consumer(state: AppState) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(workflow_response_consumer::run(state))
+}
 
 fn native_app(path: impl AsRef<str>, title: &str, description: &str) -> Html<String> {
     #[cfg(feature = "ssr")]
@@ -226,46 +225,6 @@ pub fn router(state: AppState) -> Router {
             }),
         )
         .route(
-            "/responses",
-            get(|| async {
-                native_app(
-                    "/responses",
-                    "Tessara Responses",
-                    "Browse Tessara responses.",
-                )
-            }),
-        )
-        .route(
-            "/responses/new",
-            get(|| async {
-                native_app(
-                    "/responses/new",
-                    "Start Response",
-                    "Start a Tessara response.",
-                )
-            }),
-        )
-        .route(
-            "/responses/{submission_id}/edit",
-            get(|Path(submission_id): Path<String>| async move {
-                native_app(
-                    format!("/responses/{submission_id}/edit"),
-                    "Edit Response",
-                    "Edit a Tessara response.",
-                )
-            }),
-        )
-        .route(
-            "/responses/{submission_id}",
-            get(|Path(submission_id): Path<String>| async move {
-                native_app(
-                    format!("/responses/{submission_id}"),
-                    "Response Detail",
-                    "Inspect a Tessara response.",
-                )
-            }),
-        )
-        .route(
             "/operations",
             get(|| async {
                 native_app(
@@ -364,13 +323,11 @@ fn api_routes() -> Router<AppState> {
         .merge(operations::routes())
         .merge(forms::routes())
         .merge(form_version_schema_provider::routes())
+        .merge(workflow_response_provider::routes())
         .merge(workflows::routes())
-        .merge(submissions::routes())
-        .merge(analytics::routes())
-        .merge(response_export_provider::routes())
-        .merge(response_owner_actions::routes())
         .merge(composition::routes())
         .merge(module_authorization_exchange::routes())
+        .merge(module_provider_compatibility::routes())
         .merge(modules::routes())
         .merge(demo::routes())
 }

@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.dashboards",
   "release_version": "2.0.0",
   "publisher": "tessara.first_party",
@@ -280,14 +280,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "1.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.2.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.2.0",
     "module_ui": "0.2.0",
     "design_system_asset_abi": "1.0.0",
     "conformance_suite": "1.1.0"
   },
   "linked_packages": {
-    "module_contract": "0.2.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.2.0",
     "module_ui": "0.2.0"
   },
@@ -347,14 +347,14 @@
     }
   ],
   "public_api_routes": [
-    {"path_template":"/api/dashboards","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.list","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
-    {"path_template":"/api/dashboards/{dashboard_id}","method":"GET","required_capability":"dashboards:read","authorization_action":"dashboards.get","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
-    {"path_template":"/api/admin/dashboards","method":"POST","required_capability":"dashboards:manage","authorization_action":"dashboards.create","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/dashboards/visibility-nodes","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.list_manageable","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
-    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.update","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"DELETE","required_capability":"dashboards:manage","authorization_action":"dashboards.delete","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
-    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"GET","required_capability":"dashboards:manage","authorization_action":"dashboards.load_composition","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.composition","idempotency":"none"},
-    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"PUT","required_capability":"dashboards:manage","authorization_action":"dashboards.reconcile_composition","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
+    {"path_template":"/api/dashboards","method":"GET","required_capabilities_any_of":["dashboards:read"],"authorization_action":"dashboards.list","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/dashboards/{dashboard_id}","method":"GET","required_capabilities_any_of":["dashboards:read"],"authorization_action":"dashboards.get","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards","method":"POST","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.create","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/visibility-nodes","method":"GET","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.list_manageable","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.dashboard","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"PUT","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.update","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}","method":"DELETE","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.delete","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.dashboard","idempotency":"forward_or_generate_header"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"GET","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.load_composition","dependency_binding":"tessara.core.dashboards","operation":"read","functional_contract":"tessara.dashboards.composition","idempotency":"none"},
+    {"path_template":"/api/admin/dashboards/{dashboard_id}/composition","method":"PUT","required_capabilities_any_of":["dashboards:manage"],"authorization_action":"dashboards.reconcile_composition","dependency_binding":"tessara.core.dashboards","operation":"mutation","functional_contract":"tessara.dashboards.composition","idempotency":"forward_or_generate_header"}
   ],
   "control_projections": [
     {"kind":"security_state","path":"/api/private/security-state","revision_field":"authorization_revision"},

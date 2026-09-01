@@ -105,7 +105,6 @@ pub(crate) struct NodeDetail {
     pub(crate) name: String,
     pub(crate) metadata: Value,
     pub(crate) related_forms: Vec<NodeFormLink>,
-    pub(crate) related_responses: Vec<NodeSubmissionLink>,
 }
 
 #[derive(Serialize)]
@@ -115,19 +114,6 @@ pub(crate) struct NodeFormLink {
     pub(crate) form_slug: String,
     pub(crate) published_version_count: i64,
     pub(crate) active_version_label: Option<String>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct NodeSubmissionLink {
-    pub(crate) submission_id: Uuid,
-    pub(crate) form_id: Uuid,
-    pub(crate) form_name: String,
-    pub(crate) form_version_id: Uuid,
-    pub(crate) version_label: String,
-    pub(crate) status: String,
-    pub(crate) created_at: chrono::DateTime<chrono::Utc>,
-    pub(crate) submitted_at: Option<chrono::DateTime<chrono::Utc>>,
-    pub(crate) submitted_by: Option<String>,
 }
 
 #[derive(Serialize)]

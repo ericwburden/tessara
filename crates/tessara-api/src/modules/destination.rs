@@ -36,20 +36,10 @@ const WORKFLOW_ID: &[ParameterSpec] = &[ParameterSpec {
     name: "workflow_id",
     value_type: RouteParameterType::Uuid,
 }];
-const SUBMISSION_ID: &[ParameterSpec] = &[ParameterSpec {
-    name: "submission_id",
-    value_type: RouteParameterType::Uuid,
-}];
 const FORMS_READ: &[&str] = &["forms:read", "forms:manage"];
 const FORMS_MANAGE: &[&str] = &["forms:manage"];
 const WORKFLOWS_READ: &[&str] = &["workflows:read", "workflows:manage"];
 const WORKFLOWS_MANAGE: &[&str] = &["workflows:manage"];
-const RESPONSES_READ: &[&str] = &[
-    "submissions:read_own",
-    "submissions:respond",
-    "submissions:manage",
-];
-const RESPONSES_WRITE: &[&str] = &["submissions:respond", "submissions:manage"];
 const SCOPED_RECORDS_READ: &[&str] = &[
     "tessara.reference.scoped-records:read",
     "tessara.reference.scoped-records:manage",
@@ -185,8 +175,6 @@ fn route_spec(name: &str) -> Option<RouteSpec> {
             (WORKFLOW_ID_OR_NONE(name), WORKFLOWS_READ)
         }
         "workflows.create" | "workflows.edit" => (WORKFLOW_ID_OR_NONE(name), WORKFLOWS_MANAGE),
-        "responses.directory" | "responses.detail" => (SUBMISSION_ID_OR_NONE(name), RESPONSES_READ),
-        "responses.start" | "responses.edit" => (SUBMISSION_ID_OR_NONE(name), RESPONSES_WRITE),
         "tessara.reference.scoped-records.directory" => (NONE, SCOPED_RECORDS_READ),
         _ => return None,
     };
@@ -211,10 +199,6 @@ fn route_name(name: &str) -> &'static str {
         "workflows.assignments" => "workflows.assignments",
         "workflows.detail" => "workflows.detail",
         "workflows.edit" => "workflows.edit",
-        "responses.directory" => "responses.directory",
-        "responses.start" => "responses.start",
-        "responses.detail" => "responses.detail",
-        "responses.edit" => "responses.edit",
         "tessara.reference.scoped-records.directory" => {
             "tessara.reference.scoped-records.directory"
         }
@@ -240,15 +224,6 @@ fn WORKFLOW_ID_OR_NONE(name: &str) -> &'static [ParameterSpec] {
     }
 }
 
-#[allow(non_snake_case)]
-fn SUBMISSION_ID_OR_NONE(name: &str) -> &'static [ParameterSpec] {
-    if matches!(name, "responses.detail" | "responses.edit") {
-        SUBMISSION_ID
-    } else {
-        NONE
-    }
-}
-
 fn render_path(
     route: &str,
     parameters: &std::collections::BTreeMap<String, SemanticParameterValue>,
@@ -267,10 +242,6 @@ fn render_path(
         "workflows.assignments" => "/workflows/assignments".to_string(),
         "workflows.detail" => format!("/workflows/{}", uuid("workflow_id")?),
         "workflows.edit" => format!("/workflows/{}/edit", uuid("workflow_id")?),
-        "responses.directory" => "/responses".to_string(),
-        "responses.start" => "/responses/new".to_string(),
-        "responses.detail" => format!("/responses/{}", uuid("submission_id")?),
-        "responses.edit" => format!("/responses/{}/edit", uuid("submission_id")?),
         "tessara.reference.scoped-records.directory" => "/reference/scoped-records".to_string(),
         _ => return None,
     })
@@ -383,16 +354,6 @@ mod tests {
                 "workflows.edit",
                 "/workflows/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
             ),
-            ("responses.directory", "/responses"),
-            ("responses.start", "/responses/new"),
-            (
-                "responses.detail",
-                "/responses/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-            ),
-            (
-                "responses.edit",
-                "/responses/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/edit",
-            ),
             (
                 "tessara.reference.scoped-records.directory",
                 "/reference/scoped-records",
@@ -407,10 +368,6 @@ mod tests {
                 )]),
                 "workflows.detail" | "workflows.edit" => BTreeMap::from([(
                     "workflow_id".to_string(),
-                    SemanticParameterValue::Uuid(resource_id),
-                )]),
-                "responses.detail" | "responses.edit" => BTreeMap::from([(
-                    "submission_id".to_string(),
                     SemanticParameterValue::Uuid(resource_id),
                 )]),
                 _ => BTreeMap::new(),

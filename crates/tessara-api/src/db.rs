@@ -24,15 +24,10 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
             "forms:read",
             "workflows:read",
             "workflows:manage",
-            "submissions:respond",
-            "submissions:manage",
             "operations:view",
         ],
     ),
-    (
-        "respondent",
-        &["submissions:read_own", "submissions:respond"],
-    ),
+    ("respondent", &[]),
 ];
 
 /// Stable review identifier for the exact built-in membership set above.
@@ -41,11 +36,11 @@ pub const BUILT_IN_ROLE_CAPABILITY_SEED: &[(&str, &[&str])] = &[
 /// [`BUILT_IN_ROLE_CAPABILITY_SEED_SHA256`]. This coupling makes a membership
 /// change require both a new digest and an intentional version change.
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_VERSION: &str =
-    "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6";
+    "sprint-8c-role-capabilities-v1+sha256.7158b2205008";
 
 /// SHA-256 of [`built_in_role_capability_seed_canonical_bytes`].
 pub const BUILT_IN_ROLE_CAPABILITY_SEED_SHA256: &str =
-    "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621";
+    "7158b22050089e456e88501181adb21fdeb6b342a8ee4ad7cabcd9b74ec702b0";
 
 /// Returns the canonical bytes covered by the built-in membership digest.
 ///
@@ -250,7 +245,7 @@ fn migrations_dir() -> PathBuf {
     PathBuf::from("migrations")
 }
 
-async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
+pub(crate) async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
     let admin_account_id: uuid::Uuid = sqlx::query_scalar(
         r#"
         INSERT INTO accounts (email, display_name)
@@ -279,18 +274,6 @@ async fn seed_dev_admin(pool: &PgPool, config: &Config) -> anyhow::Result<()> {
         (
             "workflows:manage",
             "Manage workflow definitions and assignments",
-        ),
-        (
-            "submissions:read_own",
-            "Read own and delegated response work",
-        ),
-        (
-            "submissions:respond",
-            "Start and complete assigned response work",
-        ),
-        (
-            "submissions:manage",
-            "Manage submissions by hierarchy scope",
         ),
         ("analytics:refresh", "Refresh analytics projections"),
         (
@@ -485,11 +468,11 @@ mod tests {
     fn built_in_role_capability_seed_contract_is_exact_and_review_versioned() {
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_VERSION,
-            "sprint-8b-role-capabilities-v1+sha256.592a7f5359b6"
+            "sprint-8c-role-capabilities-v1+sha256.7158b2205008"
         );
         assert_eq!(
             BUILT_IN_ROLE_CAPABILITY_SEED_SHA256,
-            "592a7f5359b6a86864f7fda1265360f2a411a087ffe209baaf5d1f41a5725621"
+            "7158b22050089e456e88501181adb21fdeb6b342a8ee4ad7cabcd9b74ec702b0"
         );
         assert_eq!(
             super::sha256_hex(&built_in_role_capability_seed_canonical_bytes()),
@@ -516,8 +499,8 @@ mod tests {
     }
 
     #[test]
-    fn sprint_8b_core_fresh_baseline_excludes_independent_module_product_storage() {
-        assert_eq!(fnv1a(BASELINE), 0x4913_d74d_dd95_46e2);
+    fn sprint_8c_core_fresh_baseline_excludes_independent_module_product_storage() {
+        assert_eq!(fnv1a(BASELINE), 0x871b_ed0f_6a64_016d);
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(!baseline.contains("CREATE TABLE components ("));
         assert!(!baseline.contains("CREATE TABLE component_versions ("));
@@ -526,13 +509,18 @@ mod tests {
         assert!(!baseline.contains("CREATE TABLE datasets ("));
         assert!(!baseline.contains("CREATE TABLE dataset_revisions ("));
         assert!(!baseline.contains("CREATE TYPE dataset_revision_status AS ENUM"));
+        assert!(!baseline.contains("CREATE TABLE submissions ("));
+        assert!(!baseline.contains("CREATE TABLE submission_values ("));
+        assert!(!baseline.contains("CREATE TABLE submission_audit_events ("));
+        assert!(!baseline.contains("CREATE TABLE response_export_changes ("));
+        assert!(!baseline.contains("CREATE TABLE response_owner_action_receipts ("));
     }
 
     #[test]
     fn closeout_baseline_contains_the_control_plane_and_navigation_schema() {
         assert_eq!(
             sha256_hex(BASELINE),
-            "b35d55a0bb502a966f88b8f73856d3cebc30d2d17d8eb6db750c66a02208add4"
+            "7453bfa8948f7459289e8446d48a42cb698ab0b1aaa9625562d8add3cd919aa3"
         );
         let baseline = std::str::from_utf8(BASELINE).expect("baseline migration is UTF-8");
         assert!(baseline.contains("CREATE TABLE application_installations"));

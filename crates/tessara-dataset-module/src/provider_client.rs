@@ -20,6 +20,7 @@ use crate::{DatasetModuleError, DatasetModuleState, MODULE_DEFINITION_ID, load_s
 
 #[derive(Clone, Copy)]
 pub(crate) struct ProviderAction {
+    pub audience: ProviderAudience,
     pub binding: &'static str,
     pub contract: &'static str,
     pub action: &'static str,
@@ -28,6 +29,12 @@ pub(crate) struct ProviderAction {
     /// True only for authenticated, side-effect-free provider observations.
     /// Owner product writes must never opt into this retry path.
     pub retry_safe_observation: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum ProviderAudience {
+    Core,
+    Module(&'static str),
 }
 
 #[derive(Clone, Copy)]
@@ -197,15 +204,7 @@ where
         // refreshing the service-request nonce.
         let downstream = match &bootstrap_downstream {
             Some(downstream) => downstream.clone(),
-            None => match exchange(
-                state,
-                inbound,
-                target.binding,
-                target.contract,
-                target.action,
-            )
-            .await
-            {
+            None => match exchange(state, inbound, target).await {
                 Ok(downstream) => downstream,
                 Err(error) => {
                     emit_provider_attempt(
@@ -509,26 +508,22 @@ struct DownstreamAuthorization {
 async fn exchange<TAuthorization: ProviderAuthorization + ?Sized>(
     state: &DatasetModuleState,
     inbound: &TAuthorization,
-    binding: &'static str,
-    contract: &'static str,
-    action: &'static str,
+    provider: ProviderAction,
 ) -> Result<DownstreamAuthorization, DatasetModuleError> {
     let security = load_security_state(&state.pool).await?.ok_or_else(|| {
         DatasetModuleError::Unavailable("Dataset security state is unavailable".into())
     })?;
     let definition = ModuleDefinitionId::new(MODULE_DEFINITION_ID)
         .map_err(|error| DatasetModuleError::Internal(error.to_string()))?;
-    let target = AuthorizationAudienceV1::CoreInstallation {
-        installation_id: security.installation_id,
-    };
+    let target = provider_audience(provider.audience, security.installation_id)?;
     let request = AuthorizationExchangeRequestV2 {
         schema_version: AUTHORIZATION_EXCHANGE_SCHEMA_VERSION_V2,
         target: target.clone(),
-        dependency_binding: DependencyBindingKey::new(binding)
+        dependency_binding: DependencyBindingKey::new(provider.binding)
             .map_err(|error| DatasetModuleError::Internal(error.to_string()))?,
-        functional_contract: FunctionalContractId::new(contract)
+        functional_contract: FunctionalContractId::new(provider.contract)
             .map_err(|error| DatasetModuleError::Internal(error.to_string()))?,
-        action: action.into(),
+        action: provider.action.into(),
         resource_assertion: None,
     };
     request
@@ -601,7 +596,7 @@ async fn exchange<TAuthorization: ProviderAuthorization + ?Sized>(
             audience: target,
             dependency_binding: request.dependency_binding,
             functional_contract: request.functional_contract,
-            action: action.into(),
+            action: provider.action.into(),
             operation: AuthorizationGrantOperationV1::Read,
             resource_assertion: None,
             authorization_revision: security.authorization_revision as u64,
@@ -622,6 +617,23 @@ async fn exchange<TAuthorization: ProviderAuthorization + ?Sized>(
         module_instance_id: security.module_instance_id,
         correlation_id: response.authorization.payload.correlation_id,
     })
+}
+
+fn provider_audience(
+    audience: ProviderAudience,
+    installation_id: Uuid,
+) -> Result<AuthorizationAudienceV1, DatasetModuleError> {
+    match audience {
+        ProviderAudience::Core => Ok(AuthorizationAudienceV1::CoreInstallation { installation_id }),
+        ProviderAudience::Module(definition_id) => Ok(AuthorizationAudienceV1::ModuleInstance {
+            module_instance_id: tessara_composition::module_instance_id(
+                installation_id,
+                definition_id,
+            ),
+            module_definition_id: ModuleDefinitionId::new(definition_id)
+                .map_err(|error| DatasetModuleError::Internal(error.to_string()))?,
+        }),
+    }
 }
 
 fn signed_service_request(
@@ -712,6 +724,27 @@ mod tests {
     }
 
     #[test]
+    fn provider_audience_preserves_core_and_independent_module_ownership() {
+        let installation_id = Uuid::from_u128(1);
+        assert_eq!(
+            provider_audience(ProviderAudience::Core, installation_id).unwrap(),
+            AuthorizationAudienceV1::CoreInstallation { installation_id }
+        );
+
+        let definition_id = "tessara.responses";
+        assert_eq!(
+            provider_audience(ProviderAudience::Module(definition_id), installation_id).unwrap(),
+            AuthorizationAudienceV1::ModuleInstance {
+                module_instance_id: tessara_composition::module_instance_id(
+                    installation_id,
+                    definition_id,
+                ),
+                module_definition_id: ModuleDefinitionId::new(definition_id).unwrap(),
+            }
+        );
+    }
+
+    #[test]
     fn provider_attempt_event_is_structured_and_contains_no_request_detail() {
         let captured = CapturedWriter::default();
         let subscriber = tracing_subscriber::fmt()
@@ -726,6 +759,7 @@ mod tests {
                 Uuid::from_u128(1),
                 Some(Uuid::from_u128(2)),
                 ProviderAction {
+                    audience: ProviderAudience::Module("tessara.responses"),
                     binding: "tessara.datasets.response-export",
                     contract: "tessara.responses.submitted-response-export",
                     action: "responses.export_checkpoint",

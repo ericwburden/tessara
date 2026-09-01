@@ -11,7 +11,7 @@ use tessara_module_contract::{
 const VALID_MANIFEST: &str = include_str!("fixtures/valid-manifest.json");
 const VALID_MANIFEST_DIGEST_SIDECAR: &str = include_str!("fixtures/valid-manifest.json.sha256");
 const VALID_MANIFEST_SHA256: &str =
-    "sha256:3d1bbe16f71a9fb3821a89541107ab6f2b2972e83348efc0e91399b5edae0ea0";
+    "sha256:4511d8432c614e9310b8bc94331d37fad0fe97e75f2be5c432f2a631f5eac582";
 const INVALID_MANIFEST_PROFILE: &str =
     include_str!("fixtures/invalid-manifest-unsupported-profile.json");
 const INVALID_TRANSITION_DEPLOYMENT: &str =
@@ -54,12 +54,6 @@ const HISTORICAL_SPRINT_6A_TRANSITION_SOURCES: &[FixtureSource] = &[
         expected_digest: "sha256:e9bdf51896700ffb982a00e4c80ea198bbdb98056705036a1a948347a71c04cf",
     },
     FixtureSource {
-        name: "Responses",
-        bytes: include_bytes!("fixtures/transition-responses-v1.json"),
-        digest_sidecar: include_str!("fixtures/transition-responses-v1.json.sha256"),
-        expected_digest: "sha256:e491986ed43b0f290f0c2ee763e60afb03e5b7babc7117a11e280e37de7b91bc",
-    },
-    FixtureSource {
         name: "Datasets",
         bytes: include_bytes!("fixtures/transition-datasets-v1.json"),
         digest_sidecar: include_str!("fixtures/transition-datasets-v1.json.sha256"),
@@ -85,13 +79,8 @@ const HISTORICAL_SPRINT_6A_TRANSITION_SOURCES: &[FixtureSource] = &[
     },
 ];
 
-const CURRENT_CORE_TRANSITION_IDENTITIES: [&str; 5] = [
-    "tessara.forms",
-    "tessara.workflows",
-    "tessara.responses",
-    "tessara.datasets",
-    "tessara.migration",
-];
+const CURRENT_CORE_TRANSITION_IDENTITIES: [&str; 3] =
+    ["tessara.forms", "tessara.workflows", "tessara.migration"];
 
 fn assert_exact_utf8_lf_fixture<'a>(
     name: &str,
@@ -380,121 +369,6 @@ const HISTORICAL_SPRINT_6A_EXPECTED_CATALOG: &[ExpectedCatalogEntry] = &[
             ExpectedCapability {
                 id: "workflows:manage",
                 description: "Manage workflow definitions and assignments",
-            },
-        ],
-    },
-    ExpectedCatalogEntry {
-        display_name: "Responses",
-        definition_id: "tessara.responses",
-        availability: TransitionAvailability::ActiveInProcess,
-        features: &[
-            ExpectedFeature {
-                id: "tessara.responses.start",
-                contracts: &[
-                    "tessara.workflows.workflow-version",
-                    "tessara.forms.form-version",
-                ],
-                resources: &[],
-                destinations: &["responses.start"],
-                capabilities: &["submissions:respond"],
-            },
-            ExpectedFeature {
-                id: "tessara.responses.draft",
-                contracts: &[
-                    "tessara.responses.response",
-                    "tessara.responses.response-lifecycle",
-                ],
-                resources: &["tessara.transition.response"],
-                destinations: &["responses.edit"],
-                capabilities: &["submissions:respond"],
-            },
-            ExpectedFeature {
-                id: "tessara.responses.submit",
-                contracts: &[
-                    "tessara.responses.response",
-                    "tessara.responses.response-lifecycle",
-                ],
-                resources: &["tessara.transition.response"],
-                destinations: &["responses.edit"],
-                capabilities: &["submissions:respond"],
-            },
-            ExpectedFeature {
-                id: "tessara.responses.review",
-                contracts: &["tessara.responses.response"],
-                resources: &["tessara.transition.response"],
-                destinations: &["responses.detail"],
-                capabilities: &["submissions:read_own", "submissions:manage"],
-            },
-        ],
-        contracts: &[
-            ExpectedContract {
-                id: "tessara.responses.response",
-                kind: FunctionalContractKind::Resource,
-            },
-            ExpectedContract {
-                id: "tessara.responses.response-lifecycle",
-                kind: FunctionalContractKind::Behavior,
-            },
-        ],
-        dependencies: &[
-            ExpectedDependency {
-                binding_key: "tessara.responses.workflow-version",
-                contract_id: "tessara.workflows.workflow-version",
-            },
-            ExpectedDependency {
-                binding_key: "tessara.responses.form-version",
-                contract_id: "tessara.forms.form-version",
-            },
-        ],
-        resources: &["tessara.transition.response"],
-        routes: &[
-            ExpectedRoute {
-                name: "responses.directory",
-                parameters: &[],
-            },
-            ExpectedRoute {
-                name: "responses.start",
-                parameters: &[],
-            },
-            ExpectedRoute {
-                name: "responses.detail",
-                parameters: &[ExpectedParameter {
-                    name: "submission_id",
-                    value_type: RouteParameterType::Uuid,
-                }],
-            },
-            ExpectedRoute {
-                name: "responses.edit",
-                parameters: &[ExpectedParameter {
-                    name: "submission_id",
-                    value_type: RouteParameterType::Uuid,
-                }],
-            },
-        ],
-        navigation: Some(ExpectedNavigation {
-            id: "tessara.responses.navigation",
-            destination: "responses.directory",
-            label: "Responses",
-            group: "Main",
-            order_hint: 40,
-            capabilities: &[
-                "submissions:read_own",
-                "submissions:respond",
-                "submissions:manage",
-            ],
-        }),
-        capabilities: &[
-            ExpectedCapability {
-                id: "submissions:read_own",
-                description: "Read own and delegated response work",
-            },
-            ExpectedCapability {
-                id: "submissions:respond",
-                description: "Start and complete assigned response work",
-            },
-            ExpectedCapability {
-                id: "submissions:manage",
-                description: "Manage submissions by hierarchy scope",
             },
         ],
     },
@@ -1099,7 +973,6 @@ fn historical_sprint_6a_transition_sources_are_byte_pinned_valid_and_exact() {
         [
             "Forms",
             "Workflows",
-            "Responses",
             "Datasets",
             "Components",
             "Dashboards",
@@ -1114,7 +987,6 @@ fn historical_sprint_6a_transition_sources_are_byte_pinned_valid_and_exact() {
         [
             "tessara.forms",
             "tessara.workflows",
-            "tessara.responses",
             "tessara.datasets",
             "tessara.components",
             "tessara.dashboards",
@@ -1164,14 +1036,10 @@ fn historical_sprint_6a_transition_sources_are_byte_pinned_valid_and_exact() {
 fn current_core_transition_identity_contract_is_exact() {
     assert_eq!(
         CURRENT_CORE_TRANSITION_IDENTITIES,
-        [
-            "tessara.forms",
-            "tessara.workflows",
-            "tessara.responses",
-            "tessara.datasets",
-            "tessara.migration",
-        ]
+        ["tessara.forms", "tessara.workflows", "tessara.migration",]
     );
+    assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.responses"));
+    assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.datasets"));
     assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.components"));
     assert!(!CURRENT_CORE_TRANSITION_IDENTITIES.contains(&"tessara.dashboards"));
     let historical_identities = HISTORICAL_SPRINT_6A_EXPECTED_CATALOG
@@ -1243,7 +1111,7 @@ fn invalid_fixtures_have_specific_wire_rejections() {
     assert!(
         manifest_schema_error
             .to_string()
-            .contains("module manifest schema version 1 is unsupported; expected 3")
+            .contains("module manifest schema version 1 is unsupported; expected 4")
     );
 
     let transition_schema_error =

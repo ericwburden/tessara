@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 //! Public boundary for the Organization feature.
 //!
 //! Re-export only route content components; keep Organization-specific
@@ -12,7 +14,6 @@ mod node_options;
 mod pages;
 mod pagination;
 mod related_work;
-mod related_work_controls;
 mod related_work_tables;
 mod text;
 mod tree;

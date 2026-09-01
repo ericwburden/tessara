@@ -1002,20 +1002,16 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     let document_credentials = |action: &str, contract: &str, include_manage: bool| {
         let correlation_id = Uuid::new_v4();
         let now = Utc::now();
-        let mut bindings = vec![CapabilityScopeBindingV1 {
-            capability: SecurityCapabilityId::new("datasets:read")
-                .expect("Dataset read capability"),
+        let capability = if include_manage {
+            "datasets:manage"
+        } else {
+            "datasets:read"
+        };
+        let bindings = vec![CapabilityScopeBindingV1 {
+            capability: SecurityCapabilityId::new(capability).expect("Dataset document capability"),
             organization_root_id: allowed_scope,
             authorized_organization_ids: Vec::new(),
         }];
-        if include_manage {
-            bindings.push(CapabilityScopeBindingV1 {
-                capability: SecurityCapabilityId::new("datasets:manage")
-                    .expect("Dataset manage capability"),
-                organization_root_id: allowed_scope,
-                authorized_organization_ids: Vec::new(),
-            });
-        }
         let authorization = authorization_signer
             .sign(AuthorizationGrantV3 {
                 schema_version: AUTHORIZATION_GRANT_SCHEMA_VERSION_V3,
@@ -1212,11 +1208,17 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     )
     .expect("canonical unavailable Dataset revision lifecycle response");
     assert_eq!(projection.destination.as_str(), "datasets.revision_detail");
-    assert_eq!(projection.payload["route"], "revision_unavailable");
+    assert_eq!(projection.payload["route"], "revision_deferred");
     assert_eq!(
-        projection.payload["message"],
-        "Dataset revision was not found."
+        projection.payload["dataset_id"],
+        visible_dataset.to_string()
     );
+    assert_eq!(
+        projection.payload["revision_id"],
+        unavailable_revision.to_string()
+    );
+    assert_eq!(projection.payload["can_manage"], true);
+    assert!(projection.payload.get("message").is_none());
     assert_eq!(owner_write_fingerprint(&pool).await, before_document_gets);
 
     let hidden = app
@@ -1292,9 +1294,11 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
                 },
                 dependency_binding: DependencyBindingKey::new("tessara.core.datasets")
                     .expect("Dataset Core binding"),
-                functional_contract: FunctionalContractId::new(
-                    "tessara.datasets.dataset-major-line",
-                )
+                functional_contract: FunctionalContractId::new(if include_manage {
+                    "tessara.datasets.authoring"
+                } else {
+                    "tessara.datasets.dataset-major-line"
+                })
                 .expect("Dataset resource contract"),
                 action: action.into(),
                 operation: AuthorizationGrantOperationV1::Read,
@@ -1347,12 +1351,12 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     );
 
     let (manager_revisions_grant, manager_revisions_correlation) =
-        revision_grant("datasets.list_revisions", true);
+        revision_grant("datasets.list_manageable_revisions", true);
     let manager_revisions_response = app
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/datasets/{visible_dataset}/revisions"))
+                .uri(format!("/api/admin/datasets/{visible_dataset}/revisions"))
                 .header("x-tessara-authorization", manager_revisions_grant)
                 .header(
                     "x-tessara-correlation-id",
@@ -1373,13 +1377,13 @@ async fn dataset_directory_is_module_owned_and_scope_filtered(pool: sqlx::PgPool
     assert_eq!(manager_revisions[0].id, draft_revision.to_string());
 
     let (manager_revision_grant, manager_revision_correlation) =
-        revision_grant("datasets.get_revision", true);
+        revision_grant("datasets.get_manageable_revision", true);
     let manager_revision_response = app
         .clone()
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/datasets/{visible_dataset}/revisions/{draft_revision}"
+                    "/api/admin/datasets/{visible_dataset}/revisions/{draft_revision}"
                 ))
                 .header("x-tessara-authorization", manager_revision_grant)
                 .header(

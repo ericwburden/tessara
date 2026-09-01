@@ -204,7 +204,7 @@ struct CoreBootstrapV1 {
     #[serde(default)]
     forms: Vec<CoreBootstrapFormV1>,
     #[serde(default)]
-    responses: Vec<CoreBootstrapResponseV1>,
+    workflow_assignments: Vec<CoreBootstrapWorkflowAssignmentV1>,
     #[serde(default)]
     actors: Vec<CoreBootstrapActorV1>,
 }
@@ -245,13 +245,11 @@ struct CoreBootstrapFormFieldV1 {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CoreBootstrapResponseV1 {
+struct CoreBootstrapWorkflowAssignmentV1 {
     resource_key: String,
     form_resource_key: String,
     node_key: String,
-    created_at: DateTime<Utc>,
-    submitted_at: DateTime<Utc>,
-    values: BTreeMap<String, Value>,
+    actor_resource_key: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1061,43 +1059,26 @@ async fn issue_bootstrap_dependency_authorization(
     let original_actor_id =
         Uuid::parse_str(&request.apply_authorization.payload.initiator.actor_id)
             .map_err(|_| reject_bootstrap_authorization("initiator_identity"))?;
+    let provider_manifests = match (module, manifest.as_ref()) {
+        (Some(module), Some(manifest)) => {
+            load_owner_bootstrap_provider_manifests(&lockfile, module, manifest).await?
+        }
+        _ => BTreeMap::new(),
+    };
     let provider_actions = match (module, manifest.as_ref()) {
-        (Some(module), Some(manifest)) => manifest
-            .consumed_service_actions
-            .iter()
-            .filter_map(|action| {
-                let binding = module
-                    .dependency_bindings
-                    .get(action.dependency_binding.as_str())?;
-                if binding.provider != "core"
-                    || binding.contract_id != action.functional_contract.as_str()
-                {
-                    return None;
-                }
-                let declaration = crate::core_service_providers::resolve_service_action(
-                    action.functional_contract.as_str(),
-                    &action.authorization_action,
-                )?;
-                Some((
-                    declaration.required_capability,
-                    OwnerBootstrapProviderActionV1 {
-                        dependency_binding: action.dependency_binding.to_string(),
-                        functional_contract: action.functional_contract.to_string(),
-                        action: action.authorization_action.clone(),
-                        method: declaration.method,
-                        path: declaration.path.into(),
-                        audience: AuthorizationAudienceV1::CoreInstallation {
-                            installation_id: request.installation_id,
-                        },
-                    },
-                ))
-            })
-            .collect::<Vec<_>>(),
+        (Some(module), Some(manifest)) => resolve_owner_bootstrap_provider_actions(
+            request.installation_id,
+            &lockfile.modules,
+            module,
+            manifest,
+            &provider_manifests,
+        )
+        .map_err(reject_bootstrap_authorization)?,
         _ => Vec::new(),
     };
     let required_capabilities = provider_actions
         .iter()
-        .map(|(capability, _)| *capability)
+        .flat_map(|(capabilities, _)| capabilities.iter().map(String::as_str))
         .collect::<BTreeSet<_>>();
     let mut capability_scope_bindings = Vec::new();
     for required_capability in required_capabilities {
@@ -1217,6 +1198,138 @@ async fn issue_bootstrap_dependency_authorization(
             validation,
         },
     ))
+}
+
+async fn load_owner_bootstrap_provider_manifests(
+    lockfile: &ApplicationLockfileV1,
+    owner: &tessara_composition::ResolvedModuleReleaseV1,
+    owner_manifest: &ModuleManifest,
+) -> ApiResult<BTreeMap<String, ModuleManifest>> {
+    let mut endpoints = module_control_endpoints()?;
+    let mut manifests = BTreeMap::new();
+    for action in &owner_manifest.consumed_service_actions {
+        let binding = owner
+            .dependency_bindings
+            .get(action.dependency_binding.as_str())
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_binding"))?;
+        if binding.provider == "core" || manifests.contains_key(&binding.provider) {
+            continue;
+        }
+        let provider = lockfile
+            .modules
+            .iter()
+            .find(|module| module.enabled && module.definition_id == binding.provider)
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_provider"))?;
+        let endpoint = endpoints
+            .remove(&provider.definition_id)
+            .ok_or_else(|| reject_bootstrap_authorization("provider_action_endpoint"))?;
+        let manifest = reqwest::Client::new()
+            .get(format!("{}/api/manifest", endpoint.trim_end_matches('/')))
+            .header("x-tessara-module-control-key", module_control_key()?)
+            .send()
+            .await
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_request"))?
+            .error_for_status()
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_status"))?
+            .json::<ModuleManifest>()
+            .await
+            .map_err(|_| reject_bootstrap_authorization("provider_action_manifest_decode"))?;
+        manifests.insert(provider.definition_id.clone(), manifest);
+    }
+    Ok(manifests)
+}
+
+fn resolve_owner_bootstrap_provider_actions(
+    installation_id: Uuid,
+    modules: &[tessara_composition::ResolvedModuleReleaseV1],
+    owner: &tessara_composition::ResolvedModuleReleaseV1,
+    owner_manifest: &ModuleManifest,
+    provider_manifests: &BTreeMap<String, ModuleManifest>,
+) -> Result<Vec<(Vec<String>, OwnerBootstrapProviderActionV1)>, &'static str> {
+    let mut resolved = Vec::with_capacity(owner_manifest.consumed_service_actions.len());
+    for action in &owner_manifest.consumed_service_actions {
+        let binding = owner
+            .dependency_bindings
+            .get(action.dependency_binding.as_str())
+            .ok_or("provider_action_binding")?;
+        if binding.contract_id != action.functional_contract.as_str() {
+            return Err("provider_action_contract");
+        }
+        let (required_capabilities, method, path, audience) = if binding.provider == "core" {
+            let declaration = crate::core_service_providers::resolve_service_action(
+                action.functional_contract.as_str(),
+                &action.authorization_action,
+            )
+            .ok_or("provider_action_declaration")?;
+            if crate::core_service_providers::contract_version(action.functional_contract.as_str())
+                != Some(binding.contract_version.clone())
+            {
+                return Err("provider_action_version");
+            }
+            (
+                declaration
+                    .required_capabilities_any_of
+                    .iter()
+                    .map(|capability| (*capability).to_string())
+                    .collect(),
+                declaration.method,
+                declaration.path.to_string(),
+                AuthorizationAudienceV1::CoreInstallation { installation_id },
+            )
+        } else {
+            let provider = modules
+                .iter()
+                .find(|module| module.enabled && module.definition_id == binding.provider)
+                .ok_or("provider_action_provider")?;
+            let provider_manifest = provider_manifests
+                .get(&provider.definition_id)
+                .ok_or("provider_action_manifest")?;
+            if provider_manifest.definition_id.as_str() != provider.definition_id
+                || provider_manifest.release_version != provider.version
+                || canonical_digest(provider_manifest)
+                    .map_err(|_| "provider_action_manifest_digest")?
+                    != provider.manifest_digest
+                || !provider_manifest.provided_contracts.iter().any(|contract| {
+                    contract.id == action.functional_contract
+                        && contract.version == binding.contract_version
+                })
+            {
+                return Err("provider_action_manifest_identity");
+            }
+            let declaration = provider_manifest
+                .provided_service_actions
+                .iter()
+                .find(|declaration| {
+                    declaration.functional_contract == action.functional_contract
+                        && declaration.authorization_action == action.authorization_action
+                })
+                .ok_or("provider_action_declaration")?;
+            (
+                vec![declaration.required_capability.to_string()],
+                declaration.method,
+                declaration.path.clone(),
+                AuthorizationAudienceV1::ModuleInstance {
+                    module_instance_id: tessara_composition::module_instance_id(
+                        installation_id,
+                        &provider.definition_id,
+                    ),
+                    module_definition_id: provider_manifest.definition_id.clone(),
+                },
+            )
+        };
+        resolved.push((
+            required_capabilities,
+            OwnerBootstrapProviderActionV1 {
+                dependency_binding: action.dependency_binding.to_string(),
+                functional_contract: action.functional_contract.to_string(),
+                action: action.authorization_action.clone(),
+                method,
+                path,
+                audience,
+            },
+        ));
+    }
+    Ok(resolved)
 }
 
 fn reject_bootstrap_authorization(reason: &'static str) -> ApiError {
@@ -1516,14 +1629,6 @@ async fn apply_core_bootstrap(
     Ok(Json(response))
 }
 
-#[derive(Clone)]
-struct BootstrappedForm {
-    form_version_id: Uuid,
-    workflow_version_id: Uuid,
-    workflow_step_id: Uuid,
-    field_ids: BTreeMap<String, Uuid>,
-}
-
 fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
     if input.schema_version != "tessara.io/core-bootstrap/v1"
         || !is_core_bootstrap_key(&input.root_node_type_external_key)
@@ -1567,7 +1672,7 @@ fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
             || !is_core_bootstrap_key(&form.source_alias)
             || form.name.trim().is_empty()
             || !is_core_bootstrap_slug(&form.slug)
-            || !form_keys.insert(&form.resource_key)
+            || !form_keys.insert(form.resource_key.as_str())
             || !form_slugs.insert(&form.slug)
             || version.major == 0
             || !version.pre.is_empty()
@@ -1593,66 +1698,6 @@ fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
             return Err(ApiError::BadRequest(
                 "Core bootstrap Form source contract is invalid".into(),
             ));
-        }
-    }
-
-    let mut response_keys = BTreeSet::new();
-    for response in &input.responses {
-        let Some(form) = input
-            .forms
-            .iter()
-            .find(|form| form.resource_key == response.form_resource_key)
-        else {
-            return Err(ApiError::BadRequest(
-                "Core bootstrap Response references an unknown Form".into(),
-            ));
-        };
-        let field_keys = form
-            .fields
-            .iter()
-            .map(|field| field.key.as_str())
-            .collect::<BTreeSet<_>>();
-        let required_field_keys = form
-            .fields
-            .iter()
-            .filter(|field| field.required)
-            .map(|field| field.key.as_str())
-            .collect::<BTreeSet<_>>();
-        if !is_core_bootstrap_key(&response.resource_key)
-            || !response_keys.insert(&response.resource_key)
-            || !node_keys.contains(response.node_key.as_str())
-            || response.submitted_at < response.created_at
-            || response.values.is_empty()
-            || response
-                .values
-                .keys()
-                .any(|key| !field_keys.contains(key.as_str()))
-            || required_field_keys.iter().any(|key| {
-                response
-                    .values
-                    .get(*key)
-                    .is_none_or(serde_json::Value::is_null)
-            })
-        {
-            return Err(ApiError::BadRequest(
-                "Core bootstrap submitted Response contract is invalid".into(),
-            ));
-        }
-        for (key, value) in &response.values {
-            if value.is_null() {
-                continue;
-            }
-            let field = form
-                .fields
-                .iter()
-                .find(|field| field.key == *key)
-                .expect("unknown Response fields were rejected above");
-            let field_type = crate::hierarchy::parse_field_type(&field.field_type)?;
-            crate::hierarchy::validate_field_value(field_type, value).map_err(|_| {
-                ApiError::BadRequest(
-                    "Core bootstrap submitted Response value type is invalid".into(),
-                )
-            })?;
         }
     }
 
@@ -1683,6 +1728,21 @@ fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
         }
     }
 
+    let mut assignment_keys = BTreeSet::new();
+    for assignment in &input.workflow_assignments {
+        if !is_core_bootstrap_key(&assignment.resource_key)
+            || !assignment.resource_key.starts_with("workflow.assignment.")
+            || !assignment_keys.insert(assignment.resource_key.as_str())
+            || !form_keys.contains(assignment.form_resource_key.as_str())
+            || !node_keys.contains(assignment.node_key.as_str())
+            || !actor_keys.contains(assignment.actor_resource_key.as_str())
+        {
+            return Err(ApiError::BadRequest(
+                "Core Workflow bootstrap assignment contract is invalid".into(),
+            ));
+        }
+    }
+
     let mut receipt_keys = node_keys
         .into_iter()
         .map(str::to_owned)
@@ -1692,10 +1752,6 @@ fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
             .actors
             .iter()
             .any(|actor| !receipt_keys.insert(actor.resource_key.clone()))
-        || input
-            .responses
-            .iter()
-            .any(|response| !receipt_keys.insert(response.resource_key.clone()))
     {
         return Err(ApiError::BadRequest(
             "Core bootstrap receipt logical keys overlap".into(),
@@ -1706,6 +1762,15 @@ fn validate_core_bootstrap_input(input: &CoreBootstrapV1) -> ApiResult<()> {
             if !receipt_keys.insert(format!("{}.{suffix}", form.resource_key)) {
                 return Err(ApiError::BadRequest(
                     "Core bootstrap Form receipt logical keys overlap".into(),
+                ));
+            }
+        }
+    }
+    for assignment in &input.workflow_assignments {
+        for suffix in ["assignment_id", "context"] {
+            if !receipt_keys.insert(format!("{}.{suffix}", assignment.resource_key)) {
+                return Err(ApiError::BadRequest(
+                    "Core Workflow bootstrap receipt logical keys overlap".into(),
                 ));
             }
         }
@@ -1788,7 +1853,7 @@ async fn materialize_core_bootstrap(
         &mut resources,
     )
     .await?;
-    let forms = materialize_core_bootstrap_forms(
+    materialize_core_bootstrap_forms(
         transaction,
         installation_id,
         node_type_id,
@@ -1797,13 +1862,10 @@ async fn materialize_core_bootstrap(
         &mut resources,
     )
     .await?;
-    materialize_core_bootstrap_responses(
+    materialize_core_bootstrap_workflow_assignments(
         transaction,
-        installation_id,
-        apply_actor_id,
         &node_ids,
-        &forms,
-        &input.responses,
+        &input.workflow_assignments,
         &mut resources,
     )
     .await?;
@@ -1911,8 +1973,7 @@ async fn materialize_core_bootstrap_forms(
     node_ids: &BTreeMap<String, Uuid>,
     forms: &[CoreBootstrapFormV1],
     resources: &mut BTreeMap<String, String>,
-) -> ApiResult<BTreeMap<String, BootstrappedForm>> {
-    let mut result = BTreeMap::new();
+) -> ApiResult<()> {
     for form in forms {
         let form_id = core_bootstrap_resource_id(installation_id, "form", &form.resource_key);
         let compatibility_group_id =
@@ -2024,12 +2085,11 @@ async fn materialize_core_bootstrap_forms(
             .await?;
             field_ids.insert(field.key.clone(), field_id);
         }
-        let (_, workflow_version_id, workflow_step_id) =
-            crate::workflows::ensure_workflow_for_published_form_version_tx(
-                transaction,
-                form_version_id,
-            )
-            .await?;
+        crate::workflows::ensure_workflow_for_published_form_version_tx(
+            transaction,
+            form_version_id,
+        )
+        .await?;
         let source = tessara_datasets_contract::DatasetProductSourceV1::Form {
             alias: form.source_alias.clone(),
             form_id: form_id.to_string(),
@@ -2055,6 +2115,8 @@ async fn materialize_core_bootstrap_forms(
                 position: field.position,
                 grid_row: field.grid_row,
                 grid_column: field.grid_column,
+                grid_width: 1,
+                grid_height: 1,
             })
             .collect::<Vec<_>>();
         schema_fields.sort_by(|left, right| {
@@ -2092,6 +2154,7 @@ async fn materialize_core_bootstrap_forms(
                 section_id,
                 key: section_id.to_string(),
                 label: "Response".into(),
+                description: String::new(),
                 position: 0,
             }],
             fields: schema_fields,
@@ -2114,108 +2177,56 @@ async fn materialize_core_bootstrap_forms(
             format!("{}.schema", form.resource_key),
             serde_json::to_string(&schema).map_err(|error| ApiError::Internal(error.into()))?,
         );
-        result.insert(
-            form.resource_key.clone(),
-            BootstrappedForm {
-                form_version_id,
-                workflow_version_id,
-                workflow_step_id,
-                field_ids,
-            },
-        );
     }
-    Ok(result)
+    Ok(())
 }
 
-async fn materialize_core_bootstrap_responses(
+async fn materialize_core_bootstrap_workflow_assignments(
     transaction: &mut Transaction<'_, Postgres>,
-    installation_id: Uuid,
-    apply_actor_id: Uuid,
     node_ids: &BTreeMap<String, Uuid>,
-    forms: &BTreeMap<String, BootstrappedForm>,
-    responses: &[CoreBootstrapResponseV1],
+    assignments: &[CoreBootstrapWorkflowAssignmentV1],
     resources: &mut BTreeMap<String, String>,
 ) -> ApiResult<()> {
-    crate::response_owner_actions::defer_export_capture_tx(transaction).await?;
-    for response in responses {
-        let form = &forms[&response.form_resource_key];
-        let node_id = node_ids[&response.node_key];
-        let assignment_key = format!(
-            "{}:{}:{apply_actor_id}",
-            response.form_resource_key, response.node_key
-        );
-        let assignment_id =
-            core_bootstrap_resource_id(installation_id, "workflow_assignment", &assignment_key);
-        let assignment_id: Uuid = sqlx::query_scalar(
-            "INSERT INTO workflow_assignments(
-                 id,workflow_version_id,workflow_step_id,node_id,account_id,
-                 assigned_by_account_id,is_active)
-             VALUES($1,$2,$3,$4,$5,$5,true)
-             ON CONFLICT(workflow_step_id,node_id,account_id) DO UPDATE SET
-                 workflow_version_id=EXCLUDED.workflow_version_id,is_active=true
-             RETURNING id",
+    for assignment in assignments {
+        let form_version_id = Uuid::parse_str(
+            resources
+                .get(&format!("{}.form_version_id", assignment.form_resource_key))
+                .ok_or_else(|| {
+                    ApiError::BadRequest("Workflow bootstrap FormVersion is missing".into())
+                })?,
         )
-        .bind(assignment_id)
-        .bind(form.workflow_version_id)
-        .bind(form.workflow_step_id)
-        .bind(node_id)
-        .bind(apply_actor_id)
-        .fetch_one(&mut **transaction)
-        .await?;
-        let response_id =
-            core_bootstrap_resource_id(installation_id, "response", &response.resource_key);
-        sqlx::query(
-            "INSERT INTO submissions(
-                 id,form_version_id,node_id,workflow_assignment_id,status,submitted_at,created_at)
-             VALUES($1,$2,$3,$4,'draft'::submission_status,NULL,$5)",
+        .map_err(|error| ApiError::Internal(error.into()))?;
+        let account_id = Uuid::parse_str(
+            resources
+                .get(&assignment.actor_resource_key)
+                .ok_or_else(|| {
+                    ApiError::BadRequest("Workflow bootstrap actor is missing".into())
+                })?,
         )
-        .bind(response_id)
-        .bind(form.form_version_id)
-        .bind(node_id)
-        .bind(assignment_id)
-        .bind(response.created_at)
-        .execute(&mut **transaction)
-        .await?;
-        for (field_key, value) in &response.values {
-            sqlx::query(
-                "INSERT INTO submission_values(submission_id,form_version_id,field_id,value)
-                 VALUES($1,$2,$3,$4)",
+        .map_err(|error| ApiError::Internal(error.into()))?;
+        let node_id = node_ids[&assignment.node_key];
+        let workflow_assignment_id =
+            crate::workflows::ensure_workflow_assignment_for_form_version_tx(
+                transaction,
+                form_version_id,
+                node_id,
+                account_id,
             )
-            .bind(response_id)
-            .bind(form.form_version_id)
-            .bind(form.field_ids[field_key])
-            .bind(value)
-            .execute(&mut **transaction)
             .await?;
-        }
-        let audit_id =
-            core_bootstrap_resource_id(installation_id, "response_audit", &response.resource_key);
-        sqlx::query(
-            "INSERT INTO submission_audit_events(id,submission_id,event_type,account_id,created_at)
-             VALUES($1,$2,$3,$4,$5)",
+        let context = crate::workflow_response_provider::issue_bootstrap_context_tx(
+            transaction,
+            workflow_assignment_id,
+            account_id,
         )
-        .bind(audit_id)
-        .bind(response_id)
-        .bind(format!("bootstrap:{}", response.resource_key))
-        .bind(apply_actor_id)
-        .bind(response.submitted_at)
-        .execute(&mut **transaction)
         .await?;
-        // Build the complete aggregate while it is a draft so the generic
-        // table triggers cannot publish partial value/audit snapshots. The
-        // final lifecycle transition emits exactly one immutable upsert with
-        // the complete value set and authoritative audit identity.
-        sqlx::query(
-            "UPDATE submissions
-                SET status='submitted'::submission_status,submitted_at=$2
-              WHERE id=$1 AND status='draft'::submission_status",
-        )
-        .bind(response_id)
-        .bind(response.submitted_at)
-        .execute(&mut **transaction)
-        .await?;
-        crate::response_owner_actions::append_final_upsert_tx(transaction, response_id).await?;
-        resources.insert(response.resource_key.clone(), response_id.to_string());
+        resources.insert(
+            format!("{}.assignment_id", assignment.resource_key),
+            workflow_assignment_id.to_string(),
+        );
+        resources.insert(
+            format!("{}.context", assignment.resource_key),
+            serde_json::to_string(&context).map_err(|error| ApiError::Internal(error.into()))?,
+        );
     }
     Ok(())
 }
@@ -2716,6 +2727,102 @@ mod tests {
         );
     }
 
+    #[test]
+    fn owner_bootstrap_authorization_resolves_module_provider_actions() {
+        let installation_id = Uuid::from_u128(0x8c);
+        let (mut owner, mut owner_manifest) = dataset_bootstrap_manifest_fixture();
+        owner_manifest.consumed_service_actions.retain(|action| {
+            action.dependency_binding.as_str() == "tessara.datasets.response-export"
+        });
+        owner.dependency_bindings.insert(
+            "tessara.datasets.response-export".into(),
+            tessara_composition::ResolvedContractBindingV1 {
+                provider: "tessara.responses".into(),
+                contract_id: "tessara.responses.submitted-response-export".into(),
+                contract_version: semver::Version::new(1, 0, 0),
+            },
+        );
+        let provider_manifest: ModuleManifest = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../tessara-response-module/manifest.json"
+        )))
+        .expect("Response manifest");
+        let provider = tessara_composition::ResolvedModuleReleaseV1 {
+            definition_id: provider_manifest.definition_id.to_string(),
+            version: provider_manifest.release_version.clone(),
+            manifest_digest: canonical_digest(&provider_manifest)
+                .expect("Response manifest digest"),
+            runtime_image: ArtifactDigest::new(format!("sha256:{}", "9".repeat(64)))
+                .expect("runtime digest"),
+            deployment_profile: "tessara-oci-v1".into(),
+            enabled: true,
+            configuration_schema_version: "tessara.io/response-configuration/v1".into(),
+            configuration: serde_json::json!({}),
+            configuration_digest: canonical_digest(&serde_json::json!({}))
+                .expect("configuration digest"),
+            bootstrap_schema_version: Some("tessara.io/response-bootstrap/v1".into()),
+            bootstrap: None,
+            bootstrap_digest: None,
+            dependency_bindings: BTreeMap::new(),
+        };
+        let provider_manifests =
+            BTreeMap::from([(provider.definition_id.clone(), provider_manifest.clone())]);
+
+        let actions = resolve_owner_bootstrap_provider_actions(
+            installation_id,
+            std::slice::from_ref(&provider),
+            &owner,
+            &owner_manifest,
+            &provider_manifests,
+        )
+        .expect("module provider actions");
+        assert_eq!(actions.len(), 3);
+        assert!(actions.iter().all(|(capabilities, action)| {
+            capabilities == &["submissions:manage"]
+                && action.functional_contract == "tessara.responses.submitted-response-export"
+                && action.audience
+                    == (AuthorizationAudienceV1::ModuleInstance {
+                        module_instance_id: tessara_composition::module_instance_id(
+                            installation_id,
+                            "tessara.responses",
+                        ),
+                        module_definition_id: provider_manifest.definition_id.clone(),
+                    })
+        }));
+        assert_eq!(
+            actions
+                .iter()
+                .map(|(_, action)| action.action.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "responses.export_checkpoint",
+                "responses.export_page",
+                "responses.export_start",
+            ])
+        );
+
+        let mut incomplete_manifest = provider_manifest;
+        incomplete_manifest
+            .provided_service_actions
+            .retain(|action| action.authorization_action != "responses.export_page");
+        let mut incomplete_provider = provider;
+        incomplete_provider.manifest_digest =
+            canonical_digest(&incomplete_manifest).expect("incomplete manifest digest");
+        assert_eq!(
+            resolve_owner_bootstrap_provider_actions(
+                installation_id,
+                std::slice::from_ref(&incomplete_provider),
+                &owner,
+                &owner_manifest,
+                &BTreeMap::from([(
+                    incomplete_provider.definition_id.clone(),
+                    incomplete_manifest,
+                )]),
+            ),
+            Err("provider_action_declaration")
+        );
+    }
+
     #[sqlx::test(migrations = "./migrations")]
     async fn fresh_baseline_enrolls_dataset_security_before_core_actor_bootstrap(
         pool: sqlx::PgPool,
@@ -2906,13 +3013,11 @@ mod tests {
                     "grid_column": 1
                 }]
             }],
-            "responses": [{
-                "resource_key": "response.initial",
+            "workflow_assignments": [{
+                "resource_key": "workflow.assignment.primary",
                 "form_resource_key": "form.primary/v1",
                 "node_key": "scope.restricted",
-                "created_at": "2026-08-01T12:01:00Z",
-                "submitted_at": "2026-08-01T12:02:00Z",
-                "values": {"amount": 17}
+                "actor_resource_key": "actor.reader"
             }],
             "actors": [{
                 "resource_key": "actor.reader",
@@ -2968,35 +3073,16 @@ mod tests {
         unknown_parent.additional_nodes[0].parent_node_key = Some("scope.substituted".into());
         assert!(validate_core_bootstrap_input(&unknown_parent).is_err());
 
-        let mut substituted_form = valid_core_bootstrap_fixture();
-        substituted_form.responses[0].form_resource_key = "form.substituted/v1".into();
-        assert!(validate_core_bootstrap_input(&substituted_form).is_err());
-
-        let mut substituted_field = valid_core_bootstrap_fixture();
-        substituted_field.responses[0]
-            .values
-            .insert("unknown".into(), Value::String("hidden".into()));
-        assert!(validate_core_bootstrap_input(&substituted_field).is_err());
-
-        let mut missing_required_field = valid_core_bootstrap_fixture();
-        missing_required_field.responses[0].values.clear();
-        assert!(validate_core_bootstrap_input(&missing_required_field).is_err());
-
-        let mut wrong_value_type = valid_core_bootstrap_fixture();
-        wrong_value_type.responses[0]
-            .values
-            .insert("amount".into(), Value::String("seventeen".into()));
-        assert!(validate_core_bootstrap_input(&wrong_value_type).is_err());
+        let mut substituted_assignment = valid_core_bootstrap_fixture();
+        substituted_assignment.workflow_assignments[0].form_resource_key =
+            "form.substituted/v1".into();
+        assert!(validate_core_bootstrap_input(&substituted_assignment).is_err());
 
         let mut duplicate_actor_scope = valid_core_bootstrap_fixture();
         duplicate_actor_scope.actors[0]
             .scope_node_keys
             .push("scope.restricted".into());
         assert!(validate_core_bootstrap_input(&duplicate_actor_scope).is_err());
-
-        let mut overlapping_receipt = valid_core_bootstrap_fixture();
-        overlapping_receipt.responses[0].resource_key = "scope.restricted".into();
-        assert!(validate_core_bootstrap_input(&overlapping_receipt).is_err());
     }
 
     #[test]

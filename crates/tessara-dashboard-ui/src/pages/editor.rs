@@ -60,7 +60,7 @@ use navigation_guard::{
 use operation::EditorOperation;
 use requests::{
     CompositionLoadContext, LayoutSaveContext, SettingsSaveContext, load_composition,
-    load_settings_nodes, save_layout, save_settings,
+    load_reader_access, load_settings_nodes, save_layout, save_settings,
 };
 
 #[cfg(all(feature = "hydrate", target_arch = "wasm32"))]
@@ -104,8 +104,9 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    let initial_reader_access = editor_reader_actions_visible(initial_account.as_ref());
     let composition = RwSignal::new(initial_composition);
-    let account = RwSignal::new(initial_account);
+    let reader_access = RwSignal::new(initial_reader_access);
     let dependency_health = RwSignal::new(initial_dependency_health);
     let dependency_error = RwSignal::new(None::<String>);
     let dependency_loading = RwSignal::new(false);
@@ -132,12 +133,12 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
     Effect::new({
         let dashboard_id = dashboard_id.clone();
         move |_| {
+            load_reader_access(dashboard_id.clone(), reader_access);
             if !bootstrapped {
                 load_composition(
                     dashboard_id.clone(),
                     CompositionLoadContext {
                         composition,
-                        account,
                         placements,
                         loading,
                         error: load_error,
@@ -184,8 +185,7 @@ pub fn DashboardEditorContent(dashboard_id: String) -> impl IntoView {
                         .map(|placement| placement.effective_resolution_state().title().to_string())
                         .unwrap_or_else(|| "Placement issue".to_string())
                 });
-                let current_account = account.get();
-                let can_read_dashboard = editor_reader_actions_visible(current_account.as_ref());
+                let can_read_dashboard = reader_access.get();
                 let available_options = StoredValue::new(loaded.available_component_versions);
                 view! {
                         <div

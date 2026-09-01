@@ -50,7 +50,12 @@ pub use protocol::{
     AuthorizationGrantV3, AuthorizationValidationContextV2, AuthorizationValidationContextV3,
     AuthorizationValidationError, CapabilityScopeBindingV1, CoreServiceRequestV1,
     CoreServiceRequestValidationContextV1, CoreServiceRequestValidationError, DelegationBasisV1,
-    ExternalIdentityAssertionV1, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+    ExternalIdentityAssertionV1, MODULE_PROVIDER_COMPATIBILITY_MAX_EXPECTATIONS,
+    MODULE_PROVIDER_COMPATIBILITY_MAX_LIFETIME_SECONDS, MODULE_PROVIDER_COMPATIBILITY_MEDIA_TYPE,
+    MODULE_PROVIDER_COMPATIBILITY_PATH, MODULE_PROVIDER_COMPATIBILITY_SCHEMA_VERSION_V1,
+    MODULE_PROVIDER_COMPATIBILITY_SERVICE_CONTEXT, MODULE_SERVICE_REQUEST_MAX_LIFETIME_SECONDS,
+    ModuleProviderCompatibilityError, ModuleProviderCompatibilityExpectationV1,
+    ModuleProviderCompatibilityRequestV1, ModuleProviderCompatibilityResponseV1,
     ModuleServicePrincipalV1, ModuleServiceRequestV1, ModuleServiceRequestValidationContextV1,
     ModuleServiceRequestValidationError, OriginalActorProjectionV1, ProtocolEnvelopeError,
     ProtocolSignaturePurposeV1, PurposeBoundSigningKeyV1, PurposeBoundVerifyingKeyV1,
@@ -77,7 +82,7 @@ use uuid::Uuid;
 pub const CONTRACT_SCHEMA_VERSION_V1: u16 = 1;
 /// Exact schema version for the policy-neutral resource observation envelope.
 pub const RESOURCE_OBSERVATION_SCHEMA_VERSION_V1: u16 = 1;
-pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 3;
+pub const MODULE_MANIFEST_SCHEMA_VERSION: u16 = 4;
 pub const CURRENT_CORE_RELEASE: &str = "0.1.0";
 pub const CURRENT_SHELL_CONTEXT_SCHEMA: &str = "2.0.0";
 pub const CURRENT_MODULE_CONTROL_PROTOCOL: &str = "1.1.0";
@@ -105,7 +110,7 @@ where
     D: Deserializer<'de>,
 {
     let schema_version = u16::deserialize(deserializer)?;
-    if !matches!(schema_version, 2 | MODULE_MANIFEST_SCHEMA_VERSION) {
+    if schema_version != MODULE_MANIFEST_SCHEMA_VERSION {
         return Err(de::Error::custom(format!(
             "module manifest schema version {schema_version} is unsupported; expected {MODULE_MANIFEST_SCHEMA_VERSION}"
         )));
@@ -1705,7 +1710,7 @@ pub enum PublicApiMethod {
 pub struct PublicApiRouteDeclaration {
     pub path_template: String,
     pub method: PublicApiMethod,
-    pub required_capability: SecurityCapabilityId,
+    pub required_capabilities_any_of: Vec<SecurityCapabilityId>,
     pub authorization_action: String,
     pub dependency_binding: DependencyBindingKey,
     pub operation: AuthorizationGrantOperationV1,
@@ -2889,12 +2894,31 @@ fn validate_manifest_links(manifest: &ModuleManifest, findings: &mut Vec<Validat
                 message: "public API paths must be local /api paths outside /api/private".into(),
             });
         }
-        if !capability_ids.contains(api_route.required_capability.as_str()) {
+        if api_route.required_capabilities_any_of.is_empty() {
             findings.push(ValidationFinding {
-                code: "unresolved_public_api_capability".into(),
-                path: format!("{base}.required_capability"),
-                message: "public API capability must be declared by the manifest".into(),
+                code: "invalid_public_api_capabilities".into(),
+                path: format!("{base}.required_capabilities_any_of"),
+                message: "public API routes require at least one capability".into(),
             });
+        }
+        let mut route_capabilities = BTreeSet::new();
+        for (capability_index, capability) in
+            api_route.required_capabilities_any_of.iter().enumerate()
+        {
+            let path = format!("{base}.required_capabilities_any_of[{capability_index}]");
+            if !route_capabilities.insert(capability.as_str()) {
+                findings.push(ValidationFinding {
+                    code: "duplicate_public_api_capability".into(),
+                    path,
+                    message: "public API route capabilities must be unique".into(),
+                });
+            } else if !capability_ids.contains(capability.as_str()) {
+                findings.push(ValidationFinding {
+                    code: "unresolved_public_api_capability".into(),
+                    path,
+                    message: "public API capability must be declared by the manifest".into(),
+                });
+            }
         }
         if !contract_ids.contains(api_route.functional_contract.as_str()) {
             findings.push(ValidationFinding {
@@ -3849,6 +3873,96 @@ mod tests {
         assert!(error.findings.iter().any(|finding| {
             finding.code == "mismatched_consumed_service_contract"
                 && finding.path == "consumed_service_actions[0].functional_contract"
+        }));
+    }
+
+    #[test]
+    fn public_api_routes_require_a_nonempty_unique_declared_capability_set() {
+        let mut manifest = forms_manifest();
+        assert_eq!(manifest.schema_version, MODULE_MANIFEST_SCHEMA_VERSION);
+        assert_eq!(
+            manifest.platform_versions.module_contract,
+            Version::new(0, 4, 0)
+        );
+        assert_eq!(
+            manifest.linked_packages.module_contract,
+            Version::new(0, 4, 0)
+        );
+
+        let mut retired_schema_wire = serde_json::to_value(&manifest).unwrap();
+        retired_schema_wire["schema_version"] = serde_json::json!(3);
+        assert!(
+            serde_json::from_value::<ModuleManifest>(retired_schema_wire).is_err(),
+            "manifest schema 3 has no compatibility reader"
+        );
+
+        let mut retired_contract = manifest.clone();
+        retired_contract.platform_versions.module_contract = Version::new(0, 3, 0);
+        retired_contract.linked_packages.module_contract = Version::new(0, 3, 0);
+        let retired_contract_error = retired_contract
+            .validate(&forms_authority())
+            .expect_err("module-contract 0.3 has no compatibility support");
+        assert!(retired_contract_error.findings.iter().any(|finding| {
+            finding.code == "unsupported_platform_version"
+                && finding.path == "platform_versions.module_contract"
+        }));
+
+        manifest.public_api_routes.push(PublicApiRouteDeclaration {
+            path_template: "/api/forms/{form_id}".into(),
+            method: PublicApiMethod::Delete,
+            required_capabilities_any_of: vec![id("forms:read"), id("forms:manage")],
+            authorization_action: "forms.delete".into(),
+            dependency_binding: id("tessara.core.forms"),
+            operation: AuthorizationGrantOperationV1::Mutation,
+            functional_contract: manifest.provided_contracts[0].id.clone(),
+            idempotency: PublicApiIdempotency::ForwardOrGenerateHeader,
+        });
+        manifest
+            .validate(&forms_authority())
+            .expect("an exact public capability alternative set is valid");
+        let mut retired_wire = serde_json::to_value(&manifest).unwrap();
+        let route = retired_wire["public_api_routes"][0]
+            .as_object_mut()
+            .unwrap();
+        route.remove("required_capabilities_any_of");
+        route.insert(
+            "required_capability".into(),
+            serde_json::Value::String("forms:read".into()),
+        );
+        assert!(
+            serde_json::from_value::<ModuleManifest>(retired_wire).is_err(),
+            "the retired singular public capability field has no compatibility reader"
+        );
+
+        manifest.public_api_routes[0].required_capabilities_any_of =
+            vec![id("forms:read"), id("forms:read")];
+        let duplicate = manifest
+            .validate(&forms_authority())
+            .expect_err("duplicate public route capabilities are invalid");
+        assert!(duplicate.findings.iter().any(|finding| {
+            finding.code == "duplicate_public_api_capability"
+                && finding.path == "public_api_routes[0].required_capabilities_any_of[1]"
+        }));
+
+        manifest.public_api_routes[0].required_capabilities_any_of =
+            vec![id("forms:read"), id("forms:unknown")];
+        let unresolved = manifest
+            .validate(&forms_authority())
+            .expect_err("undeclared public route capabilities are invalid");
+        assert!(unresolved.findings.iter().any(|finding| {
+            finding.code == "unresolved_public_api_capability"
+                && finding.path == "public_api_routes[0].required_capabilities_any_of[1]"
+        }));
+
+        manifest.public_api_routes[0]
+            .required_capabilities_any_of
+            .clear();
+        let empty = manifest
+            .validate(&forms_authority())
+            .expect_err("empty public route capabilities are invalid");
+        assert!(empty.findings.iter().any(|finding| {
+            finding.code == "invalid_public_api_capabilities"
+                && finding.path == "public_api_routes[0].required_capabilities_any_of"
         }));
     }
 

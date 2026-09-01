@@ -8,6 +8,220 @@ project direction.
 “Next Sprint” labels inside dated entries are historical snapshots and may be
 superseded. Use the current sequencing in `docs/roadmap.md`.
 
+## 2026-09-01 - Sprint 8C Response Module Separation Closeout
+
+Sprint 8C is complete. Responses now runs as an independently deployed module
+with its own release, instance, database, persistence, API, UI, configuration,
+diagnostics, health, bootstrap, and lifecycle. Core no longer owns Response
+product schema, routes, adapters, seed, navigation, or compatibility readers.
+The module consumes authenticated typed FormVersion and Workflow context,
+publishes ordered Workflow events, and provides the typed submitted-response
+export consumed by Dataset, Component, and Dashboard.
+
+The certified product source is commit
+`460096223afb00055f9271f24810d8fc79055b5e`, tree
+`2eadb5f26e9cfd505a133391f2f1e8749e0de99c`, candidate fingerprint
+`bf32368f66d3461bb5b9485dba8634997ea9563b6056c36a3c1814247313a2f4`,
+and active Response image digest
+`sha256:bcddcb5da80fd9350103c639c0b4ac3b9aeb8a5101c24c5d1c78c438c4ac70bd`.
+The documentation-only closeout commit is intentionally separate from this
+evidence-source commit; its resulting hash is retained in the final closeout
+authorization after the commit is created.
+
+Validation completed on the exact candidate:
+
+- Implementation Readiness passed all 23 declared targets with zero known
+  failures and passing materialization, no-op, recovery, and restoration.
+- Validation Readiness passed all three lanes, Candidate Rehearsal passed all
+  twelve lanes, and Preflight froze the clean candidate above.
+- SIT passed all four complete candidate-bound lanes: static/boundaries, Rust
+  workspace, Playwright, and deployed acceptance smoke.
+- UAT passed all eleven declared lanes and all eleven human scenarios with no
+  inheritance, no open defect, and no open product decision.
+- The policy-v2 final audit authenticated six sealed phase indexes and 4,278
+  artifacts. A closeout-discovered impact-record publication defect was fixed
+  without changing candidate or assertion results: the original provenance-
+  bound bytes remain authenticated, and their schema-valid finalization
+  successor is included in the reissued evidence chain.
+
+The reviewer topology remains running as Compose project
+`tessara-s8c-uat-manual-bf32368f` at `http://127.0.0.1:59474`. Gateway health
+and readiness return HTTP 200, Response `1.0.0` is restored and healthy, and
+the retained rollback state is `response-release-1.0.0-restored`.
+
+Next focus: Sprint 8D1 extracts Workflow authoring, publication, assignment,
+runtime coordination, persistence, configuration, and diagnostics behind
+public Form and Response contracts.
+
+### Sprint Handoff / Demo Instructions
+
+#### Response lifecycle and accepted UI
+
+- Role: Response Owner.
+- Paths: `/login`, `/responses`, and an assigned draft's `/responses/<id>/edit`.
+- Steps:
+  1. Sign in as the Response Owner and open Responses.
+  2. Open the assigned draft, edit its Label, Amount, and Category, save, and
+     refresh to prove resume behavior.
+  3. Submit the draft, review the submitted values, refresh the detail route,
+     exercise Light/Dark/System themes and narrow width, then sign out.
+- Expected: save/resume/submit/review persist; the submitted workflow reports
+  no active step and one of one steps complete; theme selection, responsive
+  layout, hydration, and sign-out remain correct.
+- Acceptance check: pass only when every action above succeeds without a
+  not-found, route, console, overflow, or stale-selection defect.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-01/result.json`.
+
+#### Assignment, typed providers, and scoped review
+
+- Roles: Response Owner, Delegate, Scoped Response Manager, and disjoint
+  Response Outsider.
+- Paths: `/responses`, `/responses/new`, `/responses/<id>`.
+- Steps:
+  1. Confirm consumed or invalid assignments cannot start a second Response.
+  2. Open the valid draft and inspect the typed FormVersion fields without
+     saving.
+  3. Switch among delegate, manager, outsider, and owner accounts; compare the
+     exact visible rows and direct known/random forbidden identities.
+- Expected: only the exact active assignment starts; provider fields render;
+  each role sees only its scope; known and random forbidden identities are
+  indistinguishable.
+- Acceptance check: fail on any extra draft, leaked existence/value, provider
+  error, or account-card overflow.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-02/result.json`
+  and `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-03/result.json`.
+
+#### Workflow, Dataset, Component, and Dashboard consumption
+
+- Roles: Administrator and Full Dataset Reader.
+- Paths: `/operations`, `/datasets`, `/components`, and
+  `/dashboards/fdd7f76b-51db-8561-88ed-388698223dbe`.
+- Steps:
+  1. In Operations, confirm completed submitted workflows, the active draft,
+     Response owner readiness, and scope-correct Dataset counts.
+  2. As Full Dataset Reader, inspect Base Responses, Derived Responses, and
+     Derived Second Hop and confirm one submitted row through the two-hop chain.
+  3. Open Dataset Row Count and Dataset Components; compare the stat, table,
+     chart, and restricted placement before and after refresh.
+- Expected: Workflow advances once; Dataset closure is ready; the stat shows a
+  dominant value `1`; the table shows Submitted owner / `20`; the restricted
+  placement remains nondisclosing.
+- Acceptance check: fail on stale Workflow progress, missing output, visual
+  hierarchy drift, inconsistent Component/Dashboard rendering, or disclosure.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-04/result.json`
+  and `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-11/result.json`.
+
+#### Replay, compatibility, and outage recovery
+
+- Roles: Administrator and Operations Reader.
+- Paths: retained `UAT-8C-05-review-evidence.json`; optional `/operations`.
+- Steps:
+  1. Review exact replay, changed-input conflict, and stable fresh-grant proof.
+  2. Review the injected provider outage and recovery of the coherent Dataset
+     closure and independent binding.
+- Expected: mutations apply once and replay exactly; incompatible reuse fails;
+  outage output is sanitized, last-good state survives, and retry restores
+  readiness without false-zero output.
+- Acceptance check: fail on double mutation, accepted changed-input replay,
+  secret leakage, partial closure, or failed recovery.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-05/result.json`.
+
+#### Configuration and diagnostics
+
+- Roles: Administrator and Operations Reader.
+- Paths: `/administration/modules/tessara.responses#configuration` and
+  `/operations`.
+- Steps:
+  1. As Administrator, inspect Response `1.0.0`, edit without changing the four
+     schema-owned values, save, and open health and diagnostics.
+  2. Confirm healthy owner-authentic metrics, typed dependencies, and sanitized
+     download content.
+  3. As Operations Reader, confirm the Operations projection is Ready and the
+     installation-global Module Management route remains restricted.
+- Expected: the no-op save remains valid; diagnostics contain no secrets or
+  record identities; the operator sees only the authorized projection.
+- Acceptance check: fail on configuration drift, unhealthy owner metrics,
+  sensitive data, missing Operations status, or excess Module Management
+  access.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-06/result.json`.
+
+#### Fresh materialization, isolation, and failure recovery
+
+- Role: Operations Reader/operator.
+- Paths: retained UAT-8C-07, UAT-8C-08, and UAT-8C-09 review evidence;
+  optional `/operations`.
+- Steps:
+  1. Review the empty-database first apply and unchanged second apply.
+  2. Review Core subtraction, one Response navigation contribution, and all 30
+     denied cross-owner database attempts.
+  3. Review each bounded failed apply, exact partial teardown, verified-empty
+     successor, semantic no-op, health, and final teardown.
+- Expected: owner order and signed read-back are exact; the second apply is a
+  semantic no-op; Core owns no Response product surface; isolation and clean
+  recovery hold without manual repair.
+- Acceptance check: fail on predicted/shared identity, unexpected database
+  access, residue, missing failure retention, or non-canonical successor.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-07/result.json`,
+  `UAT-8C-08/result.json`, and `UAT-8C-09/result.json` beneath the same path.
+
+#### Independent Response upgrade and rollback
+
+- Role: Operations Reader/operator.
+- Path: retained UAT-8C-10 review evidence.
+- Steps: review the Response-only sequence `0.9.0 → 1.0.0 → 0.9.0 → 1.0.0`
+  and compare state, instance/resource/navigation identity, outbox positions,
+  unrelated owners, health, and teardown at every stage.
+- Expected: Response alone changes version; state and unrelated owners remain
+  unchanged; final Response `1.0.0` is healthy and teardown leaves no residue.
+- Acceptance check: fail on data/identity drift, unrelated restart or image
+  change, health failure, or leftover project resource.
+- Evidence: `artifacts/sprint-8c-closeout/uat/scenarios/UAT-8C-10/result.json`.
+
+### Acceptance Mapping
+
+| Roadmap exit-condition clause | Manual demonstration | Automated assertion / command | Deployed-smoke assertion | Evidence and candidate |
+| --- | --- | --- | --- | --- |
+| Responses is independently deployed and exposes captured data without sharing its persistence. | UAT-8C-07, UAT-8C-08, UAT-8C-11 | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target owner-product`; `-Target core-subtraction`; SIT static/Rust | exact Response release, instance, database, health, and cross-owner denial | Readiness, Rehearsal, SIT, and UAT phase indexes; candidate `bf32368f…` |
+| Move response start, draft, save, submit, review, export/materialization, persistence, configuration, and diagnostics into the Response module. | UAT-8C-01, UAT-8C-04, UAT-8C-06 | `-Target owner-product`; `-Target api-idempotency`; complete Playwright | start/save/submit/review, owner diagnostics, and Response export through gateway | UAT scenario results 01, 04, 06; SIT smoke; candidate `bf32368f…` |
+| Consume typed FormVersion and Workflow context without reading Forms or Workflow tables. | UAT-8C-02, UAT-8C-08 | `-Target provider-contracts`; `-Target assignment-only`; contract boundaries | real provider processes plus credential denial and exact context rendering | UAT results 02, 08; SIT Rust/smoke; candidate `bf32368f…` |
+| Expose typed response/source contracts and events for Dataset and Workflow consumers. | UAT-8C-04, UAT-8C-11 | `-Target dataset-export`; `-Target workflow-events`; consumer cutover | submit advances Workflow once and Dataset imports exact submitted output | UAT results 04, 11; SIT smoke; candidate `bf32368f…` |
+| Preserve assignment-only response starts and scoped review behavior. | UAT-8C-02 and UAT-8C-03 | `-Target assignment-only`; `-Target scoped-review`; Playwright authorization identities | active assignment succeeds; invalid start and forbidden review nondisclose | UAT results 02, 03; SIT browser; candidate `bf32368f…` |
+| Rebuild canonical seed/test data from empty through owning bootstrap contracts and remove direct access to Forms, Workflows, Datasets, or Core storage. | UAT-8C-07, UAT-8C-08, UAT-8C-09 | `-Target migration-seed`; `-Target clean-materialization`; `-Target semantic-noop`; `-Target failure-recovery` | owner-ordered signed read-back, exact isolation, recovery, and health | UAT results 07–09; Rehearsal materialization/recovery; candidate `bf32368f…` |
+| Add cross-module authorization, idempotency, event, outage, and compatibility coverage. | UAT-8C-04 and UAT-8C-05 | `-Target api-idempotency`; `-Target workflow-events`; Rust adversarial matrices | replay once, reject mismatch, sanitized last-good outage and recovery | UAT results 04, 05; SIT Rust/smoke; candidate `bf32368f…` |
+| Keep response-entry, submission, review, configuration, and diagnostics flows unchanged through the shared shell. | UAT-8C-01 and UAT-8C-06 | `-Target ui-sdk-conformance`; complete Playwright visual/SSR/hydration inventory | direct and lifecycle Response pages plus Module Management/Operations projections | UAT results 01, 06; SIT browser; candidate `bf32368f…` |
+| A tester can complete and review a response through module contracts and consume its output in Datasets without shared database access. | UAT-8C-11 | `-Target consumer-cutover`; `-Target deployed-smoke`; `-Target uat-readiness` | Response lifecycle → Dataset two-hop closure → Component/Dashboard, with 30/30 cross-owner denials | UAT result 11; SIT smoke; candidate `bf32368f…` |
+
+## 2026-08-23 - Sprint 8C Response Module Separation Kickoff
+
+- Status: kickoff planning complete; implementation authorized on 2026-08-23.
+- Branch: `codex/sprint-8c`.
+- Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8c`.
+- Execution contract: `docs/sprints/sprint-8c-plan.md`.
+- Planned validation record: `docs/sprints/sprint-8c-verification.md`.
+- Policy-v2 contract: `docs/sprints/sprint-8c-validation-contract.json` using
+  `phase8-module-extraction` for Module Definition and transition identity
+  `tessara.responses`.
+- Planned verification includes `cargo fmt --all -- --check`, warnings-denied
+  Clippy, `cargo test --workspace --locked`, `npm --prefix .\end2end test`,
+  `.\scripts\local-launch.ps1`, `.\scripts\smoke.ps1`, and
+  `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"`, plus exact
+  Response owner, provider, Workflow-event, Dataset-export, UI conformance,
+  isolation, clean materialization/no-op/recovery and upgrade/rollback targets.
+- Product blockers: none. The user approved durable eventual Workflow-event
+  delivery during Workflow outage, pinned-snapshot editing for existing drafts,
+  live compatible providers for new starts, and fresh reset/reseed with no data
+  migration. A newly discovered storage dependency, consumer edge,
+  unbounded event state, or UI ownership ambiguity returns to planning before
+  cutover; a required provider contract that would move Forms/Workflow product
+  policy requires user direction.
+- Authorized first slice: freeze Response v2, Workflow context/event and
+  reverse-consumer contracts; capture the source-exact Response UI baseline;
+  and encode the complete Core subtraction/provider-consumer inventory as
+  failing executable boundary tests.
+- This kickoff created planning artifacts only. No product source, test,
+  migration, fixture, script, manifest, deployment, or generated asset change
+  has begun.
+
 ## 2026-08-23 - Validation Platform Foundation Diversion Closeout
 
 The post-Sprint 8B validation-platform diversion is complete independently of

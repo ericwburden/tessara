@@ -1,9 +1,7 @@
 //! Generic installation-bound typed resource reference construction and observation.
 
+use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use tessara_datasets_contract::{
-    DatasetResourceObservationRequest, DatasetResourceObservationResponse,
-};
 use tessara_module_contract::{
     ContractCompatibilityState, CoreInstallationOwnerState, ModuleInstanceOwnerState,
     OwnerDataState, ProviderAvailabilityState, ReferenceValidationError, ResourceAccessState,
@@ -35,7 +33,6 @@ enum CoreResourceKind {
     FormVersion,
     Workflow,
     WorkflowVersion,
-    Response,
 }
 
 #[derive(Clone, Copy)]
@@ -46,11 +43,19 @@ struct CoreResourceSpec {
 
 const FORMS: &[&str] = &["forms:read", "forms:manage"];
 const WORKFLOWS: &[&str] = &["workflows:read", "workflows:manage"];
-const RESPONSES: &[&str] = &[
-    "submissions:read_own",
-    "submissions:respond",
-    "submissions:manage",
-];
+
+#[derive(Serialize)]
+struct ResourceObservationRequest {
+    schema_version: u16,
+    reference: TypedResourceReference,
+}
+
+#[derive(Deserialize)]
+struct ResourceObservationResponse {
+    schema_version: u16,
+    resolution: ResourceResolutionV1,
+    observation: Option<ResourceObservationV1>,
+}
 
 pub(crate) async fn construct(
     state: &AppState,
@@ -192,11 +197,11 @@ async fn resolve_module_reference(
         return restricted_observation(ResourceAccessState::Unauthorized);
     }
 
-    let request = DatasetResourceObservationRequest {
+    let request = ResourceObservationRequest {
         schema_version: MODULE_HTTP_SCHEMA_VERSION_V1,
         reference: reference.clone(),
     };
-    match call_private_provider::<_, DatasetResourceObservationResponse>(
+    match call_private_provider::<_, ResourceObservationResponse>(
         state,
         actor,
         route.private_request(correlation_id, &request),
@@ -207,8 +212,8 @@ async fn resolve_module_reference(
         ModuleHttpError::Internal("generic resource-observation dispatch failed")
     })? {
         CorePrivateProviderResult::Response(response) => {
-            if let Err(error) = response.validate_for(reference) {
-                tracing::warn!(error = ?error, "Module resource-observation response was invalid");
+            if !valid_resource_observation_response(&response, reference) {
+                tracing::warn!("Module resource-observation response was invalid");
                 return module_provider_unavailable();
             }
             Ok((response.resolution, response.observation))
@@ -218,6 +223,35 @@ async fn resolve_module_reference(
             restricted_observation(ResourceAccessState::Unauthorized)
         }
     }
+}
+
+fn valid_resource_observation_response(
+    response: &ResourceObservationResponse,
+    reference: &TypedResourceReference,
+) -> bool {
+    if response.schema_version != MODULE_HTTP_SCHEMA_VERSION_V1 {
+        return false;
+    }
+    let disclosed = response.resolution.access_state() == ResourceAccessState::Authorized
+        && response.resolution.resource_identity_state() == ResourceIdentityState::Resolved
+        && response.resolution.compatibility_state() == ContractCompatibilityState::Compatible
+        && response.resolution.availability_state() == ProviderAvailabilityState::Available;
+    if !disclosed {
+        return response.observation.is_none();
+    }
+    response.resolution.owner_state()
+        == (ResourceOwnerState::ModuleInstance {
+            instance_state: ModuleInstanceOwnerState::Live,
+            data_state: OwnerDataState::Retained,
+        })
+        && matches!(
+            response.resolution.resource_lifecycle_state(),
+            ResourceLifecycleState::ProviderDefined { .. }
+        )
+        && response
+            .observation
+            .as_ref()
+            .is_some_and(|observation| observation.reference() == reference)
 }
 
 async fn load_resource_observation_provider(
@@ -257,8 +291,7 @@ fn validate_core_reference_construction(
     Ok(())
 }
 
-/// Resolves Core-owned transition resources without changing the established
-/// Form, Workflow, or Response behavior.
+/// Resolves the Core-owned transition resources that have not yet been extracted.
 async fn resolve_core_reference(
     pool: &PgPool,
     reference: &TypedResourceReference,
@@ -270,11 +303,6 @@ async fn resolve_core_reference(
     };
     if !has_any_capability(account, spec.capabilities_any_of) {
         return restricted(ResourceAccessState::Unauthorized);
-    }
-    if matches!(spec.kind, CoreResourceKind::Response)
-        && !account.has_global_capability("submissions:manage")
-    {
-        return resolve_ownership_bound_response(pool, reference, installation_id, account).await;
     }
     if !has_any_global_capability(account, spec.capabilities_any_of) {
         return restricted(ResourceAccessState::NotEvaluated);
@@ -328,47 +356,6 @@ async fn resolve_core_reference(
             ProviderAvailabilityState::Available,
         ),
     }
-}
-
-async fn resolve_ownership_bound_response(
-    pool: &PgPool,
-    reference: &TypedResourceReference,
-    installation_id: Uuid,
-    account: &AccountContext,
-) -> ModuleHttpResult<ResourceResolutionV1> {
-    let current_installation_owner = matches!(
-        reference.owner(),
-        ResourceOwner::CoreInstallation {
-            installation_id: owner_installation_id
-        } if *owner_installation_id == installation_id
-            && reference.installation_id() == installation_id
-    );
-    let Some(submission_id) = current_installation_owner
-        .then(|| parse_canonical_uuid(reference.resource_id()))
-        .flatten()
-    else {
-        return restricted(ResourceAccessState::NotEvaluated);
-    };
-
-    let lifecycle =
-        crate::submissions::reference_lifecycle_if_accessible(pool, account, submission_id)
-            .await
-            .map_err(|error| {
-                tracing::error!(error = ?error, "Response reference access evaluation failed");
-                ModuleHttpError::Internal("Response reference access evaluation failed")
-            })?;
-    let Some(lifecycle) = lifecycle else {
-        return restricted(ResourceAccessState::NotEvaluated);
-    };
-
-    authorized(
-        ResourceOwnerState::CoreInstallation {
-            state: CoreInstallationOwnerState::Live,
-        },
-        ResourceIdentityState::Resolved,
-        ResourceLifecycleState::ProviderDefined { state: lifecycle },
-        ProviderAvailabilityState::Available,
-    )
 }
 
 fn restricted(access_state: ResourceAccessState) -> ModuleHttpResult<ResourceResolutionV1> {
@@ -437,7 +424,6 @@ fn core_resource_spec(resource_type: &str) -> Option<CoreResourceSpec> {
         "tessara.transition.form_version" => (CoreResourceKind::FormVersion, FORMS),
         "tessara.transition.workflow" => (CoreResourceKind::Workflow, WORKFLOWS),
         "tessara.transition.workflow_version" => (CoreResourceKind::WorkflowVersion, WORKFLOWS),
-        "tessara.transition.response" => (CoreResourceKind::Response, RESPONSES),
         _ => return None,
     };
     Some(CoreResourceSpec {
@@ -482,12 +468,6 @@ async fn load_core_lifecycle(
                 .fetch_optional(pool)
                 .await
         }
-        CoreResourceKind::Response => {
-            sqlx::query_scalar("SELECT status::text FROM submissions WHERE id = $1")
-                .bind(uuid())
-                .fetch_optional(pool)
-                .await
-        }
     }
 }
 
@@ -507,7 +487,6 @@ mod tests {
             "tessara.transition.form_version",
             "tessara.transition.workflow",
             "tessara.transition.workflow_version",
-            "tessara.transition.response",
         ] {
             assert!(
                 core_resource_spec(resource_type).is_some(),
@@ -518,6 +497,7 @@ mod tests {
             "tessara.transition.dataset",
             "tessara.transition.dataset_revision",
             "tessara.transition.dataset_major_line",
+            "tessara.transition.response",
             "tessara.module.release",
             "tessara.module.instance",
         ] {

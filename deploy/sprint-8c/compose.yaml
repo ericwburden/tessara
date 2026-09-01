@@ -1,0 +1,9 @@
+name: tessara-sprint-8c
+
+# Disposable, fresh-only Sprint 8C topology. No product data is migrated from
+# the inherited Sprint 8B Core database; the Response owner starts from its one
+# module-owned baseline and is populated later through owner bootstrap APIs.
+include:
+  - path:
+      - ../sprint-8b/compose.yaml
+      - ./compose.override.yaml

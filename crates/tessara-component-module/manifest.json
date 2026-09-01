@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "definition_id": "tessara.components",
   "release_version": "1.1.0",
   "publisher": "tessara.first_party",
@@ -294,14 +294,14 @@
     "core_release": "0.1.0",
     "shell_context_schema": "2.0.0",
     "module_control_protocol": "1.1.0",
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0",
     "design_system_asset_abi": "2.0.0",
     "conformance_suite": "1.2.0"
   },
   "linked_packages": {
-    "module_contract": "0.3.0",
+    "module_contract": "0.4.0",
     "module_runtime": "0.3.0",
     "module_ui": "0.3.0"
   },
@@ -401,7 +401,7 @@
     {
       "path_template": "/api/components",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.list",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -411,7 +411,7 @@
     {
       "path_template": "/api/components/{component_ref}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.get",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -421,7 +421,7 @@
     {
       "path_template": "/api/components/{component_ref}/{kind}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.execute",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -431,7 +431,7 @@
     {
       "path_template": "/api/components/{component_ref}/versions/{version_id}/{kind}",
       "method": "GET",
-      "required_capability": "components:read",
+      "required_capabilities_any_of": ["components:read"],
       "authorization_action": "components.execute",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -441,7 +441,7 @@
     {
       "path_template": "/api/admin/components",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.create",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -451,7 +451,7 @@
     {
       "path_template": "/api/admin/components",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.list_manageable",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -461,7 +461,7 @@
     {
       "path_template": "/api/admin/components/save",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -471,7 +471,7 @@
     {
       "path_template": "/api/admin/components/{component_id}",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.edit",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -481,7 +481,7 @@
     {
       "path_template": "/api/admin/components/{component_id}",
       "method": "PUT",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.update",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -491,7 +491,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -501,7 +501,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
       "method": "PUT",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.save_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -511,7 +511,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}",
       "method": "DELETE",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.delete_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -521,7 +521,7 @@
     {
       "path_template": "/api/admin/components/validate",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.validate",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -531,7 +531,7 @@
     {
       "path_template": "/api/admin/components/preview",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.preview",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -541,7 +541,7 @@
     {
       "path_template": "/api/admin/components/datasets",
       "method": "GET",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.list_manageable",
       "dependency_binding": "tessara.core.components",
       "operation": "read",
@@ -551,7 +551,7 @@
     {
       "path_template": "/api/admin/components/datasets/distinct-values",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.validate",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -561,7 +561,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}/publish",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.publish_version",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -571,7 +571,7 @@
     {
       "path_template": "/api/admin/components/{component_id}/versions/{version_id}/lifecycle",
       "method": "POST",
-      "required_capability": "components:manage",
+      "required_capabilities_any_of": ["components:manage"],
       "authorization_action": "components.change_lifecycle",
       "dependency_binding": "tessara.core.components",
       "operation": "mutation",
@@ -657,32 +657,32 @@
   "assets": [
     {
       "path": "/module-ui.css",
-      "digest": "sha256:21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc",
+      "digest": "sha256:8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.css",
-      "digest": "sha256:752387257cd0ddb69780425d88be40128a1a3cc96ed0cdffd725749ba723600e",
+      "digest": "sha256:6e5179a1f685bc9573edd541447da14a005905d6644d47b9eb6cf5769b5f09be",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component-lifecycle.css",
-      "digest": "sha256:17eac83dcf01b4d39808474e7f58b5d4188d784f077d61f9d0a09021cb612724",
+      "digest": "sha256:c5542e5f756e35b65eeabbaeb8da42f2e81c7ac8d2935ae9228dec7711fa04ac",
       "content_type": "text/css; charset=utf-8"
     },
     {
       "path": "/component.js",
-      "digest": "sha256:afe97c66ca0aa0b1d2fadc2e608a5900dfef1c916b05a337063b421152fad790",
+      "digest": "sha256:b79f114c35074053ed07240d67bf142875d38ec985cc819ac681644b170b0f88",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component-bindings.js",
-      "digest": "sha256:a5196691684f715ba0450f824d5fae5034d2e2b5a96f83e827603b314238f453",
+      "digest": "sha256:eda4dbf4c50504041f4966d809ceb80afaaf5c713544b332ac9618d22e5b5039",
       "content_type": "text/javascript; charset=utf-8"
     },
     {
       "path": "/component.wasm",
-      "digest": "sha256:39a1ab97a0c78a226a72dac338f92884045e73c329e2df9b885e8fcd4c47829b",
+      "digest": "sha256:94b135f8eab1c40616af38dd699feebfe4f5d88d8c1089ce9d3f35878ffc7fc1",
       "content_type": "application/wasm"
     }
   ]

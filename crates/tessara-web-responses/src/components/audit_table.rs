@@ -2,13 +2,13 @@
 
 use crate::metadata::metadata_label;
 use crate::text::nonempty_text;
-use crate::types::SubmissionAuditEventSummary;
+use crate::types::ResponseAuditEventSummary;
 use leptos::prelude::*;
 use tessara_module_ui::{DataTable, Timestamp};
 
 /// Renders response audit events.
 #[component]
-pub(crate) fn ResponseAuditTable(events: Vec<SubmissionAuditEventSummary>) -> impl IntoView {
+pub(crate) fn ResponseAuditTable(events: Vec<ResponseAuditEventSummary>) -> impl IntoView {
     view! {
         <DataTable>
             <thead>
@@ -33,7 +33,7 @@ pub(crate) fn ResponseAuditTable(events: Vec<SubmissionAuditEventSummary>) -> im
                             view! {
                                 <tr>
                                     <th scope="row">{metadata_label(&event.event_type)}</th>
-                                    <td>{nonempty_text(event.account_email.as_deref(), "System")}</td>
+                                    <td>{nonempty_text(event.actor_display_name.as_deref(), "System")}</td>
                                     <td><Timestamp value=event.created_at/></td>
                                 </tr>
                             }

@@ -21,7 +21,7 @@ $supported = [ordered]@{
     core_release = "0.1.0"
     shell_context_schema = "2.0.0"
     module_control_protocol = "1.1.0"
-    module_contract = "0.3.0"
+    module_contract = "0.4.0"
     module_runtime = "0.3.0"
     module_ui = "0.3.0"
     design_system_asset_abi = "2.0.0"
@@ -50,7 +50,7 @@ try {
         $path = $record.source
         $manifest = $record.manifest
         $releaseFindings = [Collections.Generic.List[string]]::new()
-        if ($manifest.schema_version -ne 3) {
+        if ($manifest.schema_version -ne 4) {
             $releaseFindings.Add("unsupported manifest schema $($manifest.schema_version)")
         }
         foreach ($field in $supported.Keys) {

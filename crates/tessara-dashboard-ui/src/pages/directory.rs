@@ -28,9 +28,7 @@ pub fn DashboardsIndexContent() -> impl IntoView {
     let selected_scope = RwSignal::new(None::<DashboardSummary>);
 
     Effect::new(move |_| {
-        if !bootstrapped {
-            load_directory(dashboards, account, loading, error);
-        }
+        load_directory(dashboards, account, loading, error);
     });
 
     let filtered = Memo::new(move |_| {
@@ -224,7 +222,13 @@ fn load_directory(
             Err(message) => error.set(Some(message)),
         }
         match crate::api::fetch_dashboards().await {
-            Ok(payload) => dashboards.set(payload),
+            Ok(mut payload) => {
+                for dashboard in &mut payload {
+                    dashboard.can_manage =
+                        crate::api::fetch_composition(&dashboard.id).await.is_ok();
+                }
+                dashboards.set(payload);
+            }
             Err(message) => error.set(Some(message)),
         }
         loading.set(false);

@@ -133,7 +133,7 @@ pub fn empty_view() -> AnyView {
 pub const MODULE_UI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MODULE_UI_CSS: &str = include_str!("../assets/module-ui.css");
 pub const MODULE_UI_CSS_SHA256: &str =
-    "21cfad6ee92484c03eb6fae0c4ba413740afebb1c938115a354a49e85c4c9bfc";
+    "8baab0234ca5b5a23be320b6a2c12c4580f656b96a647b7cc30e1ec19caa998f";
 pub const MODULE_SHELL_JS: &str = include_str!("../assets/module-shell.js");
 pub const MODULE_SHELL_JS_SHA256: &str =
     "8265b868960d45fc50fa3fc8173968b94b6d36f1d9ce12e027ab6599942682ff";
@@ -240,15 +240,6 @@ fn render_document_markup(
 ) -> String {
     let theme = theme_name(presentation.theme);
     let theme_bootstrap = theme_bootstrap_script(theme);
-    let top_bar_title = presentation
-        .navigation
-        .iter()
-        .flat_map(|group| &group.items)
-        .filter(|item| navigation_path_matches(&presentation.current_destination, &item.href))
-        .max_by_key(|item| item.href.len())
-        .map_or(presentation.document_title.as_str(), |item| {
-            item.label.as_str()
-        });
     let stylesheets = assets
         .stylesheets
         .iter()
@@ -283,7 +274,7 @@ fn render_document_markup(
         .collect::<Vec<_>>();
     let current_destination = presentation.current_destination.clone();
     let return_destination = presentation.return_destination.clone();
-    let shell_title = top_bar_title.to_string();
+    let shell_title = presentation.document_title.clone();
     let body_html = body_html.to_string();
     let shell = Owner::new().with(|| {
         let navigation_view = Arc::new(move || {
@@ -366,7 +357,7 @@ pub fn navigation_path_matches(current_path: &str, navigation_href: &str) -> boo
 
 #[cfg(feature = "components")]
 fn shell_interaction_script() -> &'static str {
-    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);document.querySelectorAll('[data-theme-value]').forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;root.dataset.themePreference=preference;root.dataset.theme=preference==='system'?(dark?'dark':'light'):preference;closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);document.querySelector('[data-shell-sign-out]')?.addEventListener('click',()=>{const form=document.createElement('form');form.method='post';form.action='/api/logout';document.body.appendChild(form);form.submit()})})();"#
+    r#"(function(){const root=document.documentElement;const theme=document.querySelector('.theme-toggle');const themeButton=document.querySelector('.theme-toggle__trigger');const themeOptions=document.querySelectorAll('[data-theme-value]');const setThemeSelection=(preference)=>themeOptions.forEach(option=>{const active=option.dataset.themeValue===preference;option.classList.toggle('is-active',active);option.setAttribute('aria-checked',String(active))});const closeTheme=()=>{theme?.classList.remove('is-open');themeButton?.setAttribute('aria-expanded','false')};setThemeSelection(root.dataset.themePreference||'system');themeButton?.addEventListener('click',()=>{const open=!theme?.classList.contains('is-open');theme?.classList.toggle('is-open',open);themeButton.setAttribute('aria-expanded',String(open))});document.querySelector('.theme-toggle__scrim')?.addEventListener('click',closeTheme);themeOptions.forEach(button=>button.addEventListener('click',()=>{const preference=button.dataset.themeValue;try{localStorage.setItem('tessara.themePreference',preference)}catch(_error){}const dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;const resolved=preference==='system'?(dark?'dark':'light'):preference;root.dataset.themePreference=preference;root.dataset.theme=resolved;setThemeSelection(preference);const meta=document.querySelector('meta[name="theme-color"]');meta?.setAttribute('content',resolved==='dark'?'#0F172A':'#F8FAFC');closeTheme()}));const mobileNavigation=document.querySelector('.mobile-nav');const menuButton=document.querySelector('.mobile-nav__toggle');const closeMenu=()=>{mobileNavigation?.classList.remove('is-open');menuButton?.setAttribute('aria-expanded','false')};menuButton?.addEventListener('click',()=>{mobileNavigation?.classList.add('is-open');menuButton.setAttribute('aria-expanded','true')});document.querySelector('.mobile-nav__scrim')?.addEventListener('click',closeMenu);const signOutButton=document.querySelector('[data-shell-sign-out]');signOutButton?.addEventListener('click',async()=>{signOutButton.disabled=true;try{const response=await fetch('/api/auth/logout',{method:'DELETE',credentials:'same-origin',headers:{accept:'application/json'}});if(!response.ok){throw new Error('Sign out failed')}const result=await response.json();if(result?.signed_out!==true){throw new Error('Sign out failed')}window.location.assign('/login')}catch(_error){signOutButton.disabled=false}})})();"#
 }
 
 #[cfg(feature = "components")]
@@ -509,12 +500,37 @@ mod tests {
         assert!(html.contains("module-ui.css"));
         assert!(html.contains("<script src=\"/assets/shared.js\" defer></script>"));
         assert!(html.contains("module-scope--tessara-reference-module-sdk"));
-        assert!(html.contains(r#"class="top-app-bar__title">SDK Reference</span>"#));
+        assert!(html.contains(r#"class="top-app-bar__title">Module SDK diagnostics</span>"#));
         assert_eq!(html.matches("sidebar-link is-active").count(), 2);
         assert!(html.contains("mobileNavigation?.classList.add('is-open')"));
         assert!(!html.contains("shell?.classList.add('mobile-nav-open')"));
         assert!(html.contains(r#"name="tessara-module-release" content="1.0.1""#));
         assert!(!html.contains("type=\"module\""));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn shell_interaction_script_uses_canonical_logout_contract() {
+        let script = shell_interaction_script();
+
+        assert!(script.contains("fetch('/api/auth/logout'"));
+        assert!(script.contains("method:'DELETE'"));
+        assert!(script.contains("credentials:'same-origin'"));
+        assert!(script.contains("result?.signed_out!==true"));
+        assert!(script.contains("window.location.assign('/login')"));
+        assert!(!script.contains("'/api/logout'"));
+        assert!(!script.contains("form.method='post'"));
+    }
+
+    #[cfg(feature = "components")]
+    #[test]
+    fn shell_interaction_script_updates_theme_selection_semantics() {
+        let script = shell_interaction_script();
+
+        assert!(script.contains("setThemeSelection(root.dataset.themePreference||'system')"));
+        assert!(script.contains("option.classList.toggle('is-active',active)"));
+        assert!(script.contains("option.setAttribute('aria-checked',String(active))"));
+        assert!(script.contains("setThemeSelection(preference)"));
     }
 
     #[test]

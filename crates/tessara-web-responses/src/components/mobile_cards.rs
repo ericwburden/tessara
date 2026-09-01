@@ -1,18 +1,18 @@
 //! Mobile card list for response summaries.
 
 use crate::display::{
-    submission_assignee_label, submission_progress_label, submission_status_key,
-    submission_status_label, submission_step_label, submission_workflow_label,
+    response_assignee_label, response_progress_label, response_status_key, response_status_label,
+    response_step_label, response_workflow_label,
 };
 use crate::pagination::pagination_page_start;
 use crate::status::status_badge_class;
-use crate::types::SubmissionSummary;
+use crate::types::ResponseSummary;
 use leptos::prelude::*;
 use tessara_module_ui::{Timestamp, empty_view};
 
 #[component]
 pub(crate) fn ResponseMobileCards(
-    submissions: Vec<SubmissionSummary>,
+    submissions: Vec<ResponseSummary>,
     total_count: usize,
     page_size: RwSignal<usize>,
     page_index: RwSignal<usize>,
@@ -27,22 +27,22 @@ pub(crate) fn ResponseMobileCards(
                     .skip(pagination_page_start(total_count, page_size.get(), page_index.get()))
                     .take(page_size.get())
                     .cloned()
-                    .map(|submission| {
-                        let detail_href = format!("/responses/{}", submission.id);
-                        let edit_href = format!("/responses/{}/edit", submission.id);
-                        let node_href = format!("/organization/{}", submission.node_id);
-                        let status_key = submission_status_key(&submission);
-                        let status_label = submission_status_label(&submission);
-                        let workflow_label = submission_workflow_label(&submission);
-                        let step_label = submission_step_label(&submission);
-                        let progress_label = submission_progress_label(&submission);
-                        let assignee = submission_assignee_label(&submission);
+                    .map(|response| {
+                        let detail_href = format!("/responses/{}", response.id);
+                        let edit_href = format!("/responses/{}/edit", response.id);
+                        let node_href = format!("/organization/{}", response.node_id);
+                        let status_key = response_status_key(&response);
+                        let status_label = response_status_label(&response);
+                        let workflow_label = response_workflow_label(&response);
+                        let step_label = response_step_label(&response);
+                        let progress_label = response_progress_label(&response);
+                        let assignee = response_assignee_label(&response);
                         let is_draft = status_key == "draft";
                         view! {
                             <article class="forms-list-mobile-card response-mobile-card">
                                 <div class="forms-list-mobile-card__header">
                                     <div class="forms-list-mobile-card__title-row">
-                                        <h3><a href=detail_href.clone()>{submission.form_name}</a></h3>
+                                        <h3><a href=detail_href.clone()>{response.form_name}</a></h3>
                                     </div>
                                 </div>
                                 <dl>
@@ -52,7 +52,7 @@ pub(crate) fn ResponseMobileCards(
                                     </div>
                                     <div>
                                         <dt>"Form Version"</dt>
-                                        <dd>{submission.version_label}</dd>
+                                        <dd>{response.version_label}</dd>
                                     </div>
                                     <div>
                                         <dt>"Workflow"</dt>
@@ -68,7 +68,7 @@ pub(crate) fn ResponseMobileCards(
                                     </div>
                                     <div>
                                         <dt>"Node"</dt>
-                                        <dd><a href=node_href>{submission.node_name}</a></dd>
+                                        <dd><a href=node_href>{response.node_name}</a></dd>
                                     </div>
                                     <div>
                                         <dt>"Assignee"</dt>
@@ -76,9 +76,9 @@ pub(crate) fn ResponseMobileCards(
                                     </div>
                                     <div>
                                         <dt>"Last Updated"</dt>
-                                        <dd><Timestamp value=submission.last_modified_at/></dd>
+                                        <dd><Timestamp value=response.last_modified_at/></dd>
                                     </div>
-                                    {if let Some(submitted_at) = submission.submitted_at {
+                                    {if let Some(submitted_at) = response.submitted_at {
                                         view! {
                                             <div>
                                                 <dt>"Submitted"</dt>
