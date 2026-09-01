@@ -135,8 +135,14 @@ try {
     $unknownPair.contract.dependency_domains=@($unknownPair.contract.dependency_domains|Where-Object name -eq 'coordinator-test-input');Write-Json $unknownPair.contract_path $unknownPair.contract
     $unknownBaseline=Invoke-TessaraImplementationHarvest $unknownPair.adapter_relative (Get-Candidate $unknownPair) $unknownPair.evidence_root -RepositoryRoot $repo -LaneInvoker $passInvoker
     $unknownIdentity=Get-TessaraValidationPlatformIdentity;$unknownStatePath=Join-Path $testRoot 'unknown-state.json';$unknownState=[pscustomobject]@{schema_version=1;contract='tessara.validation.implementation-target-state';policy_version='tessara-validation-v3';sprint=$unknownPair.contract.sprint;validation_contract=Get-Ref $unknownPair.contract_path;validation_adapter=Get-Ref $unknownPair.adapter_path;platform_identity=[pscustomobject]@{release_version=$unknownIdentity.release_version;platform_fingerprint=$unknownIdentity.platform_fingerprint};targets=@([pscustomobject]@{id='unknown-target';previous_receipt=$unknownBaseline.finalization.targets[0].receipt;provenance=$null})};Write-Json $unknownStatePath $unknownState
-    $unknownRun=Invoke-TessaraImplementationHarvest $unknownPair.adapter_relative (Get-Candidate $unknownPair) (Join-Path $unknownPair.evidence_root 'successor') -RepositoryRoot $repo -TargetStatePath ([IO.Path]::GetRelativePath($repo,$unknownStatePath).Replace('\','/')) -LaneInvoker $passInvoker
-    Assert-True ($unknownRun.plan.schedule[0].disposition -eq 'execute' -and $unknownRun.plan.schedule[0].rationale -eq 'unknown-dependency-impact-conservative-execution') 'Unknown dependency mapping did not force conservative execution.'
+    $unknownImpactProbe=Join-Path $repo "scripts/validation-platform/fixtures/implementation-coordinator-unknown-impact-$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        [IO.File]::WriteAllText($unknownImpactProbe,"unmapped coordinator impact probe`n",[Text.UTF8Encoding]::new($false))
+        $unknownRun=Invoke-TessaraImplementationHarvest $unknownPair.adapter_relative (Get-Candidate $unknownPair) (Join-Path $unknownPair.evidence_root 'successor') -RepositoryRoot $repo -TargetStatePath ([IO.Path]::GetRelativePath($repo,$unknownStatePath).Replace('\','/')) -LaneInvoker $passInvoker
+        Assert-True ($unknownRun.plan.schedule[0].disposition -eq 'execute' -and $unknownRun.plan.schedule[0].rationale -eq 'unknown-dependency-impact-conservative-execution') 'Unknown dependency mapping did not force conservative execution.'
+    } finally {
+        if(Test-Path -LiteralPath $unknownImpactProbe){Remove-Item -LiteralPath $unknownImpactProbe -Force}
+    }
 
     $recoveryPair=New-CoordinatorPair 'recovery' @([pscustomobject]@{id='recovery-first';prerequisites=@();live=$false;unsafe=$false},[pscustomobject]@{id='recovery-second';prerequisites=@();live=$false;unsafe=$false})
     $recoveryCalls=@{};$recoveryInvoker={param($Target,$Lane,$Claims)if(-not$recoveryCalls.ContainsKey($Target)){$recoveryCalls[$Target]=0};$recoveryCalls[$Target]++;[pscustomobject]@{state='passed';cleanup_restoration=[pscustomobject]@{state='passed'}}};$interrupted=$false
