@@ -1,6 +1,6 @@
 # Sprint 8C Validation Record
 
-- Status: planned acceptance inventory; no validation phase has run.
+- Status: complete; closeout authorized on 2026-09-01.
 - Validation policy: `tessara-validation-v2`
 - Tracked validation contract: `docs/sprints/sprint-8c-validation-contract.json`
 - Implementation profile: `phase8-module-extraction`
@@ -37,23 +37,23 @@ smoke is part of SIT; it is not a separate pre-SIT authorization.
 
 | Artifact | Producer | Required before | Status |
 | --- | --- | --- | --- |
-| `implementation-readiness-result.json` | Implementation | Validation Readiness | Not Run |
-| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Not Run |
-| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Not Run |
-| `preflight-result.json` | Preflight | Candidate freeze | Not Run |
-| `candidate.json` | Preflight | SIT | Not Run |
-| `sit-result.json` | SIT | UAT | Not Run |
-| `uat-result.json` | UAT | Authorization | Not Run |
-| per-failure sibling `defect-provenance.json` | Target/phase owner | correction or broad rerun | Planned / Conditional |
-| `uat-defect-harvest.json` | UAT/coordinator | correction batch when triggered | Planned / Conditional |
-| `defect-batch.json` | Coordinator | impact assessment when triggered | Planned / Conditional |
-| `correction-impact-assessment.json` | Coordinator | focused repair validation when triggered | Planned / Conditional |
-| `focused-repair-validation/attempt-<n>.json` | Coordinator/phase owners | convergence when triggered | Planned / Conditional |
-| `canonical-restoration.json` | Coordinator | convergence/final certification when triggered | Planned / Conditional |
-| `final-certification-entry.json` | Coordinator | final readiness/rehearsal when triggered | Planned / Conditional |
-| per-phase `evidence-index.json` and SHA sidecar | Each phase | phase certificate | Not Run |
-| `evidence-chain.json` and SHA sidecar | Coordinator | authorization | Not Run |
-| `closeout-authorization.json` | Coordinator | Closeout | Not Run |
+| `implementation-readiness-result.json` | Implementation | Validation Readiness | Passed |
+| `validation-readiness-result.json` | Validation coordinator | Rehearsal | Passed |
+| `candidate-rehearsal-result.json` | Validation coordinator | Candidate freeze | Passed |
+| `preflight-result.json` | Preflight | Candidate freeze | Passed |
+| `candidate.json` | Preflight | SIT | Frozen and authenticated |
+| `sit-result.json` | SIT | UAT | Passed |
+| `uat-result.json` | UAT | Authorization | Passed |
+| per-failure sibling `defect-provenance.json` | Target/phase owner | correction or broad rerun | Resolved and authenticated |
+| `uat-defect-harvest.json` | UAT/coordinator | correction batch when triggered | Retained as non-authoritative history |
+| `defect-batch.json` | Coordinator | impact assessment when triggered | Passed; zero open defects |
+| `correction-impact-assessment.json` | Coordinator | focused repair validation when triggered | Passed; successor cone authorized |
+| `focused-repair-validation/attempt-<n>.json` | Coordinator/phase owners | convergence when triggered | Passed; non-authoritative |
+| `canonical-restoration.json` | Coordinator | convergence/final certification when triggered | Passed |
+| `final-certification-entry.json` | Coordinator | final readiness/rehearsal when triggered | Passed |
+| per-phase `evidence-index.json` and SHA sidecar | Each phase | phase certificate | Passed; six sealed indexes |
+| `evidence-chain.json` and SHA sidecar | Coordinator | authorization | Passed; 4,278 artifacts audited |
+| `closeout-authorization.json` | Coordinator | Closeout | Authorized |
 
 Every receipt binds source commit/tree/dirty state, validation-contract hash,
 dependency fingerprints, environment fingerprint, exact command, fixture and
@@ -67,31 +67,33 @@ implementation time; a missing selector or zero selected tests fails.
 
 | Target | Proof classes | Affected domains | Exact command | Clean environment | Result |
 | --- | --- | --- | --- | --- | --- |
-| `static-quality` | static-quality | product/build/harness | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target static-quality` | No | Not Run |
-| `contract-boundary` | contract-boundary | product/contract/harness | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target contract-boundary` | No | Not Run |
-| `owner-product` | owner-product | product/migrations/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target owner-product` | No | Not Run |
-| `ui-sdk-conformance` | ui-sdk-conformance | product/acceptance/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target ui-sdk-conformance` | Yes | Not Run |
-| `consumer-cutover` | consumer-cutover | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target consumer-cutover` | No | Not Run |
-| `core-subtraction` | core-subtraction | product/migrations | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target core-subtraction` | No | Not Run |
-| `inventory-navigation` | inventory-navigation | product/deployment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target inventory-navigation` | No | Not Run |
-| `migration-seed` | migration-seed | migrations/deployment/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target migration-seed` | Yes | Not Run |
-| `clean-materialization` | clean-materialization | all executable topology inputs | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target clean-materialization` | Yes | Not Run |
-| `semantic-noop` | semantic-noop | migrations/deployment/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target semantic-noop` | Yes | Not Run |
-| `failure-recovery` | failure-recovery | migrations/deployment/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target failure-recovery` | Yes | Not Run |
-| `fixture-acceptance` | fixture-acceptance | fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target fixture-acceptance` | No | Not Run |
-| `runner-selftest` | runner-selftest | validation/runners/evidence | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target runner-selftest` | No | Not Run |
-| `deployed-smoke` | deployed-smoke | topology/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target deployed-smoke` | No | Not Run |
-| `independent-upgrade-rollback` | independent-upgrade-rollback | build/migrations/deployment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target independent-upgrade-rollback` | Yes | Not Run |
-| `uat-readiness` | uat-readiness | fixtures/acceptance/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target uat-readiness` | No | Not Run |
-| `provider-contracts` | contract-boundary, owner-product | provider/fixture/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target provider-contracts` | No | Not Run |
-| `workflow-events` | contract-boundary, consumer-cutover | product/migrations/topology | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target workflow-events` | Yes | Not Run |
-| `dataset-export` | contract-boundary, consumer-cutover | product/migrations/topology | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target dataset-export` | Yes | Not Run |
-| `assignment-only` | contract-boundary, owner-product | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target assignment-only` | No | Not Run |
-| `scoped-review` | contract-boundary, owner-product | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target scoped-review` | No | Not Run |
-| `api-idempotency` | contract-boundary, owner-product | product/migrations/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target api-idempotency` | No | Not Run |
-| `planning-contract-alignment` | contract-boundary | contract/acceptance/docs | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target planning-contract-alignment` | No | Not Run |
+| `static-quality` | static-quality | product/build/harness | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target static-quality` | No | Passed |
+| `contract-boundary` | contract-boundary | product/contract/harness | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target contract-boundary` | No | Passed |
+| `owner-product` | owner-product | product/migrations/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target owner-product` | No | Passed |
+| `ui-sdk-conformance` | ui-sdk-conformance | product/acceptance/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target ui-sdk-conformance` | Yes | Passed |
+| `consumer-cutover` | consumer-cutover | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target consumer-cutover` | No | Passed |
+| `core-subtraction` | core-subtraction | product/migrations | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target core-subtraction` | No | Passed |
+| `inventory-navigation` | inventory-navigation | product/deployment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target inventory-navigation` | No | Passed |
+| `migration-seed` | migration-seed | migrations/deployment/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target migration-seed` | Yes | Passed |
+| `clean-materialization` | clean-materialization | all executable topology inputs | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target clean-materialization` | Yes | Passed |
+| `semantic-noop` | semantic-noop | migrations/deployment/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target semantic-noop` | Yes | Passed |
+| `failure-recovery` | failure-recovery | migrations/deployment/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target failure-recovery` | Yes | Passed |
+| `fixture-acceptance` | fixture-acceptance | fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target fixture-acceptance` | No | Passed |
+| `runner-selftest` | runner-selftest | validation/runners/evidence | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target runner-selftest` | No | Passed |
+| `deployed-smoke` | deployed-smoke | topology/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target deployed-smoke` | No | Passed |
+| `independent-upgrade-rollback` | independent-upgrade-rollback | build/migrations/deployment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target independent-upgrade-rollback` | Yes | Passed |
+| `uat-readiness` | uat-readiness | fixtures/acceptance/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target uat-readiness` | No | Passed |
+| `provider-contracts` | contract-boundary, owner-product | provider/fixture/environment | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target provider-contracts` | No | Passed |
+| `workflow-events` | contract-boundary, consumer-cutover | product/migrations/topology | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target workflow-events` | Yes | Passed |
+| `dataset-export` | contract-boundary, consumer-cutover | product/migrations/topology | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target dataset-export` | Yes | Passed |
+| `assignment-only` | contract-boundary, owner-product | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target assignment-only` | No | Passed |
+| `scoped-review` | contract-boundary, owner-product | product/fixtures/acceptance | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target scoped-review` | No | Passed |
+| `api-idempotency` | contract-boundary, owner-product | product/migrations/fixtures | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target api-idempotency` | No | Passed |
+| `planning-contract-alignment` | contract-boundary | contract/acceptance/docs | `.\scripts\run-sprint-8c-implementation-readiness.ps1 -Target planning-contract-alignment` | No | Passed |
 
-- Clean source and validation-contract hash: pending implementation exit.
+- Clean source and validation-contract hash: authenticated at commit
+  `460096223afb00055f9271f24810d8fc79055b5e`, tree
+  `2eadb5f26e9cfd505a133391f2f1e8749e0de99c`.
 - Materialization / first apply: exact `deploy/sprint-8c/compose.yaml` profile,
   `scripts/materialize-sprint-8c.ps1`, empty disposable databases.
 - Semantic no-op: unchanged second invocation of the same materializer.
@@ -99,17 +101,18 @@ implementation time; a missing selector or zero selected tests fails.
   fault, retained result, exact teardown, new from-empty apply.
 - Fixture, runner, smoke and acceptance reproducers: exact target selectors
   above, full Playwright manifest and UAT predicate discovery.
-- Known failure count: must be zero.
-- Open/blocked defect-provenance records: must be zero.
+- Known failure count: zero.
+- Open/blocked defect-provenance records: zero.
 - Formal fixture/environment/inventory/assertion contract: must be byte-identical
   to the implementation-exit selection.
 
 ## Candidate Identity
 
-- Implementation commit: pending
-- Tree: pending
-- Dirty state: must be false
-- Candidate fingerprint: pending Preflight
+- Implementation commit: `460096223afb00055f9271f24810d8fc79055b5e`
+- Tree: `2eadb5f26e9cfd505a133391f2f1e8749e0de99c`
+- Dirty state: false
+- Candidate fingerprint:
+  `bf32368f66d3461bb5b9485dba8634997ea9563b6056c36a3c1814247313a2f4`
 - Acceptance-inventory identity: SHA-256 of schema-valid
   `end2end/acceptance-manifest.json` plus Sprint 8C UAT scenario contract
 - Deployment profile/configuration digest: `deploy/sprint-8c/compose.yaml` and
@@ -118,7 +121,8 @@ implementation time; a missing selector or zero selected tests fails.
   owner baseline digest
 - Expected provenance labels: Core, Supervisor, Forms/Workflow transition
   providers, Response `1.0.0`, Dataset, Component, Dashboard
-- Observed image digests: pending source-exact materialization
+- Active Response image digest:
+  `sha256:bcddcb5da80fd9350103c639c0b4ac3b9aeb8a5101c24c5d1c78c438c4ac70bd`
 
 ## Validation Readiness
 
@@ -133,28 +137,30 @@ implementation time; a missing selector or zero selected tests fails.
   or foreign-owned resource; exact owner endpoints and provenance.
 - Semantic fixture/idempotence: logical-key owner read-back, first apply and
   no-op identities authenticated.
-- Result receipt: Not Run.
-- Dependency fingerprints / executed or inherited lanes / phase index: pending.
+- Result receipt: Passed, attempt 1; three of three lanes executed with no
+  inheritance and zero open defects.
+- Dependency fingerprints and sealed phase index authenticated by
+  `validation-readiness-result.json`.
 
 ## Candidate Rehearsal
 
 | Lane | Command / evidence | Required assertions | Result |
 | --- | --- | --- | --- |
-| Static/boundaries | Sprint runner static selector | format/Clippy/source/schema/Core subtraction | Not Run |
-| Full Rust | `cargo test --workspace --locked` plus exact DB targets | all owner/provider/consumer tests, zero warnings | Not Run |
-| Materialization | Sprint clean-environment runner | first apply/no-op/read-back/isolation | Not Run |
-| Browser | `npm --prefix .\end2end test` | complete manifest, one worker, zero retries/skips | Not Run |
-| Conformance | SDK and authorization runners | UI ownership, nondisclosure, exact contracts | Not Run |
-| Providers/events/consumers | Sprint focused targets | Form/Workflow contexts, outbox, Dataset/reverse consumers | Not Run |
-| Deployed smoke | `.\scripts\run-sprint-8c-deployed-smoke.ps1` | real routes/health/owner/output chain | Not Run |
-| Recovery/restoration | Sprint failure target | bounded fault, teardown, from-empty recovery | Not Run |
-| Upgrade/rollback | Sprint upgrade target | source-built Response-only transition | Not Run |
-| Automated UAT diagnostics | `.\scripts\uat-sprint-8c.ps1` diagnostic mode | every manual prerequisite and predicate | Not Run |
+| Static/boundaries | Sprint runner static selector | format/Clippy/source/schema/Core subtraction | Passed |
+| Full Rust | `cargo test --workspace --locked` plus exact DB targets | all owner/provider/consumer tests, zero warnings | Passed |
+| Materialization | Sprint clean-environment runner | first apply/no-op/read-back/isolation | Passed |
+| Browser | `npm --prefix .\end2end test` | complete manifest, one worker, zero retries/skips | Passed |
+| Conformance | SDK and authorization runners | UI ownership, nondisclosure, exact contracts | Passed |
+| Providers/events/consumers | Sprint focused targets | Form/Workflow contexts, outbox, Dataset/reverse consumers | Passed |
+| Deployed smoke | `.\scripts\run-sprint-8c-deployed-smoke.ps1` | real routes/health/owner/output chain | Passed |
+| Recovery/restoration | Sprint failure target | bounded fault, teardown, from-empty recovery | Passed |
+| Upgrade/rollback | Sprint upgrade target | source-built Response-only transition | Passed |
+| Automated UAT diagnostics | `.\scripts\uat-sprint-8c.ps1` diagnostic mode | every manual prerequisite and predicate | Passed |
 
-- Mutable source/environment identity: pending.
-- Passing Readiness prerequisite: required.
-- Result, dependency fingerprints, executed/inherited lanes, evidence index:
-  pending.
+- Mutable source identity: final clean evidence source above.
+- Passing Readiness prerequisite: authenticated.
+- Result: Passed, attempt 1; twelve of twelve lanes executed with no
+  inheritance, zero open defects, and passed cleanup/restoration.
 
 ## Environment Contract
 
@@ -172,7 +178,7 @@ implementation time; a missing selector or zero selected tests fails.
 
 ## Preflight
 
-- Status: Not Run
+- Status: Passed, attempt 1; candidate frozen on 2026-08-31.
 - Required inputs: passing current-source implementation readiness, Readiness
   and Rehearsal certificates; exact dependency fingerprints; resolved defect
   chronology; clean source and environment; reset authorization.
@@ -184,10 +190,10 @@ implementation time; a missing selector or zero selected tests fails.
 
 | Lane | Command / evidence | Assertions | Result |
 | --- | --- | --- | --- |
-| Static/boundaries | Sprint SIT static lane | exact source, format/Clippy, schemas, subtraction and isolation | Not Run |
-| Rust workspace | `cargo test --workspace --locked` | complete frozen-candidate Rust inventory | Not Run |
-| Playwright | `npm --prefix .\end2end test` | complete frozen-candidate browser manifest | Not Run |
-| Deployed acceptance smoke | `.\scripts\smoke.ps1` plus Sprint 8C profile | Response owner, product flow, providers/events, Dataset output, health | Not Run |
+| Static/boundaries | Sprint SIT static lane | exact source, format/Clippy, schemas, subtraction and isolation | Passed |
+| Rust workspace | `cargo test --workspace --locked` | complete frozen-candidate Rust inventory | Passed |
+| Playwright | `npm --prefix .\end2end test` | complete frozen-candidate browser manifest | Passed |
+| Deployed acceptance smoke | `.\scripts\smoke.ps1` plus Sprint 8C profile | Response owner, product flow, providers/events, Dataset output, health | Passed |
 
 Deployed acceptance smoke runs inside SIT. SIT must restore the canonical
 topology and publish one passing `sit-result.json` before UAT begins.
@@ -198,27 +204,30 @@ topology and publish one passing `sit-result.json` before UAT begins.
 
 - Command: `.\scripts\uat-sprint.ps1 -BaseUrl "http://localhost:8080"` plus
   `.\scripts\uat-sprint-8c.ps1` exact Sprint inventory.
-- Result: Not Run
-- Evidence: pending sealed UAT phase index.
+- Result: Passed.
+- Evidence: sealed UAT phase index; eleven of eleven declared UAT lanes
+  executed with no inheritance.
 
 ### Manual UAT
 
 | Scenario | Role / start state | Actions and observable pass condition | Result |
 | --- | --- | --- | --- |
-| UAT-8C-01 product and UI parity | owner/respondent; active assigned draft | list, start, save, refresh/resume, submit and review in direct/lifecycle routes; accepted shell/theme/responsive/a11y/SSR/hydration behavior and clean console | Not Run |
-| UAT-8C-02 assignment and providers | respondent/delegate; active/inactive/completed/substituted contexts | only exact active assignment starts; FormVersion renders from typed snapshot; direct legacy start and invalid contexts create nothing/nondisclose | Not Run |
-| UAT-8C-03 scoped review | owner, delegate, scoped manager, disjoint outsider | prove own/delegated/scoped visibility and indistinguishable known/random forbidden responses | Not Run |
-| UAT-8C-04 Dataset and Workflow consumers | submitted fixture, Workflow and Dataset healthy | submit once, Workflow advances once, Dataset refresh imports exact output, Component/Dashboard display it; duplicate/reordered event and unchanged export are no-ops | Not Run |
-| UAT-8C-05 replay, compatibility and outage | administrator/operator | replay identical mutation; reject changed actor/body/action; fault Forms/Workflow/Response/Dataset binding separately; observe bounded sanitized last-good behavior and recovery | Not Run |
-| UAT-8C-06 configuration and diagnostics | administrator/operator | administrator validates/applies Response config and inspects sanitized owner diagnostics in generic Module Management; operator verifies the healthy Response status projection in Operations while installation-global Module Management remains correctly restricted | Not Run |
-| UAT-8C-07 fresh materialization/no-op | operator, empty authenticated databases | apply owner order, inspect signed read-back/one enrollment/exact health, reapply unchanged and observe semantic no-op | Not Run |
-| UAT-8C-08 Core subtraction/isolation | operator | prove three Core transitions (Forms, Workflows, Migration), one Response enrollment/navigation item, no Core Response schema/routes/adapters/seed, and pairwise credential denial | Not Run |
-| UAT-8C-09 failure recovery | operator, empty topology with one-shot fault | inspect retained failed apply, exact partial teardown, clean successor apply and canonical health without manual repair | Not Run |
-| UAT-8C-10 upgrade/rollback | operator, healthy Response `0.9.0` fixture | upgrade to `1.0.0`, roll back, restore; preserve state/instance and unrelated owners/images/restarts/data/navigation | Not Run |
-| UAT-8C-11 roadmap exit | tester with assigned work | complete and review Response, consume submitted output in Dataset/Component/Dashboard, and inspect proof of no shared database access | Not Run |
+| UAT-8C-01 product and UI parity | owner/respondent; active assigned draft | list, start, save, refresh/resume, submit and review in direct/lifecycle routes; accepted shell/theme/responsive/a11y/SSR/hydration behavior and clean console | Passed |
+| UAT-8C-02 assignment and providers | respondent/delegate; active/inactive/completed/substituted contexts | only exact active assignment starts; FormVersion renders from typed snapshot; direct legacy start and invalid contexts create nothing/nondisclose | Passed |
+| UAT-8C-03 scoped review | owner, delegate, scoped manager, disjoint outsider | prove own/delegated/scoped visibility and indistinguishable known/random forbidden responses | Passed |
+| UAT-8C-04 Dataset and Workflow consumers | submitted fixture, Workflow and Dataset healthy | submit once, Workflow advances once, Dataset refresh imports exact output, Component/Dashboard display it; duplicate/reordered event and unchanged export are no-ops | Passed |
+| UAT-8C-05 replay, compatibility and outage | administrator/operator | replay identical mutation; reject changed actor/body/action; fault Forms/Workflow/Response/Dataset binding separately; observe bounded sanitized last-good behavior and recovery | Passed |
+| UAT-8C-06 configuration and diagnostics | administrator/operator | administrator validates/applies Response config and inspects sanitized owner diagnostics in generic Module Management; operator verifies the healthy Response status projection in Operations while installation-global Module Management remains correctly restricted | Passed |
+| UAT-8C-07 fresh materialization/no-op | operator, empty authenticated databases | apply owner order, inspect signed read-back/one enrollment/exact health, reapply unchanged and observe semantic no-op | Passed |
+| UAT-8C-08 Core subtraction/isolation | operator | prove three Core transitions (Forms, Workflows, Migration), one Response enrollment/navigation item, no Core Response schema/routes/adapters/seed, and pairwise credential denial | Passed |
+| UAT-8C-09 failure recovery | operator, empty topology with one-shot fault | inspect retained failed apply, exact partial teardown, clean successor apply and canonical health without manual repair | Passed |
+| UAT-8C-10 upgrade/rollback | operator, healthy Response `0.9.0` fixture | upgrade to `1.0.0`, roll back, restore; preserve state/instance and unrelated owners/images/restarts/data/navigation | Passed |
+| UAT-8C-11 roadmap exit | tester with assigned work | complete and review Response, consume submitted output in Dataset/Component/Dashboard, and inspect proof of no shared database access | Passed |
 
-- UAT result receipt: pending.
-- Final topology restoration: required and pending.
+- UAT result receipt: Passed; `uat-result.json` SHA-256
+  `db1ebb965b1a5bf451f141ef38620c1e93e95744563f996c6b7aae4ef52b3371`.
+- Final topology restoration: Passed; Response `1.0.0` is retained at
+  `http://127.0.0.1:59474` with health and readiness returning HTTP 200.
 
 ## Post-SIT Defect Convergence (Conditional)
 
@@ -240,7 +249,10 @@ complete SIT and complete UAT are mandatory.
 
 | Time | Phase/lane/stage | Assertions started | Candidate | Provenance | Origin | Exit gap/process drift | Focused proof | Invalidation | Replacement |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| None | Kickoff only | No | None | None | N/A | None | N/A | N/A | N/A |
+| 2026-08-28–30 | Rehearsal lanes | Yes where recorded | Mutable pre-freeze source | Per-attempt records | Product/process as recorded | Reconciled | Focused implementation targets | Affected lanes and downstream candidate boundary | Final clean Readiness/Rehearsal attempt 1 |
+| 2026-08-30 | UAT-8C-01 submit and sign-out | Yes | Superseded candidate | Per-scenario records | Product/harness as recorded | Reconciled | Focused repair attempt 1 | Candidate, SIT, and UAT invalidated | Successor candidate `bf32368f…` |
+| 2026-08-31 | Diagnostic human UAT observations and UAT-8C-06 contract defect | Yes | Invalid mutable candidate lineage | `uat-human-observations-batch-2.json` plus reconciliation record | Product and acceptance contract | Reconciled | Complete correction batch and implementation exit | Full Readiness, Rehearsal, Preflight, SIT, and UAT | Final candidate `bf32368f…` |
+| 2026-09-01 | Closeout impact-record finalization | No | Final candidate unchanged | `evidence-finalization-20260901T202938287Z.json` | Evidence finalization | No exit gap or process drift | Schema and policy validation only | No phase invalidation; assertions immutable | Reissued evidence chain and closeout authorization |
 
 For every future failure, a sibling `defect-provenance.json` must validate
 before correction or broad rerun. It records source/fixture/environment/
@@ -253,12 +265,18 @@ authority, equal-or-stronger coverage and a test-change-log entry.
 
 ## Evidence Integrity And Closeout Authorization
 
-- Compact phase certificates: pending.
-- Phase-local indexes and hashes: pending.
+- Compact phase certificates: Passed and authenticated.
+- Phase-local indexes and hashes: six sealed indexes authenticated.
 - Raw evidence: retained cold under ignored evidence root.
 - Routine downstream review: certificates/index hashes only.
-- Final full-integrity audit and `evidence-chain.json`: pending.
-- Closeout status: Not Authorized.
-- Authorization requires one exact candidate, complete passing SIT and UAT,
-  complete acceptance mapping, resolved invalidations/provenance, restored
-  intended topology/health, and separate evidence-source/documentation commits.
+- Final full-integrity audit and `evidence-chain.json`: Passed; 4,278 artifacts
+  authenticated across six phase indexes. Evidence-chain SHA-256:
+  `ac65134122607c36fd9108585aa0ae3c595671f2e054d25c232e21ea2b03610f`.
+- Closeout status: Authorized on 2026-09-01. Authorization SHA-256:
+  `5a134124994eea8abd9277ba6f9a35e039bdca62d8aae8c53a362f3f34ccbe92`.
+- Evidence-source implementation commit:
+  `460096223afb00055f9271f24810d8fc79055b5e`; the documentation-only
+  closeout commit is intentionally separate.
+- Final state: one exact candidate, complete passing SIT and UAT, complete
+  acceptance mapping, resolved invalidations/provenance, zero open defects or
+  product decisions, and restored healthy reviewer topology.

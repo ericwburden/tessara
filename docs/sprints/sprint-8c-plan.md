@@ -1,6 +1,6 @@
 # Sprint 8C: Response Module Separation Slice
 
-Status: kickoff planning complete; implementation authorized on 2026-08-23.
+Status: complete; validation and closeout authorized on 2026-09-01.
 
 - Branch: `codex/sprint-8c`
 - Worktree: `C:\Users\eric-dev\Projects\tessara-sprint-8c`
@@ -652,3 +652,23 @@ Authorized first implementation slice: **S1 — freeze canonical Response v2,
 Workflow-context/event and reverse-consumer contracts; capture the source-exact
 UI baseline; and turn the complete Core/subscriber subtraction inventory into
 executable boundary tests.**
+
+## Closeout
+
+- Completed: 2026-09-01.
+- Evidence-source implementation commit:
+  `460096223afb00055f9271f24810d8fc79055b5e`.
+- Evidence-source tree: `2eadb5f26e9cfd505a133391f2f1e8749e0de99c`.
+- Frozen candidate:
+  `bf32368f66d3461bb5b9485dba8634997ea9563b6056c36a3c1814247313a2f4`.
+- Validation: Implementation Readiness, Validation Readiness, Candidate
+  Rehearsal, Preflight, complete SIT, scripted UAT, and all eleven manual UAT
+  scenarios passed with zero open defects or product decisions.
+- Evidence integrity: the final policy-v2 audit authenticated six sealed phase
+  indexes and 4,278 artifacts. The closeout audit's evidence-finalization
+  correction preserves the original provenance-bound bytes and authenticates
+  their schema-valid finalization successor without changing candidate or
+  assertion results.
+- Handoff: the retained candidate topology remains reviewer-testable at
+  `http://127.0.0.1:59474` with Response `1.0.0` restored and healthy.
+- Next sprint: Sprint 8D1, Workflow Module Separation Slice.

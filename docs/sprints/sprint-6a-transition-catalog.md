@@ -30,13 +30,18 @@ This document freezes the human-readable identifiers and current-route mappings 
 
 ## Canonical Source Artifacts
 
-These seven documents—and only these seven—are the persistence synchronization inputs. The adjacent `.sha256` sidecars contain the expected exact-byte digest. The smaller generic valid/invalid fixtures in the same test directory are conformance examples, not catalog sources.
+These seven entries record the original persistence synchronization inputs.
+Active source documents link to their adjacent `.sha256` sidecars and expected
+exact-byte digest. A retired entry preserves its historical identity and digest
+without retaining a live transition fixture. The smaller generic valid/invalid
+fixtures in the same test directory are conformance examples, not catalog
+sources.
 
 | Definition | Authoritative source | Expected exact-byte digest |
 | --- | --- | --- |
 | Forms | [`transition-forms-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-forms-v1.json) | `sha256:71bebdd07ff0028cc0da8bbd9707c393bade9951e5cedb265a4b8465d54b493e` |
 | Workflows | [`transition-workflows-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-workflows-v1.json) | `sha256:e9bdf51896700ffb982a00e4c80ea198bbdb98056705036a1a948347a71c04cf` |
-| Responses | [`transition-responses-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-responses-v1.json) | `sha256:e491986ed43b0f290f0c2ee763e60afb03e5b7babc7117a11e280e37de7b91bc` |
+| Responses | `transition-responses-v1.json` — retired by Sprint 8C when the independent Response module replaced the Core transition | `sha256:e491986ed43b0f290f0c2ee763e60afb03e5b7babc7117a11e280e37de7b91bc` |
 | Datasets | [`transition-datasets-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-datasets-v1.json) | `sha256:ca301f4ac9a589d498bc25c77de4223b33de90569ecf54974976424c07fb4614` |
 | Components | [`transition-components-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-components-v1.json) | `sha256:344388304b015421ea71b5e303e7b9699264aef51c116b56d7f52e1b92443499` |
 | Dashboards | [`transition-dashboards-v1.json`](../../crates/tessara-module-contract/tests/fixtures/transition-dashboards-v1.json) | `sha256:c82ecc7c3d121d1e1498c130133e487c8a68899b9255951e97955ce0de76bbe5` |
