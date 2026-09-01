@@ -273,7 +273,7 @@ authority, equal-or-stronger coverage and a test-change-log entry.
   authenticated across six phase indexes. Evidence-chain SHA-256:
   `ac65134122607c36fd9108585aa0ae3c595671f2e054d25c232e21ea2b03610f`.
 - Closeout status: Authorized on 2026-09-01. Authorization SHA-256:
-  `5a134124994eea8abd9277ba6f9a35e039bdca62d8aae8c53a362f3f34ccbe92`.
+  `5895691e919cbdc2b1a2f6b0817b9644e28f2f34fb45cc51c776f392243d237b`.
 - Evidence-source implementation commit:
   `460096223afb00055f9271f24810d8fc79055b5e`; the documentation-only
   closeout commit is intentionally separate.
