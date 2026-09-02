@@ -16,7 +16,14 @@ completely. Consume compact Readiness/Rehearsal certificates and an
 authenticated impact assessment. Do not reopen their raw evidence or reject
 them merely because an unrelated repository commit changed.
 
-Otherwise read
+When it declares `policy_version: tessara-validation-v3`, read v2 and then
+[`../tessara-sprint-validation/references/validation-policy-v3.md`](../tessara-sprint-validation/references/validation-policy-v3.md)
+completely. Validate the canonical successor-impact plan when this is a
+successor freeze. Require its exact predecessor/successor source and candidate
+fingerprints, diff digest, owned-domain mapping, affected Readiness/Rehearsal/
+Preflight closure, correction-batch convergence, and fallback decision.
+
+Only when the contract selects neither v2 nor v3, read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
 completely. It defines the legacy receipt schemas, fingerprints,
 classifications, and invalidation authority.
@@ -29,6 +36,10 @@ completely and validate its records against
 When any prior v2 target, lane, or scenario failed, also read
 [`../tessara-sprint-validation/references/defect-provenance.md`](../tessara-sprint-validation/references/defect-provenance.md)
 and validate every retained record against its schema.
+
+Read
+[`../tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+before freezing the acceptance inventory.
 
 ## Inputs
 
@@ -54,16 +65,20 @@ and validate every retained record against its schema.
 4. When an earlier candidate was invalidated after SIT, parse and hash the
    defect-harvest, defect-batch, correction-impact, focused repair,
    restoration, and final-certification-entry records. Require the coordinator
-   to have authorized return to the legacy complete pass or v2 affected-lane
-   pre-freeze recertification, and require the resulting certificates to bind
-   the final corrected source and authenticated inherited coverage.
+   to have authorized return to the legacy complete pass, v2 affected-lane
+   pre-freeze recertification, or v3 successor-impact selection, and require
+   the resulting certificates to bind the final corrected source and
+   authenticated inherited coverage.
 5. Audit all changes and require one clean implementation commit. Require
    every defect-provenance record to be verified or validly superseded. Reject
    an open implementation-exit gap, unresolved provenance, blocked broad
    rerun, or test expectation change without approved authority and a
    test-change-log entry.
-6. Reconcile every roadmap exit condition with automated, smoke, and manual
-   UAT coverage in the validation record.
+6. Reconcile every roadmap exit condition with automated evidence and smoke
+   where applicable. Audit the exact screen/feature touch inventory and require
+   every sprint-delivered user-facing surface to map to a human exploratory UAT
+   scenario with automated prerequisites; purely technical clauses may record
+   manual coverage as not applicable.
 7. Discover required environment variables from the actual test and runner
    sources. Do not infer similarly named variables.
 8. Validate database URLs, unique disposable identities, reachability,
@@ -93,8 +108,11 @@ impact still returns to complete affected-phase execution.
 
 ## Executable preflight contract
 
-Prefer one repository-owned preflight command. Until one exists, perform the
-checks explicitly and retain their outputs. The contract must catch:
+For v3, execute the declared Preflight lane through
+`Invoke-TessaraValidationLane`; a repository script may be its product action
+but cannot own phase orchestration, topology, cleanup, publication, or
+certificates. For retained legacy/v2 contracts, use only the runner named by
+that contract. The contract must catch:
 
 - missing reset acknowledgements
 - missing or misspelled database variables
@@ -155,6 +173,8 @@ Finish only when:
 
 - the implementation commit is clean
 - the acceptance inventory is complete and frozen
+- every delivered user-facing screen/feature has planned human exploratory
+  touch coverage and no manual scenario is a machine-evidence review checklist
 - all environment and deployment prerequisites pass
 - evidence paths and required artifacts are declared
 - the defect-provenance chronology is complete and resolved

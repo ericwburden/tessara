@@ -19,9 +19,12 @@ or harness changes during kickoff.
   implementation slices, and verification coverage.
 - Create the `tessara-sprint-validation` record as a planned acceptance
   inventory; do not execute validation gates.
-- Create the tracked machine-readable sprint validation contract and select
-  `policy_version: tessara-validation-v2`. This policy first applies after
-  Sprint 8A; never retrofit an older sprint's receipts.
+- Create the tracked machine-readable sprint validation contract and schema-v2
+  `tessara.validation.adapter`. New kickoffs select contract schema 3 and
+  `policy_version: tessara-validation-v3`; retained contracts continue under
+  the version they declare and are never retrofitted.
+- Read `tessara-sprint-validation/references/validation-policy-v3.md` after its
+  v2 base before writing a new kickoff package.
 - Prepend a kickoff entry to `docs/progress-report.md`.
 - Audit the planning package for completeness and stop at the implementation
   handoff boundary.
@@ -71,6 +74,8 @@ Example: `Sprint 2A: Workflow Assignment And Response Start (Next)` produces:
   `docs/sprints/sprint-2a-verification.md`
 - validation contract in the sprint worktree:
   `docs/sprints/sprint-2a-validation-contract.json`
+- validation adapter in the sprint worktree:
+  `docs/sprints/sprint-2a-validation-adapter.json`
 
 Abort if the branch, worktree path, plan, validation record, or validation
 contract already exists, unless the user explicitly asks to resume or revise an
@@ -93,18 +98,47 @@ the current roadmap.
 7. Write `docs/sprints/<slug>-plan.md` as the execution contract.
 8. Use `tessara-sprint-validation` and its record template to create
    `docs/sprints/<slug>-verification.md` as a planned acceptance inventory.
-9. Create `docs/sprints/<slug>-validation-contract.json`, validate it with
-   `scripts/tessara-validation-policy.psm1`, starting from
-   `tessara-sprint-validation/assets/sprint-validation-contract.json`, and
-   ensure every placeholder is replaced and every requirement,
+9. Create `docs/sprints/<slug>-validation-contract.json` and
+   `docs/sprints/<slug>-validation-adapter.json`, starting from both assets in
+   `tessara-sprint-validation/assets/`. Select schema 3 / policy v3, record the
+   canonical adapter path and supported platform release, validate the contract
+   with `scripts/tessara-validation-policy.psm1`, validate
+   the adapter through public `Assert-TessaraValidationAdapter`, then run
+   `Assert-TessaraFutureSprintPlanningPackage`. Select v3 only after
+   `scripts/test-tessara-successor-certification.ps1` and the complete shared
+   platform certification pass with warnings denied. Ensure every placeholder is
+   replaced and every requirement,
    target, lane, prerequisite, dependency domain, environment section, and
    evidence policy is complete. Select `implementation_profile.kind` as
    `phase8-module-extraction` for a Phase 8 extraction, bind the canonical
    playbook and exact module/transition identities, and map required exact
    commands to every playbook proof class.
-10. Prepend the kickoff entry to `docs/progress-report.md`.
-11. Run the comprehensive planning audit below and correct planning gaps.
-12. Present the plan, unresolved decisions, and recommended first
+10. Declare explicit producer-to-projection fanout edges and each slice's exact
+    focused exit targets. For Phase 8, also create the actor/action/route/
+    capability authorization matrix and bind its early boundary target plus the
+    independent UI ownership gate.
+    For every v3 sprint, select the shared implementation coordinator, declare
+    dependency-complete target prerequisites, and give each target an exclusive
+    evidence-path claim plus every process, topology, port, database, Docker,
+    or external-service claim it can touch. Read
+    `tessara-sprint-validation/references/implementation-target-coordinator.md`.
+    Activate the shared successor planner/validator. Replace broad
+    `product-source` buckets with only justified owned domains: each domain must
+    name actual producer/test/fixture/environment/acceptance/runner inputs,
+    candidate binding, exact target/lane consumers, and either a proved bounded
+    cone or conservative full replay. Declare every UAT scripted/manual scenario
+    as a formal coverage item with a risk rank. Read
+    [`tessara-sprint-validation/references/uat-scenario-classification.md`](../tessara-sprint-validation/references/uat-scenario-classification.md)
+    and
+    classify every machine-decidable artifact, API, browser, topology, or
+    provenance check as automated. Retain a manual scenario only when it names
+    a direct product interaction and an irreducible human-judgment question.
+    Build a complete screen/feature touch inventory and map every user-facing
+    screen and feature delivered by the sprint to at least one human exploratory
+    scenario; related surfaces may share one coherent journey.
+11. Prepend the kickoff entry to `docs/progress-report.md`.
+12. Run the comprehensive planning audit below and correct planning gaps.
+13. Present the plan, unresolved decisions, and recommended first
    implementation slice, then stop. Do not begin implementation.
 
 ## Comprehensive sprint plan
@@ -118,11 +152,16 @@ Write the plan in Markdown with these sections:
   observability, and rollback specifications, retaining only relevant domains
 - assumptions, decisions, open questions, dependencies, and blockers
 - traceability matrix mapping every roadmap clause to specifications,
-  acceptance criteria, implementation slices, automated checks, and manual UAT
+  acceptance criteria, implementation slices, automated checks, and applicable
+  manual UAT
 - acceptance criteria with observable pass conditions and negative cases
 - ordered implementation slices with prerequisites, expected file/component
-  touchpoints, tests changed in the same slice, and slice completion criteria
+  touchpoints, exact focused exit targets, controlled-artifact fanout edges,
+  tests changed in the same slice, and receipt-bound completion criteria
 - automated, integration, deployed-smoke, and manual UAT plans
+- exact screen/feature-to-manual-scenario coverage, including intended actor and
+  materially distinct role, responsive, direct/lifecycle, or failure-state
+  experiences
 - validation, evidence, candidate-freeze, failure-restart, and closeout-
   authorization plan
 - rollout, migration, compatibility, recovery, and rollback plan where relevant
@@ -135,7 +174,13 @@ command matrix. Include an accepted pre-extraction visual and interaction
 baseline plus a UI ownership inventory for markup, SDK primitives, styles,
 assets, SSR/hydration, lifecycle behavior, navigation title/state, and
 responsive behavior. Map a focused visual reproducer and
-`ui-sdk-conformance` target before consumer cutover. Reusing the architecture
+`ui-sdk-conformance` target before consumer cutover. Add the complete eight-
+boundary authorization matrix with exact positive, negative, replay,
+nondisclosure, revision, and outage cases; exercise it through the real process/
+gateway boundary before browser or smoke. Require standalone-module UI proof
+for CSS and shared-shell ownership, generated assets/digests, responsive and
+navigation parity, route identity, bootstrap media types, SSR, hydration,
+accessibility, and a clean console. Reusing the architecture
 without these delivery details is not an implementation-ready plan.
 
 Use repository evidence to make the plan concrete, but do not make speculative
@@ -145,16 +190,27 @@ that merely names files or architectural layers.
 
 The tracked validation contract is the executable companion to this prose. It
 maps every clause to exact implementation targets and formal lanes, maps every
-target/lane to dependency domains, and maps each domain to tracked path
-patterns. Unknown paths must select conservative validation rather than being
+target/lane to dependency domains, and maps each domain to exact owned inputs
+and reverse consumer relationships. Unknown paths must select conservative validation rather than being
 silently ignored.
+
+For policy v3, it also owns one explicit producer-to-projection edge for every
+controlled artifact relationship (migrations/checksums, contracts/generated
+clients, manifests/catalogs, browser assets/digests, baselines, fixtures,
+acceptance inventories, and evidence schemas), owner-read fixture rules, visual
+stability declarations, and per-slice exit targets. Unknown fanout expands the
+verification cone. Predicted identities, copied inventories, historical demo
+counts, reduced DTO replicas, and cross-owner fixture writes are prohibited.
 
 ## Validation and closeout readiness
 
 Seed the validation record before implementation with:
 
 - every roadmap exit-condition clause
-- one automated assertion and one manual UAT scenario per clause
+- automated evidence for every clause, plus human exploratory touch coverage
+  for every user-facing screen and feature delivered by the sprint; purely
+  technical clauses without a user-facing surface may mark manual coverage not
+  applicable
 - product, authorization, lifecycle, deployment, compatibility, migration,
   observability, recovery, and rollback risks that apply
 - required commands, environments, roles/accounts, fixtures, and evidence paths
@@ -171,10 +227,10 @@ Seed the validation record before implementation with:
   `evidence-chain.json` integrity audit
 - the rule that deployed acceptance smoke runs inside SIT
 - the rule that a candidate or harness change invalidates downstream evidence
-- the shared validation-protocol invalidation matrix, including complete SIT
-  restart for a successor candidate, authenticated affected-lane pre-freeze
-  recertification, and certificate reuse only when declared dependency
-  fingerprints prove earlier results unaffected
+- the v2 complete-successor-SIT/UAT rule when v2 governs
+- for v3, the five correction classes, focused-repair-before-certification
+  rule, immediate-predecessor-only inheritance invariants, deterministic
+  failed/direct/prerequisite/risk order, and conservative fallback conditions
 
 Plan `defect-provenance.json` beside every possible failed attempt. State that
 automation may classify, invalidate, route, and block reruns, but may not edit
@@ -197,8 +253,19 @@ Before declaring kickoff complete, verify that:
 
 - every roadmap scope and exit-condition clause has end-to-end traceability
 - the machine-readable validation contract agrees with the plan and record,
-  validates against `validation-contract.schema.json`, and contains no
+  validates against `validation-contract-v3.schema.json`, and contains no
   unmapped requirement, target, lane, dependency, or tracked path category
+- the tracked schema-v2 adapter passes `Assert-TessaraValidationAdapter`, names
+  exactly the contract lanes and prerequisites, maps every required target with
+  no extra action target, and the public planning-package audit passes
+- the contract selects `Invoke-TessaraImplementationHarvest`,
+  `evidentiary-priority-v1`, and `serial-resource-safe`; target prerequisites
+  agree with implementation lanes, and live-state topology/ports have matching
+  exclusive target claims
+- every slice declares its exact focused exit targets and fanout edges; every
+  canonical producer has explicit projections and a reconciliation target
+- fixture identities are owner-read under logical keys with signed read-back,
+  and mutable visual content uses stable regions plus semantic assertions
 - a Phase 8 extraction selects `phase8-module-extraction`, instantiates the
   canonical playbook, and covers every required proof class with a required
   exact implementation target; clean materialization, semantic no-op, and
@@ -208,12 +275,21 @@ Before declaring kickoff complete, verify that:
 - happy paths, negative paths, boundary cases, nondisclosure, recovery, and
   rollback are covered where applicable
 - implementation slices have a dependency-valid order and testable boundaries
+- browser, smoke, and consumer-cutover targets depend on passing early
+  authorization and independent UI ownership targets where Phase 8 applies
 - required harness and fixture changes are paired with their product slices
 - every extracted UI has an accepted baseline, canonical SDK ownership map,
   namespaced product-style inventory, direct/lifecycle parity target, and
   mandatory passing `ui-sdk-conformance` implementation target
 - acceptance commands, roles, environments, data, and evidence destinations
   are concrete
+- no manual UAT scenario consists of reviewing JSON, receipts, logs, hashes,
+  source scans, or other machine-decidable evidence; each retained manual
+  scenario records its product surface, direct interaction, irreducible human-
+  judgment question, and automated prerequisite receipts
+- the screen/feature touch inventory has exact forward and reverse mappings,
+  leaves no sprint-delivered user-facing surface uncovered, and requires each
+  manual scenario to retain exploratory defect and UI/UX-improvement notes
 - assumptions and unresolved decisions are visible and no blocker is hidden
 - the plan traces the defect-provenance gate through implementation exit,
   every formal phase failure, Preflight rejection, and Closeout audit
@@ -272,7 +348,16 @@ Do not report kickoff complete unless:
 - the sprint branch and worktree were created
 - the comprehensive plan was written and passed the planning audit
 - the validation record was created and seeded from the roadmap
-- the policy-v2 validation contract was created and validated
+- the policy-v3 validation contract and tracked schema-v2 adapter were created,
+  validated through the public APIs, and passed the planning-package audit
+- every owned domain has actual producer and test evidence plus an exact
+  consumer inventory, and the shared successor-impact state machine is active
+- every acceptance clause has automated evidence and every retained manual UAT
+  scenario passes the automated-versus-human classification audit
+- every sprint-delivered user-facing screen and feature maps to a planned human
+  exploratory touch, with purely technical manual exclusions explicit
+- the shared coordinator activation, deterministic prerequisites, and resource
+  claims can produce one immutable execution plan
 - the kickoff progress entry was prepended
 - blockers and decisions were surfaced
 - `main` remained clean and the sprint worktree contains only planning changes

@@ -63,6 +63,7 @@ $adapterPath = Join-Path $PSScriptRoot "validation-platform/fixtures/synthetic-a
 $dockerShimPath = Join-Path $PSScriptRoot "validation-platform/fixtures/docker-shim.ps1"
 $certificationHarnessRelativePaths = @(
     "scripts/test-tessara-validation-platform.ps1"
+    "scripts/test-tessara-successor-certification.ps1"
     "scripts/validation-platform/fixtures/assert-synthetic-environment.ps1"
     "scripts/validation-platform/fixtures/docker-shim.ps1"
     "scripts/validation-platform/fixtures/synthetic-acceptance.json"
@@ -78,8 +79,9 @@ function Get-CertificationHarnessSnapshot {
         [Parameter(Mandatory)][string]$RepositoryRoot,
         [Parameter(Mandatory)][string[]]$RelativePaths
     )
-    if ($RelativePaths.Count -ne 9 -or
+    if ($RelativePaths.Count -ne 10 -or
         [string]$RelativePaths[0] -cne "scripts/test-tessara-validation-platform.ps1" -or
+        [string]$RelativePaths[1] -cne "scripts/test-tessara-successor-certification.ps1" -or
         @($RelativePaths | Where-Object {
                 ([string]$_).StartsWith(
                     "scripts/validation-platform/fixtures/",
@@ -87,7 +89,7 @@ function Get-CertificationHarnessSnapshot {
                 )
             }).Count -ne 8 -or
         @($RelativePaths | Sort-Object -Unique).Count -ne $RelativePaths.Count) {
-        throw "Certification harness inventory must be the certification script plus exactly eight fixtures."
+        throw "Certification harness inventory must be the platform and successor certification scripts plus exactly eight fixtures."
     }
 
     $resolvedRoot = [IO.Path]::GetFullPath($RepositoryRoot).TrimEnd(
@@ -358,8 +360,64 @@ function Get-DockerShimLiveResidue {
 
     @(
         Get-ChildItem -LiteralPath $Root -Force -ErrorAction SilentlyContinue |
-            Where-Object { [string]$_.Name -cne "docker-transcript.jsonl" }
+            Where-Object {
+                [string]$_.Name -notin @(
+                    "docker-transcript.jsonl", "synthetic-processes.jsonl"
+                )
+            }
     )
+}
+
+function Remove-DockerShimRetainedResidue {
+    param([Parameter(Mandatory)][string]$Root)
+
+    $resolvedRoot = [IO.Path]::GetFullPath($Root)
+    $ledgerPath = Join-Path $resolvedRoot "synthetic-processes.jsonl"
+    $states = if (Test-Path -LiteralPath $ledgerPath -PathType Leaf) {
+        @(Get-Content -LiteralPath $ledgerPath | Where-Object {
+                -not [string]::IsNullOrWhiteSpace($_)
+            } | ForEach-Object { $_ | ConvertFrom-Json -Depth 20 })
+    } else { @() }
+    foreach ($state in $states) {
+        $project = [string]$state.project
+        $expectedStopPath = [IO.Path]::GetFullPath(
+            (Join-Path $resolvedRoot "$project.stop")
+        )
+        if ($project -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$' -or
+            [int]$state.pid -le 0 -or
+            [int]$state.port -le 0 -or [int]$state.port -gt 65535 -or
+            [string]$state.stop_capability -cnotmatch '^[0-9a-f]{64}$' -or
+            [IO.Path]::GetFullPath([string]$state.stop_path) -cne $expectedStopPath) {
+            throw "Docker shim retained an invalid synthetic ownership record for '$project'."
+        }
+        $recordedStart = [DateTimeOffset]::Parse(
+            [string]$state.process_started_at,
+            [Globalization.CultureInfo]::InvariantCulture
+        ).UtcDateTime
+        [IO.File]::WriteAllText(
+            $expectedStopPath,
+            ([string]$state.stop_capability) + "`n",
+            [Text.UTF8Encoding]::new($false)
+        )
+        $deadline = [DateTimeOffset]::UtcNow.AddSeconds(5)
+        do {
+            $process = Get-Process -Id ([int]$state.pid) -ErrorAction SilentlyContinue
+            $sameProcess = $null -ne $process -and [Math]::Abs(
+                ($process.StartTime.ToUniversalTime() - $recordedStart).TotalSeconds
+            ) -lt 1
+            $portClosed = Test-PortClosed -Port ([int]$state.port)
+            if (-not $sameProcess -and $portClosed) { break }
+            Start-Sleep -Milliseconds 50
+        } while ([DateTimeOffset]::UtcNow -lt $deadline)
+        if ($sameProcess -or -not $portClosed) {
+            throw "Retained synthetic service '$project' did not honor test-owned restoration."
+        }
+        Remove-Item -LiteralPath (Join-Path $resolvedRoot "$project.json") `
+            -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $expectedStopPath -Force -ErrorAction SilentlyContinue
+    }
+    Assert-Equal @(Get-DockerShimLiveResidue -Root $resolvedRoot).Count 0 `
+        "Docker shim test-owned residue restoration"
 }
 
 function Invoke-CompatibilityPlannerSet {
@@ -654,7 +712,7 @@ try {
     Assert-Equal $identity.contract "tessara.validation.platform" "Platform contract"
     Assert-Equal $identity.release_version "2.0.0" "Platform release"
     Assert-Equal $identity.components.Count 4 "Platform component count"
-    Assert-Equal $identity.boundary_inputs.Count 4 "Platform boundary-input count"
+    Assert-Equal $identity.boundary_inputs.Count 23 "Platform boundary-input count"
     if ([string]$identity.execution_fingerprint -cnotmatch '^[0-9a-f]{64}$') {
         throw "Platform did not publish a lane execution fingerprint."
     }
@@ -3408,8 +3466,7 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
         } -ExpectedMessage "cleanup"
     } finally {
         Remove-Item Env:TESSARA_VP_DOCKER_SHIM_RETAIN -ErrorAction SilentlyContinue
-        Get-ChildItem -LiteralPath $shimRoot -Filter "*.json" -File -ErrorAction SilentlyContinue |
-            Remove-Item -Force
+        Remove-DockerShimRetainedResidue -Root $shimRoot
     }
 
     $dockerTranscriptPath = Join-Path $shimRoot "docker-transcript.jsonl"
@@ -3432,6 +3489,14 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
                 }).Count -eq 0) {
             throw "Docker shim transcript did not exercise '$requiredComposeAction'."
         }
+    }
+
+    $successorCertificationOutput = @(& pwsh -NoProfile -NonInteractive -File `
+        (Join-Path $PSScriptRoot "test-tessara-successor-certification.ps1"))
+    if ($LASTEXITCODE -ne 0 -or
+        [string]$successorCertificationOutput[-1] -cne
+            "Tessara successor-certification self-test passed.") {
+        throw "Successor-candidate impact certification did not pass inside the aggregate platform suite."
     }
 
     $certificationHarnessCurrent = Get-CertificationHarnessSnapshot `
@@ -3469,6 +3534,7 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
             "truthful-assertion-process-start-accounting",
             "post-setup-topology-tool-recheck",
             "prerequisite-gating", "lane-scoped-invalidation",
+            "successor-impact-selection",
             "planner-mutation-matrix",
             "git-nul-path-and-mode-binding",
             "required-source-setup-failure",
@@ -3523,6 +3589,11 @@ if (-not ([string]$args[0]).StartsWith('@', [StringComparison]::Ordinal)) { exit
         )
     } else {
         Remove-Item Env:TESSARA_VP_SENTINEL -ErrorAction SilentlyContinue
+    }
+    if ($null -ne (Get-Variable -Name shimRoot -ErrorAction SilentlyContinue) -and
+        -not [string]::IsNullOrWhiteSpace([string]$shimRoot) -and
+        (Test-Path -LiteralPath $shimRoot -PathType Container)) {
+        Remove-DockerShimRetainedResidue -Root $shimRoot
     }
     Remove-CertificationRoot -Path $root -RepositoryRoot $repoRoot `
         -Capability $rootCapability

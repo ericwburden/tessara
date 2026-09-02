@@ -49,7 +49,7 @@ one lane. The platform keeps the following identities distinct:
 | Identity | Bound inputs | Purpose |
 |---|---|---|
 | Application candidate | Platform-derived Git commit/tree/dirty-state, governing contract, and current dependency snapshot fingerprint | Binds Validation Preflight, SIT, and UAT; the strict certifier rejects dirty candidate-bound plans or a caller mismatch |
-| Aggregate platform | Manifest, four public boundary inputs, and all four platform components | Complete release inventory and provenance; not by itself a lane-restart key |
+| Aggregate platform | Manifest, exact ordered public-boundary inventory, and all four platform components | Complete release inventory and provenance; not by itself a lane-restart key |
 | Platform execution | Public entry point, adapter schema, governing validation-contract schema, validation-policy module, and lifecycle module | Invalidates every lane when common execution semantics change |
 | Lane compatibility | The exact tuple below | Determines whether a prior lane result still describes the current lane |
 | Raw execution attempt | Lane compatibility plus attempt-specific runtime observations and resources | Distinguishes one actual execution from another compatible execution |
@@ -103,8 +103,11 @@ into a candidate-wide restart.
 
 ## Minimum-safe impact rules
 
-The smallest safe invalidation unit is an owning lane plus its recursive
-dependent closure. The current mapping is:
+Under v2, the smallest pre-freeze invalidation unit remains an owning lane plus
+its recursive dependent closure, while any successor candidate receives full
+SIT and UAT. Contract v3 replaces the aggregate product bucket with owned
+domains and selects exact consuming lanes plus their recursive prerequisite
+closure:
 
 | Changed input | Required invalidation |
 |---|---|
@@ -114,10 +117,21 @@ dependent closure. The current mapping is:
 | Adapter lane, topology, action, or execution-harness input | The owning lane and its dependents |
 | Declared source-environment value or lane environment/port contract | The owning lane and its dependents; a changed platform-base observation affects all lanes that receive it |
 | Resolved external tool binary or Docker command prefix | Every lane that invokes that observed tool and its dependents |
-| Product/source input in a dependency domain | Lanes declaring that domain and their dependents before freeze; all candidate-bound formal lanes also change when the frozen candidate changes |
+| Product/source input in a v2 dependency domain | Lanes declaring that domain and their dependents before freeze; successor candidates receive complete SIT/UAT |
+| Product/source input in a bounded v3 owned domain | Exact target/lane consumers and required prerequisite closure; unaffected authoritative items may inherit only through an authenticated successor impact plan |
+| V3 domain with full-replay default, unknown path, or unauthenticated ownership | Complete Readiness, Rehearsal, Preflight, SIT, and UAT |
 | Validation policy, lifecycle, public entry point, or either public schema | All lanes, through the platform execution fingerprint |
 | Finalizer only | Publication/finalization under the new finalizer identity; an intact completed execution checkpoint with no incomplete older-fingerprint attestation does not require action replay |
 | Cargo build policy only | Aggregate platform provenance only, unless a lane actually consumes it through its declared harness or dependency inputs |
+
+V3 domains declare a semantic class, actual producer/test/fixture/environment/
+acceptance/runner inputs, candidate-binding choice, exact target and lane
+consumers, and a bounded rationale or full-replay default. The supported
+classes cover module shell, authentication/session, navigation, theme/layout,
+response ownership and consumers, Dataset DAG, provider contracts,
+migrations/seeds, materialization, fixtures, acceptance, environment, evidence
+publication, and phase-local runners. Contracts instantiate only classes backed
+by actual ownership.
 
 This precision depends on truthful declarations. Adapter validation proves
 that directly referenced repository command and Compose files are owned by a
@@ -132,15 +146,11 @@ browser, or other tools that the wrapper starts. A missing declaration, an
 unknown changed path or runtime, or uncertainty about impact falls back to the
 complete affected phase rather than silently inheriting a lane.
 
-The platform currently computes and publishes these lane identities, but no
-real sprint phase certifier consumes them end to end yet. A platform
-`authoritative` lane result means only that the local checkpoint/finalizer
-contract committed; it is not source-authenticated candidate or phase proof.
-Until certifiers authenticate the supplied candidate fingerprint to the frozen
-source/current dependency snapshot, assemble schema-v2 phase certificates, and
-enforce the prerequisite/inheritance closure, this table defines the intended
-safe selection boundary; it is not a claim that every current validation entry
-point already avoids a full candidate restart.
+The platform publishes both the full source fingerprint and, for v3, an
+application-candidate fingerprint derived only from candidate-binding domains.
+This keeps a runner/finalizer correction from masquerading as a product change.
+Phase authority still comes only from the strict phase certifier, never from a
+standalone lane result.
 
 ## Cargo build storage platform slice
 
@@ -193,10 +203,12 @@ entry point. Release `2.0.0` exports only:
 - `Get-TessaraValidationCandidateIdentity`;
 - `Get-TessaraValidationCompatibilityPlan`;
 - `Assert-TessaraValidationAdapter`; and
-- `Invoke-TessaraValidationLane`.
+- `Assert-TessaraFutureSprintPlanningPackage`;
+- `Invoke-TessaraValidationLane`; and
+- `Invoke-TessaraImplementationHarvest`.
 
-The aggregate identity binds the exact platform manifest, four public
-boundary inputs, and four components:
+The aggregate identity binds the exact platform manifest, its versioned public-
+boundary inventory, and four components:
 
 - public entry point, adapter schema, governing validation-contract schema, and
   phase-certificate-v2 schema;
@@ -217,9 +229,9 @@ against repository code running under the caller's OS token.
 
 ## Declarative adapter contract
 
-Future sprint adapters use schema-v2 `tessara.validation.adapter` JSON. Before
+Sprint adapters use schema-v2 `tessara.validation.adapter` JSON. Before
 accepting an adapter, the platform runs the canonical validation-policy
-validator over its governing `tessara-validation-v2` contract. The adapter must
+validator over its governing contract's declared v2 or v3 policy. The adapter must
 then exactly cover the contract's lane inventory and declare the exact
 prerequisites for every lane. This prevents a syntactically valid private
 contract or a weakened adapter graph from defining a smaller validation cone.
@@ -496,11 +508,11 @@ safe fallback is to rerun the affected lane; operators must not delete evidence
 to manufacture eligibility. The caught-writer rollback above does not claim to
 run after abrupt host or machine termination.
 
-Platform-backed phase certificates use
+V2 platform-backed phase certificates use
 `phase-certificate-v2.schema.json`. Every lane carries its compatibility
 fingerprint; an inherited pre-freeze lane must carry the same prior
 compatibility fingerprint and unchanged dependency-domain fingerprints.
-Candidate-bound phases cannot inherit a lane from another candidate. Schema-v1
+Candidate-bound v2 phases cannot inherit a lane from another candidate. Schema-v1
 phase certificates remain readable for sealed historical evidence, but they do
 not contain the compatibility proof required for new platform-backed
 inheritance. The generic structural policy/evidence-chain validator deliberately
@@ -509,6 +521,25 @@ write-once current compatibility plan, evidence index, and v2 certificate;
 `Assert-TessaraPlatformPhaseCertificate` recomputes the plan and authenticates
 source/environment identity, lane receipts, attempt indexes, current finalizer
 attestations, exact target coverage, prerequisites, and permitted inheritance.
+
+Contract v3 uses phase-certificate schema 3 plus the canonical
+`tessara.validation.successor-impact-plan`. The shared planner classifies human
+execution, evidence publication, phase-local runner, bounded product, and
+unknown/shared corrections. It records the exact diff and domain mapping,
+predecessor/successor source and candidate identities, selected targets and
+formal items, deterministic risk-first order, compatibility/dependency
+fingerprints, non-impact rationale, cleanup, and fallback reasons.
+
+An inherited SIT lane or scripted/manual UAT scenario is authoritative only
+when the immediate predecessor certificate passed it, every lane-specific
+inheritance fingerprint and recursive prerequisite fingerprint is unchanged,
+fixtures/environment/acceptance semantics authenticate, the correction has no
+unknown path or open defect, and no undocumented expectation change exists.
+The v3 certificate labels inherited items `inherited_nonimpact`, references the
+prior receipt and impact plan, and carries null execution timing. It never
+claims the item ran on the successor. Security, identity, authorization,
+migrations, shared fixtures, environment, and cross-module changes default to
+full replay until finer owned domains prove a closed cone.
 
 `scripts/test-tessara-validation-platform.ps1 -SelfTest` is the mandatory
 application-independent certification. A synthetic local service proves
@@ -584,3 +615,109 @@ back to that affected lane/closure, phase, or candidate rather than authorizing
 narrower reuse. Diversion closeout is based only on the frozen diversion
 candidate and its own evidence. A later sprint may consume the closed release,
 but its adapter results neither complete nor reopen this diversion.
+
+## Mandatory future-sprint adoption (validation contract v3)
+
+Validation contract schema 3 and `policy_version: tessara-validation-v3` are the
+forward-only activation boundary. Contracts that already declare v2 or a legacy
+policy remain historical artifacts and continue to validate under that policy;
+they are not migrated, reissued, or invalidated by this section.
+
+Every v3 sprint tracks one schema-v2 `tessara.validation.adapter`. The contract
+records its canonical repository path, supported platform release `2.0.0`, and
+the public lane entry point `Invoke-TessaraValidationLane`. Kickoff calls
+`Assert-TessaraValidationAdapter` and
+`Assert-TessaraFutureSprintPlanningPackage`. Contract and adapter lane sets,
+prerequisites, dependency domains, required target mappings, and action proof
+classes agree exactly. Missing, extra, malformed, or uncertain mappings fail
+closed.
+
+| Sprint adapter actions own | Shared validation platform owns |
+| --- | --- |
+| Product commands and focused test scripts | Phase and dependency scheduling |
+| Product-specific assertions | Topology and port allocation/lifecycle |
+| Focused harness actions | Cleanup/restoration state machines |
+| Declared product input files | Evidence publication and integrity indexes |
+| Nothing outside one action | Compatibility plans and certificates |
+| | Dependency-aware implementation harvesting |
+
+A sprint-owned phase runner, topology/port manager, cleanup engine, evidence
+publisher, or certificate generator is prohibited. A deviation carries a
+documented user or architecture authority reference and rationale in the v3
+contract. An absent adapter or unauthenticated execution provenance blocks
+validation; it never triggers a fallback runner.
+
+Implementation targets are implementation-phase adapter lanes.
+`Invoke-TessaraImplementationHarvest` schedules them fail-late: safe independent
+siblings continue, failed dependents and unsafe live-state targets are blocked,
+cleanup/topology risk stops continuation, and every target receives a retained
+receipt. The deterministic defect batch is consumed by implementation-readiness
+schema 2 before formal Readiness.
+
+### Evidentiary-priority implementation scheduling
+
+Contract v3 activates `evidentiary-priority-v1` with
+`serial-resource-safe` execution. Each target declares exact prerequisites and
+exclusive claims for its evidence path and any process, topology, port,
+database, Docker, or external-service state. The sprint adapter continues to
+own only exact product actions; the shared platform owns admission, order,
+checkpoint recovery, cleanup enforcement, and aggregate accounting.
+
+Before assertions, the coordinator publishes one immutable schedule ordered by
+corrected prior failures with passing focused reproducers, never-run targets,
+dependency-affected or reuse-ineligible targets, authenticated unchanged
+targets, then finalization. Prerequisite closure may move an otherwise lower-
+priority target ahead of its dependent. An unclassified, open, blocked, or
+uncorrected prior failure is recorded as blocked by the provenance gate.
+Unknown dependency impact selects conservative execution.
+
+`authenticated-unchanged` reuse is an explicit contract choice. A prior target
+is reusable only when its completion and lane-result hashes, contract, adapter,
+platform execution, command, environment, dependency, compatibility, and
+recursive prerequisite identities all authenticate. Reuse emits a current
+completion with `disposition: reused` and `newly_executed: false`; it does not
+claim a new assertion run. Missing or challenged evidence executes normally.
+
+Execution is deliberately serial in this revision. That makes overlapping
+evidence paths and process/topology/port/database/Docker claims exclusive and
+forbids concurrent Docker-backed targets. Safe independent siblings still
+continue fail-late. Every live-state completion must authenticate cleanup and
+restoration after pass, failure, timeout, or interruption. Cleanup uncertainty
+halts unsafe continuation.
+
+The immutable start and per-target receipts are complemented by a resumable
+checkpoint. Recovery authenticates the original schedule and all completed
+receipts before continuing, and never relaunches an authenticated completed
+live-state target. Any source, fixture, contract, environment, command, adapter,
+dependency, or correction change produces a different context and requires a
+new plan. Formal Readiness requires the finalization receipt to prove every
+required target passed or was validly reused, no dependency or receipt is
+stale, no defect is open, and topology restoration passed.
+
+Formal v3 evidence uses phase-certificate schema 3 and evidence-chain schema 2.
+Both bind the current platform release/fingerprint and adapter path/hash. The
+strict certifier re-authenticates those values, the compatibility plan, lane
+receipts, prerequisites, source, and evidence indexes. Structural JSON validity
+alone cannot authorize a result.
+
+The evidence chain also owns the exact successor-impact plan inventory used by
+its phase certificates. Closeout rejects a missing plan/hash, a non-immediate
+predecessor, unsafe inheritance, open defects, or incomplete correction batch.
+
+### Logout correction example
+
+The Sprint 8C logout finding is the motivating historical example, not a policy
+exception and not an evidence migration. Under v2, its executable post-freeze
+fix correctly required complete successor Readiness, Rehearsal, SIT, and UAT.
+Those retained receipts remain v2 evidence.
+
+A future v3 contract would map the changed shared-shell logout producer to
+`module-ui-shell` and `authentication-session`, with explicit consumers for the
+shell/auth focused targets, browser lane, deployed smoke lane, and relevant
+scripted/manual UI scenarios. After the failed reproducer, affected
+implementation targets, and complete correction batch pass, the successor plan
+would execute those items plus prerequisite closure. A Dataset DAG lane or an
+independent migration/upgrade lane could be inherited only when its owned
+domains and complete inheritance fingerprint remain unchanged. An unknown
+path, coarse shared domain, authorization uncertainty, or fingerprint mismatch
+would instead select complete replay.

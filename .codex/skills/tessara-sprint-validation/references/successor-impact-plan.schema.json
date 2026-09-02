@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/successor-impact-plan-v1.json",
+  "title": "Tessara validation v3 successor-candidate impact plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "contract", "policy_version", "sprint", "correction_class",
+    "certification_mode", "predecessor", "successor", "correction_batch",
+    "affected_implementation_targets", "affected_readiness_lanes",
+    "affected_rehearsal_lanes", "affected_preflight_lanes", "affected_sit_lanes",
+    "affected_uat_scripted_scenarios", "affected_uat_manual_scenarios", "coverage",
+    "cleanup_restoration", "conservative_fallback_reasons", "open_defect_count",
+    "expectation_changes_authenticated", "generated_at", "plan_fingerprint"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.successor-impact-plan" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "correction_class": {
+      "enum": [
+        "human-execution-mistake", "evidence-publication-defect",
+        "phase-local-runner-defect", "candidate-product-bounded",
+        "unknown-shared-or-unauthenticated"
+      ]
+    },
+    "certification_mode": {
+      "enum": ["scenario-only", "finalization-only", "impact-selected", "full-replay"]
+    },
+    "predecessor": { "$ref": "#/$defs/candidate" },
+    "successor": { "$ref": "#/$defs/candidate" },
+    "correction_batch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["diff_sha256", "changed_paths", "changed_domains", "unknown_paths"],
+      "properties": {
+        "diff_sha256": { "$ref": "#/$defs/sha" },
+        "changed_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "domains"],
+            "properties": {
+              "path": { "$ref": "#/$defs/path" },
+              "domains": { "$ref": "#/$defs/ids" }
+            }
+          }
+        },
+        "changed_domains": { "$ref": "#/$defs/ids" },
+        "unknown_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/path" }
+        }
+      }
+    },
+    "affected_implementation_targets": { "$ref": "#/$defs/ids" },
+    "affected_readiness_lanes": { "$ref": "#/$defs/ids" },
+    "affected_rehearsal_lanes": { "$ref": "#/$defs/ids" },
+    "affected_preflight_lanes": { "$ref": "#/$defs/ids" },
+    "affected_sit_lanes": { "$ref": "#/$defs/ids" },
+    "affected_uat_scripted_scenarios": { "$ref": "#/$defs/ids" },
+    "affected_uat_manual_scenarios": { "$ref": "#/$defs/ids" },
+    "coverage": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/coverage" }
+    },
+    "cleanup_restoration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "scopes"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "scopes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }
+      }
+    },
+    "conservative_fallback_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "open_defect_count": { "type": "integer", "minimum": 0 },
+    "expectation_changes_authenticated": { "type": "boolean" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "plan_fingerprint": { "$ref": "#/$defs/sha" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "sha256"],
+      "properties": { "domain": { "$ref": "#/$defs/id" }, "sha256": { "$ref": "#/$defs/sha" } }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_fingerprint", "candidate_fingerprint", "compatibility_plan_fingerprint",
+        "dependency_fingerprints"
+      ],
+      "properties": {
+        "source_fingerprint": { "$ref": "#/$defs/sha" },
+        "candidate_fingerprint": { "$ref": "#/$defs/sha" },
+        "compatibility_plan_fingerprint": { "$ref": "#/$defs/sha" },
+        "dependency_fingerprints": {
+          "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fingerprint" }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "phase", "coverage_kind", "disposition", "selection_reason", "risk_rank",
+        "dependency_domains", "prerequisite_closure", "predecessor_compatibility_fingerprint",
+        "successor_compatibility_fingerprint", "predecessor_inheritance_fingerprint",
+        "successor_inheritance_fingerprint", "dependency_fingerprints", "non_impact_rationale"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "phase": { "enum": ["implementation", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] },
+        "coverage_kind": { "enum": ["lane", "runner-self-test", "scripted-scenario", "manual-scenario"] },
+        "disposition": { "enum": ["execute", "inherit", "not-required"] },
+        "selection_reason": { "enum": ["previously-failed", "direct-impact", "dependency-closure", "conservative-fallback", "same-candidate-retained", "authenticated-nonimpact", "implementation-only"] },
+        "risk_rank": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "dependency_domains": { "$ref": "#/$defs/ids" },
+        "prerequisite_closure": { "$ref": "#/$defs/ids" },
+        "predecessor_compatibility_fingerprint": { "$ref": "#/$defs/sha" },
+        "successor_compatibility_fingerprint": { "$ref": "#/$defs/sha" },
+        "predecessor_inheritance_fingerprint": { "$ref": "#/$defs/sha" },
+        "successor_inheritance_fingerprint": { "$ref": "#/$defs/sha" },
+        "dependency_fingerprints": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fingerprint" } },
+        "non_impact_rationale": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] }
+      }
+    }
+  }
+}

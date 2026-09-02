@@ -383,11 +383,12 @@ Reuse the canonical SDK/runtime/testkit, generic Core control plane, Supervisor
 apply path, Blueprint/lockfile/materialization contracts, validation-policy v2
 module, schema contracts, and this proof-class profile.
 
-Do not copy Sprint 8A's attempt lineage, evidence schemas, two-wave scheduler,
-or sprint-specific runner state machine into a later sprint. A future runner
-should be a thin sprint profile over current shared contracts. If a capability
-is genuinely reusable, extract it under a policy-neutral name with self-tests;
-do not create another large `<sprint>-common` library.
+Do not copy a historical attempt lineage, evidence schema, scheduler, or
+sprint-specific runner state machine into a later sprint. Under contract v3,
+the thin sprint profile is the schema-v2 adapter; lifecycle execution remains
+in the shared validation platform. If a capability is genuinely reusable,
+extract it under a policy-neutral name with self-tests; do not create another
+large `<sprint>-common` library.
 
 Formal Readiness begins only after the current clean source has a passing
 implementation-readiness result covering every required proof class. Candidate
@@ -418,3 +419,58 @@ canonical seed content, dependency order, accepted UI behavior, and UAT
 scenarios. Each sprint must fill those values into the same playbook and
 contract. Generalizing them would move product policy into the platform and
 recreate the coupling that Phase 8 is removing.
+
+## Contract-v3 implementation efficiency gates
+
+For a validation-contract-v3 extraction, kickoff records these requirements in
+the machine contract rather than leaving them as prose inventories:
+
+- explicit canonical-producer to controlled-projection edges for migrations and
+  checksums, contracts and generated clients, manifests and release catalogs,
+  browser assets and digests, baseline patches, fixtures, smoke/UAT inventories,
+  and evidence schemas;
+- an actor × action × route × capability matrix covering public, private,
+  bootstrap, provider, consumer, configuration, diagnostics, and gateway
+  boundaries, with exact positive, negative, replay, nondisclosure, revision,
+  and outage cases;
+- one early target exercising that matrix through the real process/gateway
+  boundary before browser, smoke, or formal validation;
+- one standalone-module UI ownership target before consumer cutover, covering
+  CSS/shared-shell ownership, assets/digests, responsive behavior, direct and
+  lifecycle navigation parity, route identity, bootstrap media types, SSR,
+  hydration, accessibility, and a clean console; and
+- every implementation slice's exact exit targets and fanout edges.
+
+Changing a canonical producer while a declared projection remains at its
+baseline fails the owning slice. Unknown fanout selects the full implementation
+verification cone. A slice cannot complete from a stale, failed, blocked,
+older-source, older-contract, or older-adapter receipt.
+
+Fixture identities and values come from signed owner read-back under logical
+keys. Predicted IDs, copied inventories, historical demo counts, reduced DTO
+replicas, and cross-owner writes are invalid. Visual evidence declares fixture
+content invariant or mutable. Whole-frame comparison is valid only for
+invariant content; mutable content requires named stable regions plus semantic
+assertions against current owner content.
+
+Implementation discovery uses the shared platform's dependency-aware fail-late
+harvest. Each failed target retains its own receipt and provenance; safe
+independent siblings continue, while dependents and unsafe live-state work are
+blocked. Correction begins from one deterministic harvested batch. No
+extraction sprint may replace this with a sprint-specific lifecycle runner.
+
+The contract also declares exact target prerequisites and exclusive resource
+claims. The shared coordinator fixes one evidentiary-priority schedule before
+assertions: corrected failures with passing focused reproducers, never-run
+targets, affected targets, authenticated unchanged targets, then finalization.
+Prerequisite closure overrides raw priority. This replaces manual first-failure
+and `foreach` target sweeps without moving product policy into the platform.
+
+An unchanged extraction target may be reused only when policy v3 explicitly
+permits it and dependency, compatibility, command, contract, adapter,
+environment, evidence, and prerequisite-closure identities authenticate. A
+reused completion is labeled inherited and not newly executed. Any ambiguous
+fixture, generated asset, owner read-back, browser inventory, topology, or
+command dependency executes conservatively. Consumer cutover still requires
+current authorization and standalone UI gates; reuse cannot weaken their
+declared dependency closure.

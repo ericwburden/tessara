@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/implementation-defect-batch-v1.json",
+  "title": "Tessara deterministic implementation defect batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "schedule_digest", "coordinator_start", "source_identity", "validation_contract", "validation_adapter", "platform_identity", "targets", "findings"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.validation.implementation-defect-batch" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "schedule_digest": { "$ref": "#/$defs/sha" },
+    "coordinator_start": { "$ref": "#/$defs/ref" },
+    "source_identity": { "type": "object" },
+    "validation_contract": { "$ref": "#/$defs/ref" },
+    "validation_adapter": { "$ref": "#/$defs/ref" },
+    "platform_identity": { "type": "object", "required": ["release_version", "platform_fingerprint"] },
+    "targets": { "type": "array", "items": { "type": "object", "required": ["id", "lane", "priority_group", "state", "disposition", "receipt"] } },
+    "findings": { "type": "array", "items": { "type": "object", "required": ["id", "target", "classification", "receipt", "provenance", "reason"] } }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "ref": { "type": "object", "required": ["path", "sha256"], "properties": { "path": { "type": "string", "minLength": 1 }, "sha256": { "$ref": "#/$defs/sha" } } }
+  }
+}

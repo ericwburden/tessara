@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/evidence-chain-v2.json",
+  "title": "Tessara platform-authenticated evidence chain v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "policy_version", "sprint", "validation_contract", "validation_adapter", "platform_identity", "certificates", "corrections", "successor_impact_plans", "final_integrity_audit"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "contract": { "const": "tessara.validation.evidence-chain" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "minLength": 1 },
+    "validation_contract": { "$ref": "#/$defs/ref" },
+    "validation_adapter": { "$ref": "#/$defs/ref" },
+    "platform_identity": { "type": "object", "additionalProperties": false, "required": ["release_version", "platform_fingerprint"], "properties": { "release_version": { "const": "2.0.0" }, "platform_fingerprint": { "$ref": "#/$defs/sha" } } },
+    "certificates": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["phase", "path", "sha256"], "properties": { "phase": { "enum": ["implementation-readiness", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] }, "path": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha" } } } },
+    "corrections": { "type": "array", "items": { "$ref": "#/$defs/ref" } },
+    "successor_impact_plans": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/ref" } },
+    "final_integrity_audit": { "type": "object", "additionalProperties": false, "required": ["state", "audited_at", "phase_index_count", "artifact_count"], "properties": { "state": { "enum": ["pending", "passed", "failed"] }, "audited_at": { "oneOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] }, "phase_index_count": { "type": "integer", "minimum": 0 }, "artifact_count": { "type": "integer", "minimum": 0 } } }
+  },
+  "$defs": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" },
+    "ref": { "type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": { "path": { "$ref": "#/$defs/path" }, "sha256": { "$ref": "#/$defs/sha" } } }
+  }
+}

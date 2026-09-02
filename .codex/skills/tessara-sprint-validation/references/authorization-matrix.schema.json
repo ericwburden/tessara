@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/authorization-matrix-v1.json",
+  "title": "Tessara Phase 8 authorization matrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "boundaries", "entries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract": { "const": "tessara.authorization-matrix" },
+    "boundaries": {
+      "type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true,
+      "items": { "enum": ["public", "private", "bootstrap", "provider", "consumer", "configuration", "diagnostics", "gateway"] }
+    },
+    "entries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "actor", "action", "route", "capability", "boundaries", "cases"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "actor": { "$ref": "#/$defs/id" },
+          "action": { "$ref": "#/$defs/id" },
+          "route": { "type": "string", "pattern": "^/" },
+          "capability": { "$ref": "#/$defs/id" },
+          "boundaries": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["public", "private", "bootstrap", "provider", "consumer", "configuration", "diagnostics", "gateway"] } },
+          "cases": { "type": "array", "minItems": 6, "maxItems": 6, "uniqueItems": true, "items": { "enum": ["positive", "negative", "replay", "nondisclosure", "revision", "outage"] } }
+        }
+      }
+    }
+  },
+  "$defs": { "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" } }
+}

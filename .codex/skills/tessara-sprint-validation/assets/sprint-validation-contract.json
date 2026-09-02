@@ -1,63 +1,94 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "contract": "tessara.validation-contract",
-  "policy_version": "tessara-validation-v2",
+  "policy_version": "tessara-validation-v3",
   "sprint": "sprint-0a-template",
-  "implementation_profile": {
-    "kind": "standard"
+  "implementation_profile": { "kind": "standard" },
+  "validation_platform": {
+    "adapter_path": ".codex/skills/tessara-sprint-validation/assets/sprint-validation-adapter.json",
+    "supported_release": "2.0.0",
+    "lane_entrypoint": "Invoke-TessaraValidationLane",
+    "implementation_coordinator": {
+      "entrypoint": "Invoke-TessaraImplementationHarvest",
+      "ordering": "evidentiary-priority-v1",
+      "execution_mode": "serial-resource-safe",
+      "reuse_policy": "authenticated-unchanged"
+    },
+    "exception": null
   },
-  "requirements": [
-    {
-      "id": "replace-requirement",
-      "implementation_targets": ["replace-implementation-target"],
-      "validation_lanes": [
-        "replace-readiness-lane",
-        "replace-rehearsal-lane",
-        "replace-preflight-lane",
-        "replace-sit-lane",
-        "replace-uat-lane"
-      ]
-    }
-  ],
+  "successor_certification": {
+    "enabled": true,
+    "plan_contract": "tessara.validation.successor-impact-plan",
+    "planner_entrypoint": "New-TessaraSuccessorImpactPlan",
+    "validator_entrypoint": "Assert-TessaraSuccessorImpactPlan",
+    "ordering": "failed-direct-prerequisite-risk-v1",
+    "inheritance_policy": "immediate-predecessor-authenticated-nonimpact-v1",
+    "fallback": "complete-readiness-rehearsal-preflight-sit-uat"
+  },
+  "requirements": [{
+    "id": "replace-requirement",
+    "implementation_targets": ["replace-focused-target"],
+    "validation_lanes": ["replace-implementation", "replace-readiness", "replace-rehearsal", "replace-preflight", "replace-sit", "replace-uat"]
+  }],
   "dependency_domains": [
-    { "name": "product-source", "tracked_inputs": ["crates/**"], "environment_sections": [] },
-    { "name": "build-dependencies", "tracked_inputs": ["Cargo.toml", "Cargo.lock", "package.json", "end2end/package*.json"], "environment_sections": ["toolchain"] },
-    { "name": "migrations-seeds", "tracked_inputs": ["migrations/**", "**/migrations/**", "scripts/seed*.ps1"], "environment_sections": ["databases"] },
-    { "name": "deployment-materialization", "tracked_inputs": ["deploy/**", "Dockerfile", "docker-compose*.yml", "scripts/materialize*.ps1"], "environment_sections": ["compose", "ports", "topology"] },
-    { "name": "fixtures", "tracked_inputs": ["**/fixtures/**", "scripts/prepare*-fixtures.ps1"], "environment_sections": ["accounts", "fixtures"] },
-    { "name": "acceptance-inventory", "tracked_inputs": ["end2end/**", "docs/sprints/*-uat/**", "docs/sprints/*-validation-contract.json"], "environment_sections": ["browser"] },
-    { "name": "environment-contract", "tracked_inputs": [".env.example", "rust-toolchain*", "scripts/*environment*.ps1"], "environment_sections": ["toolchain", "databases", "compose", "ports"] },
-    { "name": "validation-shared", "tracked_inputs": ["scripts/tessara-validation-policy.psm1", ".codex/skills/tessara-sprint-validation/SKILL.md", ".codex/skills/tessara-sprint-validation/references/validation-policy-v2.md", ".codex/skills/tessara-sprint-validation/references/defect-provenance.md", ".codex/skills/tessara-sprint-validation/references/*.schema.json", ".codex/skills/tessara-sprint-validation/assets/defect-provenance.json", "docs/architecture/module-extraction-playbook.md"], "environment_sections": [] },
-    { "name": "readiness-runner", "tracked_inputs": ["scripts/*readiness*.ps1"], "environment_sections": [] },
-    { "name": "rehearsal-runner", "tracked_inputs": ["scripts/*rehearsal*.ps1"], "environment_sections": [] },
-    { "name": "preflight-runner", "tracked_inputs": ["scripts/*preflight*.ps1"], "environment_sections": [] },
-    { "name": "sit-runner", "tracked_inputs": ["scripts/*sit*.ps1"], "environment_sections": [] },
-    { "name": "uat-runner", "tracked_inputs": ["scripts/*uat*.ps1"], "environment_sections": [] },
-    { "name": "evidence-publication", "tracked_inputs": ["scripts/*evidence*.ps1", "scripts/*lifecycle*.ps1"], "environment_sections": ["evidence-root"] },
-    { "name": "documentation", "tracked_inputs": ["docs/**"], "environment_sections": [] }
-  ],
-  "implementation_targets": [
     {
-      "id": "replace-implementation-target",
-      "command": "replace with an exact repository-owned command",
-      "dependency_domains": ["product-source"],
-      "proof_classes": ["static-quality"],
-      "required": true,
-      "clean_environment": false
+      "name": "module-ui-shell", "class": "module-ui-shell",
+      "inputs": [
+        { "path": "crates/**", "role": "producer" },
+        { "path": "end2end/tests/**", "role": "test" }
+      ],
+      "candidate_binding": true, "default_impact": "bounded",
+      "bounded_rationale": "The sprint must replace this placeholder with exact shell producers, consumers, and tests before kickoff passes.",
+      "consumers": { "implementation_targets": ["replace-focused-target"], "validation_lanes": ["replace-implementation", "replace-readiness", "replace-rehearsal", "replace-preflight", "replace-sit", "replace-uat"] }
+    },
+    {
+      "name": "validation-shared", "class": "phase-runner",
+      "inputs": [
+        { "path": "scripts/tessara-validation-*.psm1", "role": "producer" },
+        { "path": ".codex/skills/tessara-sprint-validation/**", "role": "acceptance" },
+        { "path": "docs/architecture/module-extraction-playbook.md", "role": "acceptance" },
+        { "path": "scripts/test-tessara-validation-platform.ps1", "role": "test" }
+      ],
+      "candidate_binding": false, "default_impact": "full-replay", "bounded_rationale": null,
+      "consumers": { "implementation_targets": ["replace-focused-target"], "validation_lanes": ["replace-implementation", "replace-readiness", "replace-rehearsal", "replace-preflight", "replace-sit", "replace-uat"] }
     }
   ],
+  "implementation_targets": [{
+    "id": "replace-focused-target",
+    "command": { "program": "pwsh", "arguments": ["-NoProfile", "-NonInteractive", "-File", "${repository_root}/scripts/verify-markdown-links.ps1"], "input_paths": ["scripts/verify-markdown-links.ps1"], "tools": [] },
+    "dependency_domains": ["module-ui-shell", "validation-shared"],
+    "proof_classes": ["static-quality"],
+    "required": true,
+    "clean_environment": false,
+    "prerequisites": [],
+    "resource_claims": [{ "kind": "evidence-path", "identity": "replace-focused-target", "mode": "exclusive" }],
+    "continuation": "safe-independent",
+    "slice": "replace-slice",
+    "fanout_edges": ["replace-fanout"]
+  }],
   "lanes": [
-    { "id": "replace-readiness-lane", "phase": "validation-readiness", "dependency_domains": ["validation-shared", "readiness-runner", "environment-contract"], "prerequisites": [], "touches_live_state": false },
-    { "id": "replace-rehearsal-lane", "phase": "candidate-rehearsal", "dependency_domains": ["validation-shared", "product-source", "rehearsal-runner"], "prerequisites": [], "touches_live_state": false },
-    { "id": "replace-preflight-lane", "phase": "validation-preflight", "dependency_domains": ["validation-shared", "preflight-runner"], "prerequisites": [], "touches_live_state": false },
-    { "id": "replace-sit-lane", "phase": "sit", "dependency_domains": ["validation-shared", "product-source", "sit-runner"], "prerequisites": [], "touches_live_state": true },
-    { "id": "replace-uat-lane", "phase": "uat", "dependency_domains": ["validation-shared", "acceptance-inventory", "uat-runner"], "prerequisites": [], "touches_live_state": true }
+    { "id": "replace-implementation", "phase": "implementation", "coverage_kind": "lane", "risk_rank": 100, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": [], "touches_live_state": false },
+    { "id": "replace-readiness", "phase": "validation-readiness", "coverage_kind": "lane", "risk_rank": 100, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": ["replace-implementation"], "touches_live_state": false },
+    { "id": "replace-rehearsal", "phase": "candidate-rehearsal", "coverage_kind": "lane", "risk_rank": 200, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": ["replace-readiness"], "touches_live_state": false },
+    { "id": "replace-preflight", "phase": "validation-preflight", "coverage_kind": "lane", "risk_rank": 50, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": ["replace-rehearsal"], "touches_live_state": false },
+    { "id": "replace-sit", "phase": "sit", "coverage_kind": "lane", "risk_rank": 100, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": ["replace-preflight"], "touches_live_state": true },
+    { "id": "replace-uat", "phase": "uat", "coverage_kind": "manual-scenario", "risk_rank": 100, "dependency_domains": ["module-ui-shell", "validation-shared"], "prerequisites": ["replace-sit"], "touches_live_state": true }
   ],
+  "controlled_artifact_edges": [{
+    "id": "replace-fanout", "kind": "other", "producer": "Cargo.toml",
+    "producer_baseline_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "projections": [{ "path": "Cargo.lock", "baseline_sha256": "0000000000000000000000000000000000000000000000000000000000000000" }],
+    "reconciliation_target": "replace-focused-target"
+  }],
+  "implementation_slices": [{ "id": "replace-slice", "prerequisites": [], "exit_targets": ["replace-focused-target"], "fanout_edges": ["replace-fanout"] }],
+  "fixture_policy": {
+    "identity_source": "signed-owner-readback", "logical_keys": true, "signed_owner_readback": true,
+    "prohibited_sources": ["predicted-identities", "copied-inventories", "historical-demo-counts", "reduced-dto-replicas"],
+    "cross_owner_writes": false
+  },
+  "visual_contracts": [{ "id": "replace-stable-presentation", "fixture_content": "invariant", "comparison": "whole-frame", "stable_regions": [], "semantic_assertion_targets": [] }],
   "evidence_policy": {
-    "root": "artifacts/sprint-0a-template-closeout",
-    "tracked": false,
-    "successful_raw": "retained_cold",
-    "phase_local_indexes": true,
-    "final_full_integrity_audit": true
+    "root": "artifacts/sprint-0a-template-closeout", "tracked": false, "successful_raw": "retained_cold",
+    "phase_local_indexes": true, "final_full_integrity_audit": true
   }
 }

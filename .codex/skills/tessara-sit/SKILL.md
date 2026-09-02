@@ -5,7 +5,8 @@ description: Execute and retain Tessara system integration testing for one prefl
 
 # Tessara SIT
 
-Run the complete SIT phase for one frozen candidate. Do not run UAT or
+Run authoritative SIT for one frozen candidate: complete coverage under v2 or
+the authenticated executed/inherited v3 coverage plan. Do not run UAT or
 authorize closeout.
 
 Inspect the tracked sprint validation contract before loading a protocol. When
@@ -14,7 +15,14 @@ it declares `policy_version: tessara-validation-v2`, read
 completely. Authenticate compact prerequisite certificates and write one
 phase-local evidence index plus a compact SIT certificate.
 
-Otherwise read
+When it declares `policy_version: tessara-validation-v3`, read v2 and then
+[`../tessara-sprint-validation/references/validation-policy-v3.md`](../tessara-sprint-validation/references/validation-policy-v3.md)
+completely. Validate the canonical successor-impact plan, execute only items
+marked `execute` through `Invoke-TessaraValidationLane`, and authenticate
+inherited items through the shared certifier and immediate predecessor. Never
+invoke a sprint-owned phase runner or describe inherited assertions as run.
+
+Only when the contract selects neither v2 nor v3, read
 [`../tessara-sprint-validation/references/validation-protocol.md`](../tessara-sprint-validation/references/validation-protocol.md)
 completely.
 
@@ -49,6 +57,14 @@ SIT lane reruns after freeze and produces its own receipt.
 Under v2, every SIT lane still executes for the frozen candidate. A successor
 candidate cannot inherit a SIT lane from its predecessor, even when pre-freeze
 Readiness or Rehearsal reused authenticated unaffected lanes.
+
+Under v3, a bounded successor executes affected SIT lanes plus prerequisite
+closure and may inherit only non-impact lanes whose dependency, fixture,
+environment, acceptance, runner, platform, adapter, and recursive prerequisite
+inheritance fingerprints are unchanged. Unknown paths, broad-risk domains,
+open defects, expectation ambiguity, or a non-immediate predecessor require
+complete SIT. `sit-result.json` lists executed and inherited lanes separately;
+inherited lanes have no successor execution timestamps.
 
 ## Phase model
 
@@ -144,7 +160,9 @@ Do not decide that all earlier phases are invalid merely because a command
 returned nonzero. Apply the shared invalidation matrix through
 `tessara-sprint-validation`:
 
-- candidate-affecting correction: refreeze and restart all SIT
+- candidate-affecting correction: under v2 refreeze and restart all SIT; under
+  v3 finish focused repair/batch convergence, refreeze, and follow the
+  authenticated successor-impact plan
 - before any successor freeze, the coordinator must complete the legacy full
   Readiness/Rehearsal cycle or v2 affected-lane pre-freeze recertification
 - shared-environment correction: rerun affected and downstream lanes

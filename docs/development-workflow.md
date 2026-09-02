@@ -314,10 +314,10 @@ failure recovery, fixture/runner proof, deployed smoke, and upgrade/rollback
 all complete before formal Readiness. The `ui-sdk-conformance` proof is also
 mandatory: establish the accepted visual/interaction baseline, map UI
 ownership, build typed SDK views before cutover, and prove direct/lifecycle
-visual and semantic parity. Do not fork Sprint 8A's large lifecycle
-runners or evidence lineage into the next sprint; extract only genuinely
-policy-neutral helpers and keep the future sprint runner a thin profile over
-current shared contracts.
+visual and semantic parity. Do not fork a historical lifecycle runner or its
+evidence lineage into a later sprint. Extract only genuinely policy-neutral
+helpers; under contract v3, the sprint profile is the tracked adapter and every
+lifecycle responsibility remains in the shared validation platform.
 
 Sprint closeout for a module-affecting change must run both focused module tests
 and the resolved application's integration, browser, and conformance suites.
@@ -375,9 +375,26 @@ or whenever impact is uncertain, run the complete affected phase.
 
 A downstream-only change does not reopen an upstream certificate. For example,
 a Preflight-runner change leaves Readiness and Rehearsal closed when none of
-their declared dependencies changed. A candidate-changing correction still
-requires a successor freeze followed by complete SIT and complete UAT; no SIT
-lane or manual UAT scenario is inherited across candidate fingerprints.
+their declared dependencies changed. Under v2, a candidate-changing correction
+still requires a successor freeze followed by complete SIT and complete UAT;
+no SIT lane or manual UAT scenario is inherited across candidate fingerprints.
+
+Policy v3 instead requires an immutable shared successor-impact plan. First run
+the failed/highest-risk reproducer, affected implementation targets, and the
+complete correction batch. Then `New-TessaraSuccessorImpactPlan` classifies the
+correction, authenticates owned-domain mappings, expands prerequisite closure,
+and orders newly failed/directly affected checks before expensive low-risk
+coverage. Human execution mistakes rerun the scenario; evidence-publication
+defects rerun finalization; phase-local runner defects rerun the runner self-test
+and consumers; bounded product corrections execute affected successor coverage
+and inherit authenticated non-impact evidence; uncertainty triggers complete
+Readiness, Rehearsal, Preflight, SIT, and UAT.
+
+V3 inheritance is limited to the immediate predecessor and requires unchanged
+dependency, fixture, environment, acceptance, runner, platform, adapter, and
+recursive prerequisite inheritance fingerprints. `sit-result.json` and
+`uat-result.json` list executed and inherited coverage separately and leave
+successor execution timing empty for inherited items.
 
 ### Evidence packaging
 
@@ -923,3 +940,58 @@ rejects reparse-point path chains, keeps prior bytes recoverable through final
 hash/result construction and cleanup, and restores the complete prior pair
 after any pre-commit failure. Archive old evidence and record the reason before
 any intentional replacement option is used.
+
+## Future-sprint contract-v3 sequence
+
+New kickoff packages use validation contract schema 3 / policy v3 and preserve
+all retained v2 and legacy packages unchanged.
+
+1. Kickoff creates and tracks the contract plus one schema-v2 validation
+   adapter, declares platform release `2.0.0`, the shared successor-impact
+   planner/validator, owned dependency domains with exact producer/test inputs
+   and consumers, explicit artifact-fanout edges,
+   per-slice exits, fixture/visual rules, exact target prerequisites and
+   exclusive resource claims, shared coordinator activation, and Phase 8
+   authorization/UI gates when applicable.
+2. Kickoff validates through `Assert-TessaraValidationAdapter` and
+   `Assert-TessaraFutureSprintPlanningPackage`. Missing or uncertain mappings
+   block implementation handoff.
+3. Implementation reconciles every declared projection in the touched cone,
+   proves authorization at the real boundary and standalone UI ownership early,
+   derives fixtures from signed owner read-back, and runs implementation lanes
+   through `Invoke-TessaraImplementationHarvest`. The coordinator publishes its
+   immutable evidentiary-priority plan before assertions, runs prerequisite
+   closure first, continues safe siblings fail-late, serializes resource claims,
+   and resumes authenticated checkpoints without duplicating completed work.
+4. Implementation-readiness schema 2 binds the current source, contract hash,
+   adapter hash, platform fingerprint, passing coordinator finalization,
+   deterministic defect batch, fanout receipts, and exact slice exits. Reused
+   targets remain labeled inherited/not newly executed. Formal Readiness is not
+   a discovery pass for fixtures, environments, acceptance inventories,
+   authorization, or generated assets.
+5. After a post-freeze correction, focused repair proof and the complete batch
+   finish before successor certification. The shared planner publishes the
+   predecessor/successor identities, diff digest, affected targets/lanes/UAT
+   scenarios, executed/inherited split, fingerprints, non-impact rationale,
+   cleanup, and fallback reasons.
+6. Every executed formal lane or scenario runs through
+   `Invoke-TessaraValidationLane`. Phase certificates and the evidence chain
+   authenticate platform, adapter, impact-plan, and immediate-predecessor
+   provenance; missing provenance blocks rather than falling back.
+7. Closeout validates the chain, reports target/attempt efficiency and finding
+   hotspots from retained receipts, and extracts reusable process lessons
+   without changing accepted product behavior.
+
+Only adapter actions are sprint-specific. Phase orchestration, topology/ports,
+cleanup/restoration state, evidence publication, certificates, and fail-late
+coordination remain shared-platform responsibilities. An exception requires an
+explicit documented user or architecture authority in the contract.
+
+The coordinator's target order is corrected failures with passing focused
+reproducers, never-run targets, dependency-affected targets, authenticated
+unchanged targets, then finalization. Open or uncorrected provenance blocks.
+Reuse requires explicit policy permission plus matching evidence, command,
+contract, adapter, platform, environment, dependency, compatibility, and
+prerequisite-closure identities. Unknown impact executes. A source, fixture,
+contract, environment, command, adapter, dependency, or correction change
+requires a new immutable plan.

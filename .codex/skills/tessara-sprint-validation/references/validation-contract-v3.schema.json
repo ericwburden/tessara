@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tessara.local/schemas/validation-contract-v3.json",
+  "title": "Tessara validation contract v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "contract", "policy_version", "sprint",
+    "implementation_profile", "validation_platform", "successor_certification", "requirements",
+    "dependency_domains", "implementation_targets", "lanes",
+    "controlled_artifact_edges", "implementation_slices", "fixture_policy",
+    "visual_contracts", "evidence_policy"
+  ],
+  "properties": {
+    "schema_version": { "const": 3 },
+    "contract": { "const": "tessara.validation-contract" },
+    "policy_version": { "const": "tessara-validation-v3" },
+    "sprint": { "type": "string", "pattern": "^sprint-[0-9]+[a-z][a-z0-9-]*$" },
+    "implementation_profile": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["kind"], "properties": { "kind": { "const": "standard" } } },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "playbook", "module_definition", "transition_identity", "authorization_matrix", "authorization_target", "ui_ownership_gate"],
+          "properties": {
+            "kind": { "const": "phase8-module-extraction" },
+            "playbook": { "const": "docs/architecture/module-extraction-playbook.md" },
+            "module_definition": { "$ref": "#/$defs/id" },
+            "transition_identity": { "$ref": "#/$defs/id" },
+            "authorization_matrix": { "$ref": "#/$defs/path" },
+            "authorization_target": { "$ref": "#/$defs/id" },
+            "ui_ownership_gate": { "$ref": "#/$defs/uiGate" }
+          }
+        }
+      ]
+    },
+    "validation_platform": {
+      "type": "object", "additionalProperties": false,
+      "required": ["adapter_path", "supported_release", "lane_entrypoint", "implementation_coordinator", "exception"],
+      "properties": {
+        "adapter_path": { "$ref": "#/$defs/path" },
+        "supported_release": { "const": "2.0.0" },
+        "lane_entrypoint": { "const": "Invoke-TessaraValidationLane" },
+        "implementation_coordinator": {
+          "type": "object", "additionalProperties": false,
+          "required": ["entrypoint", "ordering", "execution_mode", "reuse_policy"],
+          "properties": {
+            "entrypoint": { "const": "Invoke-TessaraImplementationHarvest" },
+            "ordering": { "const": "evidentiary-priority-v1" },
+            "execution_mode": { "const": "serial-resource-safe" },
+            "reuse_policy": { "enum": ["execute-all", "authenticated-unchanged"] }
+          }
+        },
+        "exception": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/authority" }] }
+      }
+    },
+    "successor_certification": {
+      "type": "object", "additionalProperties": false,
+      "required": ["enabled", "plan_contract", "planner_entrypoint", "validator_entrypoint", "ordering", "inheritance_policy", "fallback"],
+      "properties": {
+        "enabled": { "const": true },
+        "plan_contract": { "const": "tessara.validation.successor-impact-plan" },
+        "planner_entrypoint": { "const": "New-TessaraSuccessorImpactPlan" },
+        "validator_entrypoint": { "const": "Assert-TessaraSuccessorImpactPlan" },
+        "ordering": { "const": "failed-direct-prerequisite-risk-v1" },
+        "inheritance_policy": { "const": "immediate-predecessor-authenticated-nonimpact-v1" },
+        "fallback": { "const": "complete-readiness-rehearsal-preflight-sit-uat" }
+      }
+    },
+    "requirements": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["id", "implementation_targets", "validation_lanes"], "properties": { "id": { "$ref": "#/$defs/id" }, "implementation_targets": { "$ref": "#/$defs/ids" }, "validation_lanes": { "$ref": "#/$defs/ids" } } } },
+    "dependency_domains": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/domain" } },
+    "implementation_targets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/target" } },
+    "lanes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/lane" } },
+    "controlled_artifact_edges": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/fanoutEdge" } },
+    "implementation_slices": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slice" } },
+    "fixture_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["identity_source", "logical_keys", "signed_owner_readback", "prohibited_sources", "cross_owner_writes"],
+      "properties": {
+        "identity_source": { "const": "signed-owner-readback" },
+        "logical_keys": { "const": true },
+        "signed_owner_readback": { "const": true },
+        "prohibited_sources": { "type": "array", "minItems": 4, "uniqueItems": true, "items": { "enum": ["predicted-identities", "copied-inventories", "historical-demo-counts", "reduced-dto-replicas"] } },
+        "cross_owner_writes": { "const": false }
+      }
+    },
+    "visual_contracts": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/visualContract" } },
+    "evidence_policy": { "type": "object", "additionalProperties": false, "required": ["root", "tracked", "successful_raw", "phase_local_indexes", "final_full_integrity_audit"], "properties": { "root": { "$ref": "#/$defs/path" }, "tracked": { "const": false }, "successful_raw": { "const": "retained_cold" }, "phase_local_indexes": { "const": true }, "final_full_integrity_audit": { "const": true } } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/*-]+$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "authority": { "type": "object", "additionalProperties": false, "required": ["kind", "reference", "rationale"], "properties": { "kind": { "enum": ["user", "architecture"] }, "reference": { "$ref": "#/$defs/path" }, "rationale": { "type": "string", "minLength": 1 } } },
+    "command": { "type": "object", "additionalProperties": false, "required": ["program", "arguments", "input_paths", "tools"], "properties": { "program": { "type": "string", "minLength": 1 }, "arguments": { "type": "array", "items": { "type": "string" } }, "input_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/path" } }, "tools": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "program", "input_paths"], "properties": { "id": { "$ref": "#/$defs/id" }, "program": { "type": "string", "minLength": 1 }, "input_paths": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/path" } } } } } } },
+    "target": { "type": "object", "additionalProperties": false, "required": ["id", "command", "dependency_domains", "proof_classes", "required", "clean_environment", "prerequisites", "resource_claims", "continuation", "slice", "fanout_edges"], "properties": { "id": { "$ref": "#/$defs/id" }, "command": { "$ref": "#/$defs/command" }, "dependency_domains": { "$ref": "#/$defs/ids" }, "proof_classes": { "$ref": "#/$defs/ids" }, "required": { "type": "boolean" }, "clean_environment": { "type": "boolean" }, "prerequisites": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "resource_claims": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/resourceClaim" } }, "continuation": { "enum": ["safe-independent", "unsafe-live-state"] }, "slice": { "$ref": "#/$defs/id" }, "fanout_edges": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } },
+    "domain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "class", "inputs", "candidate_binding", "default_impact", "bounded_rationale", "consumers"],
+      "properties": {
+        "name": { "$ref": "#/$defs/id" },
+        "class": { "enum": ["module-ui-shell", "authentication-session", "module-ui-navigation", "module-ui-theme-layout", "response-owner", "response-consumers", "dataset-refresh-dag", "provider-contracts", "migrations-seeds", "deployment-materialization", "fixtures", "acceptance-inventory", "environment-contract", "evidence-publication", "phase-runner", "other"] },
+        "inputs": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["path", "role"], "properties": { "path": { "$ref": "#/$defs/path" }, "role": { "enum": ["producer", "consumer", "fixture", "test", "environment", "acceptance", "runner", "evidence"] } } } },
+        "candidate_binding": { "type": "boolean" },
+        "default_impact": { "enum": ["bounded", "full-replay"] },
+        "bounded_rationale": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1 }] },
+        "consumers": { "type": "object", "additionalProperties": false, "required": ["implementation_targets", "validation_lanes"], "properties": { "implementation_targets": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "validation_lanes": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } }
+      }
+    },
+    "lane": { "type": "object", "additionalProperties": false, "required": ["id", "phase", "coverage_kind", "risk_rank", "dependency_domains", "prerequisites"], "properties": { "id": { "$ref": "#/$defs/id" }, "phase": { "enum": ["implementation", "validation-readiness", "candidate-rehearsal", "validation-preflight", "sit", "uat"] }, "coverage_kind": { "enum": ["lane", "runner-self-test", "scripted-scenario", "manual-scenario"] }, "risk_rank": { "type": "integer", "minimum": 0, "maximum": 1000 }, "dependency_domains": { "$ref": "#/$defs/ids" }, "prerequisites": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "touches_live_state": { "type": "boolean", "default": false } } },
+    "fanoutEdge": { "type": "object", "additionalProperties": false, "required": ["id", "kind", "producer", "producer_baseline_sha256", "projections", "reconciliation_target"], "properties": { "id": { "$ref": "#/$defs/id" }, "kind": { "enum": ["migration-checksum", "contract-generated-client", "manifest-release-catalog", "browser-asset-digest", "baseline-patch", "fixture", "acceptance-inventory", "evidence-schema", "other"] }, "producer": { "$ref": "#/$defs/path" }, "producer_baseline_sha256": { "$ref": "#/$defs/sha256" }, "projections": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "object", "additionalProperties": false, "required": ["path", "baseline_sha256"], "properties": { "path": { "$ref": "#/$defs/path" }, "baseline_sha256": { "$ref": "#/$defs/sha256" } } } }, "reconciliation_target": { "$ref": "#/$defs/id" } } },
+    "slice": { "type": "object", "additionalProperties": false, "required": ["id", "prerequisites", "exit_targets", "fanout_edges"], "properties": { "id": { "$ref": "#/$defs/id" }, "prerequisites": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "exit_targets": { "$ref": "#/$defs/ids" }, "fanout_edges": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } },
+    "uiGate": { "type": "object", "additionalProperties": false, "required": ["target", "consumer_cutover_targets", "proofs"], "properties": { "target": { "$ref": "#/$defs/id" }, "consumer_cutover_targets": { "$ref": "#/$defs/ids" }, "proofs": { "type": "array", "minItems": 7, "uniqueItems": true, "items": { "enum": ["complete-css-ownership", "generated-assets-and-digests", "responsive-behavior", "direct-document-navigation-parity", "route-identity", "bootstrap-media-types", "ssr-hydration-accessibility-clean-console"] } } } },
+    "visualContract": { "type": "object", "additionalProperties": false, "required": ["id", "fixture_content", "comparison", "stable_regions", "semantic_assertion_targets"], "properties": { "id": { "$ref": "#/$defs/id" }, "fixture_content": { "enum": ["invariant", "mutable-owner-content"] }, "comparison": { "enum": ["whole-frame", "stable-regions"] }, "stable_regions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } }, "semantic_assertion_targets": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/id" } } } },
+    "resourceClaim": { "type": "object", "additionalProperties": false, "required": ["kind", "identity", "mode"], "properties": { "kind": { "enum": ["evidence-path", "topology", "port", "database", "docker", "process", "external-service"] }, "identity": { "$ref": "#/$defs/id" }, "mode": { "const": "exclusive" } } }
+  }
+}

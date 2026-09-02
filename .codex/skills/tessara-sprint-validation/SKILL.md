@@ -14,10 +14,29 @@ Own validation policy and authorization. Delegate phase execution to:
 ## Policy selection
 
 Inspect the tracked sprint validation contract before loading a protocol. When
-it declares `policy_version: tessara-validation-v2`, read
+it declares `policy_version: tessara-validation-v2` or
+`policy_version: tessara-validation-v3`, read
 [`references/validation-policy-v2.md`](references/validation-policy-v2.md)
-completely and validate the contract with
+completely. For v3, then read
+[`references/validation-policy-v3.md`](references/validation-policy-v3.md)
+completely. Validate the contract with
 `scripts/tessara-validation-policy.psm1`.
+
+For v3, also require the tracked schema-v2 adapter at the contract's canonical
+path. Validate it through public `Assert-TessaraValidationAdapter` and reject a
+missing adapter, unsupported platform release, lane/prerequisite mismatch,
+extra or omitted lane/target, undocumented lifecycle exception, or uncertain
+provenance. Every executed implementation and formal lane/scenario executes
+through `Invoke-TessaraValidationLane`; inherited v3 items are certified, not
+executed. Implementation harvesting uses
+`Invoke-TessaraImplementationHarvest`. Read
+[`references/implementation-target-coordinator.md`](references/implementation-target-coordinator.md)
+and require its immutable schedule and recovery rules.
+For any post-freeze correction, validate the canonical document against
+[`references/successor-impact-plan.schema.json`](references/successor-impact-plan.schema.json).
+When creating or auditing a UAT inventory, read
+[`references/uat-scenario-classification.md`](references/uat-scenario-classification.md)
+completely and enforce its automated-versus-human boundary before freeze.
 
 Otherwise read
 [`references/validation-protocol.md`](references/validation-protocol.md)
@@ -26,16 +45,17 @@ completely. Before creating a legacy candidate, also read
 completely. Those references remain authoritative for Sprint 8A and earlier
 sprint-specific runners.
 
-The v2 reference overrides the legacy full-rerun, two-wave deferral, embedded-
+The v2 reference, plus v3's stricter platform and implementation-exit rules,
+overrides the legacy full-rerun, two-wave deferral, embedded-
 lineage, and global-manifest rules below. All other safety, authority,
 classification, fail-late, candidate-freeze, and candidate-bound SIT/UAT rules
-continue to apply. When the contract is absent or selects another policy, use
+continue to apply. When the contract is absent or selects a legacy policy, use
 the legacy protocol unchanged. Never add v2 fields to legacy evidence, convert
 it into v2 certificates, or use this policy change to reopen a completed
 lifecycle.
 
 For every failed implementation target or formal validation lane/scenario in
-a v2 sprint, read
+a v2 or v3 sprint, read
 [`references/defect-provenance.md`](references/defect-provenance.md)
 completely and validate `defect-provenance.json` against
 [`references/defect-provenance.schema.json`](references/defect-provenance.schema.json).
@@ -85,14 +105,18 @@ Preserve these invariants:
   state transition after the immutable start exists.
 - Rehearsal is diagnostic and non-authoritative; it is never called SIT or UAT.
 - Deployed acceptance smoke belongs to SIT.
-- One candidate fingerprint covers all authoritative SIT and UAT evidence.
-- Candidate-affecting corrections invalidate all SIT and UAT.
+- Under v2, one candidate fingerprint covers all authoritative SIT and UAT
+  execution and candidate-affecting corrections invalidate all SIT and UAT.
+- Under v3, the successor certificate may combine successor-executed coverage
+  with authenticated non-impact coverage from only its immediate predecessor;
+  inherited items never claim successor execution.
 - Post-invalidation UAT may continue only as safe, explicitly
   non-authoritative diagnostic defect harvesting.
 - Focused repair validation proves a mutable correction cone only; it never
   authorizes a candidate, SIT, UAT, or closeout.
-- A successor candidate receives complete readiness, rehearsal, SIT, and UAT
-  regardless of focused repair results.
+- A v2 successor receives complete readiness, rehearsal, SIT, and UAT. A v3
+  successor follows the authenticated impact plan and falls back to that same
+  complete sequence whenever mapping or provenance is uncertain.
 - Closeout never originates an acceptance check.
 - Product decisions pause for user direction.
 - Formal validation never serves as the first execution of its exact product,
@@ -101,6 +125,14 @@ Preserve these invariants:
   provenance is classified and its routing decision is retained.
 - Automation may classify, invalidate, route, and block reruns; it never edits
   tests or declares an assertion obsolete.
+- Machine-decidable checks are scripted coverage even when an operator could
+  inspect their JSON or logs. Manual UAT requires direct product interaction
+  and an irreducible human-judgment question; a human evidence-review checklist
+  cannot replace automation.
+- Every user-facing screen and feature delivered by the sprint receives a human
+  exploratory touch. Automation remains its deterministic prerequisite, not a
+  substitute for observing the actual experience and recording unexpected
+  defects, prior-sprint issues, and UI/UX improvement opportunities.
 
 Do not interpret every command failure as a candidate failure. Record its
 stage and `assertions_started`, then apply the shared invalidation matrix.
@@ -116,7 +148,10 @@ Before freeze, record:
 - every roadmap exit-condition clause
 - relevant product, authorization, lifecycle, deployment, migration,
   compatibility, recovery, and rollback risks
-- automated, deployed-smoke, and manual UAT proof per clause
+- automated proof per clause, deployed-smoke where applicable, and manual UAT
+  through an exact screen/feature touch inventory; purely technical clauses may
+  mark manual coverage not applicable, but no delivered user-facing surface may
+  be omitted
 - exact commands, environments, accounts, fixtures, topology, and evidence
   paths
 - the required receipt and evidence inventory, including planned conditional
@@ -129,7 +164,7 @@ stale.
 
 ## Full-regime execution
 
-For a v2 sprint:
+For a v2 or v3 sprint:
 
 1. Validate the contract's implementation profile and require the passing
    non-authoritative implementation-readiness result for the current clean
@@ -142,6 +177,15 @@ For a v2 sprint:
    blocked, or missing its required focused proof. Require the exact formal
    fixture, environment, and acceptance inventory to have passed through the
    selected implementation targets.
+   For v3, additionally authenticate the current adapter hash and platform
+   fingerprint, require the passing coordinator finalization receipt, consume
+   the deterministic implementation defect batch, and
+   require every slice exit target and fanout edge to have a current passing
+   receipt. Authenticate reused target receipts as inherited evidence with
+   `newly_executed: false`; never count or describe them as new execution.
+   Reject browser/smoke if the early real-boundary authorization target
+   did not pass and reject consumer cutover if standalone UI ownership did not
+   pass. Formal Readiness is never first execution for these combinations.
 2. Run or recertify Validation Readiness from the impact-selected lanes and
    authenticated unaffected lane certificates. Fall back to complete Readiness
    when any mapping, fingerprint, or prior certificate is uncertain.
@@ -149,9 +193,11 @@ For a v2 sprint:
    pre-freeze certification surface, not the routine implementation loop.
 4. Require compact passing Readiness and Rehearsal certificates with complete
    declared coverage, no open defect, and sealed phase-local evidence indexes.
-5. Freeze through Preflight, then run complete candidate-bound SIT and complete
-   UAT. A successor candidate never inherits SIT lanes or manual UAT scenarios
-   from its predecessor.
+5. Freeze through Preflight. Under v2, run complete candidate-bound SIT and
+   complete UAT with no cross-candidate inheritance. Under v3, execute the exact
+   impact-plan selection through `Invoke-TessaraValidationLane`; the strict
+   certifier may inherit only authenticated non-impact SIT lanes and scripted/
+   manual UAT scenarios from the immediate predecessor.
 6. Consume certificate and correction hashes through `evidence-chain.json`.
    Do not recursively reopen raw evidence during routine phase authorization.
 7. At closeout, perform one full integrity audit across all sealed phase-local
@@ -229,9 +275,13 @@ Run the declared affected SIT and automated/manual UAT portions as `focused
 repair validation`. Do not issue a fingerprint or authoritative phase result.
 Collect newly exposed defects fail-late, correct them as one next batch,
 reassess the cone, and repeat until every declared check passes and no defect
-is open. Then record the coordinator's decision to enter final certification,
-rerun complete readiness and rehearsal, freeze a new candidate, and rerun
-complete authoritative SIT and UAT from the beginning.
+is open. Then record the coordinator's decision to enter final certification.
+V2 reruns complete readiness/rehearsal, freezes a new candidate, and reruns
+complete SIT/UAT. V3 publishes and validates one canonical successor-impact
+plan, executes its affected coverage in deterministic failed/direct/
+prerequisite/risk order, and inherits only items satisfying every safety
+invariant. Focused repair results are inputs to the plan, never authoritative
+closeout evidence.
 
 ## Failure and invalidation decision
 
@@ -261,22 +311,24 @@ Examples:
   the affected lane, not unrelated completed lanes, when fingerprints remain
   valid.
 - A wrong evidence output path after immutable raw results reruns finalization.
-- A changed test, harness, fixture, or product source creates a new candidate
-  only after the complete readiness and rehearsal gates pass, then restarts
-  all SIT.
+- Under v2, a changed test, harness, fixture, or product source creates a new
+  candidate after complete readiness/rehearsal and restarts all SIT. Under v3,
+  full source and application-candidate identities are distinct; runner/
+  publication changes follow their correction class, while product corrections
+  follow the successor plan.
 - A flaky assertion requires narrow diagnosis and a complete authoritative
   rerun of its lane; upstream reuse requires matching fingerprints and an
   explicit non-impact rationale.
 
 Never choose a narrower scope merely to avoid expensive work.
 
-For v2, determine scope from the tracked dependency map and authenticated
-domain fingerprints. Preserve a closed upstream certificate when its complete
-dependency set is unchanged. Recertify only intersecting Readiness or Rehearsal
-lanes, including their prerequisite closure. An unknown path, missing digest,
-or uncertain consumer selects complete affected-phase execution. After freeze,
-a candidate-changing correction still requires a successor freeze followed by
-complete SIT and complete UAT.
+For v2 and v3, determine scope from authenticated domain fingerprints. V3 also
+requires exact owned producers/tests/consumers and the canonical impact plan.
+Preserve a closed certificate only when its complete recursive inheritance
+fingerprint is unchanged. Unknown paths, missing digests, open defects,
+expectation ambiguity, or uncertain consumers select complete execution. After
+freeze, v2 always requires complete successor SIT/UAT; v3 permits only the
+immediate-predecessor inheritance authorized above.
 
 Do not label a failure `product` merely because a product assertion failed.
 A missing fixture identity, divergent runner command, absent environment
@@ -286,7 +338,11 @@ defect in the same attempt; use `mixed` and apply the union cone.
 
 ## Result collection and recovery
 
-- Prefer repository-owned phase runners over ad hoc compound commands.
+- Under v3, invoke only the shared validation-platform entry points. Repository-
+  owned focused product scripts remain adapter actions; they are not authority
+  to implement phase orchestration, topology/port lifecycle, cleanup state,
+  evidence publication, or certificates. Under retained v2/legacy contracts,
+  use only the runner named by that historical contract.
 - Run independent sibling checks fail-late within a lane or isolated scenario
   set and aggregate their results.
 - Retain start/completion receipts, append-only logs, heartbeats, durations,
@@ -303,10 +359,19 @@ defect in the same attempt; use `mixed` and apply the union cone.
 Authorize `tessara-sprint-closeout` only when:
 
 - preflight passed before SIT
-- one immutable candidate fingerprint covers all authoritative receipts
-- every SIT lane and deployed acceptance smoke passed
-- scripted and every manual UAT scenario passed after SIT
-- every roadmap clause maps to automated and manual evidence
+- v2 evidence resolves to one candidate; v3 evidence resolves to one successor
+  plus the exact authenticated immediate-predecessor items in its impact plan
+- every SIT lane and deployed acceptance smoke is passed as executed or, under
+  v3 only, authenticated non-impact inheritance
+- every scripted/manual UAT scenario is passed with executed versus inherited
+  coverage stated explicitly
+- every roadmap clause maps to automated evidence, and every applicable manual
+  scenario states the product interaction and irreducible human-judgment
+  question instead of reviewing machine-readable artifacts
+- every sprint-delivered screen and user-facing feature maps to an executed
+  manual exploratory touch (or v3-authenticated immediate-predecessor touch for
+  unchanged successor coverage), and every observation is triaged as a defect,
+  previously existing issue needing authority, or non-blocking future UI/UX work
 - all invalidation decisions were satisfied
 - no required evidence is missing, stale, malformed, or unhashed
 - no product decision or open acceptance defect remains
@@ -324,6 +389,11 @@ For v2, replace the growing evidence-manifest prerequisite with the compact
 certificates and sealed phase-local indexes remain the ordinary downstream
 trust boundary; raw artifacts are cold evidence.
 
+For v3, require evidence-chain schema 2 and phase-certificate schema 3. Every
+formal receipt must authenticate the current platform release/fingerprint and
+adapter hash. Missing or ambiguous provenance blocks closeout; it never falls
+back to a custom runner.
+
 If closeout discovers missing coverage or executable evidence, reopen at the
 boundary chosen by this coordinator. Documentation-only corrections may stay
 in closeout when they cannot alter executable behavior or test interpretation.
@@ -333,5 +403,6 @@ in closeout when they cannot alter executable behavior or test interpretation.
 Do not report validation complete unless the receipt chain parses and hashes,
 all authoritative phases passed, failure invalidations are satisfied, the
 defect-provenance chronology is resolved, the verification record explicitly
-authorizes closeout, and the application is in the intended healthy handoff
-state.
+authorizes closeout, required v3 platform/adapter provenance and implementation-
+exit coverage authenticate, and the application is in the intended healthy
+handoff state.
